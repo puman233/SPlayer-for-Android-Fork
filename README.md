@@ -1,7 +1,7 @@
 # 🎵 SPlayer for Android
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.6-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-3.0.8-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-red?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white" alt="vue">

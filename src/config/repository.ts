@@ -1,0 +1,7 @@
+export const ANDROID_REPOSITORY_OWNER = "puman233";
+export const ANDROID_REPOSITORY_NAME = "SPlayer-for-Android-Fork";
+
+export const ANDROID_REPOSITORY_URL = `https://github.com/${ANDROID_REPOSITORY_OWNER}/${ANDROID_REPOSITORY_NAME}`;
+export const ANDROID_RELEASES_URL = `${ANDROID_REPOSITORY_URL}/releases`;
+export const ANDROID_RELEASES_ATOM_URL = `${ANDROID_RELEASES_URL}.atom`;
+export const ANDROID_RELEASES_API_URL = `https://api.github.com/repos/${ANDROID_REPOSITORY_OWNER}/${ANDROID_REPOSITORY_NAME}/releases`;

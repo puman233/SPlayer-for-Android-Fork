@@ -16,4 +16,8 @@
 - `VERIFIED`：手机 480 dpi 进入 Debug 首页；平板 280 dpi 在 MuMu 多显示面中完成许可协议并进入 Debug 首页，截图已留存于工作区外的测试证据目录。
 - `IMPLEMENTED`：同步 Capacitor 生成的 Gradle 依赖路径，使其与锁文件安装的 Capacitor 8.4.0 / Status Bar 8.0.2 一致。
 - `VERIFIED`：构建工具在 Windows 上引入 989 个已跟踪文件的换行/生成噪音；已仅还原本次构建产生的跟踪文件修改，保留计划文档。
-- 待验证：双端播放页、短暂停顿、更新 API 错误场景。
+- `IMPLEMENTED`：更新仓库统一为 `puman233/SPlayer-for-Android-Fork`，手动检查强制绕过 10 分钟缓存，并使用完整 SemVer 比较。
+- `VERIFIED`：新增 4 个版本比较测试，覆盖 `v` 前缀、构建元数据、稳定版/预发布版及非法标签；类型检查和完整 lint 通过。
+- `VERIFIED`：GitHub API 真实返回匿名限流 403 时，Android 原生 HTTP 自动回退 Releases Atom（200），关于页显示最新 v3.0.8，手动检查提示“已是最新版本”。
+- `VERIFIED`：修复后的 Web 构建、Capacitor 同步和四 ABI Debug APK 构建通过，x86_64 APK 已在手机覆盖安装验证。
+- 待验证：双端播放页、短暂停顿、更新下载与系统安装器链路。

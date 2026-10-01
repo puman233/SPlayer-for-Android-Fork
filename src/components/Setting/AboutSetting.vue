@@ -157,13 +157,13 @@ import { useStatusStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import { Capacitor } from "@capacitor/core";
 import packageJson from "@/../package.json";
+import { ANDROID_RELEASES_URL, ANDROID_REPOSITORY_URL } from "@/config/repository";
+import { isVersionNewer } from "@/core/update/version";
+import axios from "axios";
 
 import "github-markdown-css/github-markdown.css";
 
 const statusStore = useStatusStore();
-
-// 安卓端仓库地址
-const UPDATE_REPO = "https://github.com/puman233/SPlayer-for-Android";
 
 // 打开日志文件
 const handleOpenLog = () => {
@@ -178,7 +178,8 @@ const openFeedback = () => {
     "平台: " + Capacitor.getPlatform(),
     "设备: " + navigator.userAgent,
   ].join("\n");
-  const url = UPDATE_REPO + "/issues/new?title=%5BBug%5D&body=" + encodeURIComponent(deviceInfo);
+  const url =
+    ANDROID_REPOSITORY_URL + "/issues/new?title=%5BBug%5D&body=" + encodeURIComponent(deviceInfo);
   openLink(url);
 };
 
@@ -261,16 +262,19 @@ const oldVersion = computed<UpdateLogType[]>(() => {
   return oldData ? oldData : [];
 });
 
-// 简易版本号比较：a 是否比 b 新（支持 x.y.z 及 v 前缀）
-const isVersionNewer = (a: string, b: string) => {
-  const pa = a.replace(/^v/, "").split(".").map(Number);
-  const pb = b.replace(/^v/, "").split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
-    const na = pa[i] ?? 0;
-    const nb = pb[i] ?? 0;
-    if (na !== nb) return na > nb;
+const getUpdateErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    if (error.response?.status === 403 || error.response?.status === 429) {
+      return "GitHub 请求次数已达上限，请稍后重试";
+    }
+    if (error.response?.status === 404) {
+      return "未找到更新仓库，请检查仓库地址或网络代理";
+    }
+    if (error.code === "ECONNABORTED" || !error.response) {
+      return "无法连接 GitHub，请检查网络后重试";
+    }
   }
-  return false;
+  return "检查更新失败，请稍后重试";
 };
 
 // 检查更新（Android：应用内检查，不再跳转外部）
@@ -284,10 +288,14 @@ const checkUpdate = debounce(
     if (statusStore.updateCheck) return;
     statusStore.updateCheck = true;
     try {
-      const logs = await getUpdateLog();
+      const logs = await getUpdateLog(true);
       const latest = logs?.[0];
       const latestVer = latest?.version || "";
       const current = packageJson.version;
+      if (!latest) {
+        window.$message.warning("仓库暂未发布可用版本");
+        return;
+      }
       if (latestVer && isVersionNewer(latestVer, current)) {
         window.$dialog.info({
           title: "发现新版本",
@@ -296,14 +304,15 @@ const checkUpdate = debounce(
           negativeText: "稍后再说",
           onPositiveClick: () => {
             // 下载安装需原生支持，先打开 Release 页
-            openLink(UPDATE_REPO + "/releases", "_blank");
+            openLink(ANDROID_RELEASES_URL, "_blank");
           },
         });
       } else {
         window.$message.success("已是最新版本");
       }
-    } catch {
-      window.$message.error("检查更新失败，请检查网络");
+    } catch (error) {
+      console.error("检查 Android 更新失败", error);
+      window.$message.error(getUpdateErrorMessage(error));
     } finally {
       statusStore.updateCheck = false;
     }
@@ -323,7 +332,14 @@ const jumpLink = (e: MouseEvent) => {
 };
 
 // 获取更新日志
-const getUpdateData = async () => (updateData.value = await getUpdateLog());
+const getUpdateData = async () => {
+  try {
+    updateData.value = await getUpdateLog();
+  } catch (error) {
+    // 关于页初始化不弹出阻塞提示；用户主动检查时再给出可操作错误。
+    console.warn("获取 Android 更新日志失败", error);
+  }
+};
 
 // 打开开发者模式
 const openDeveloperMode = useThrottleFn(() => {

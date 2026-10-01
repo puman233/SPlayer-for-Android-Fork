@@ -249,17 +249,23 @@ export const formatForGlobalShortcut = (shortcut: string): string => {
  * 获取更新日志
  * @returns 更新日志数组
  */
-export const getUpdateLog = async (): Promise<UpdateLogType[]> => {
-  const result = await getCacheData(updateLog, { key: "updateLog", time: 10 });
+export const getUpdateLog = async (forceRefresh = false): Promise<UpdateLogType[]> => {
+  const result = await getCacheData(updateLog, {
+    key: "androidUpdateLog",
+    time: 10,
+    useCache: !forceRefresh,
+  });
   if (!result || isEmpty(result)) return [];
   const updateLogs = await Promise.all(
-    result.map(async (v: any) => ({
-      version: v.tag_name,
-      changelog: await marked(v.body),
-      time: convertToLocalTime(v.published_at),
-      url: v.html_url,
-      prerelease: v.prerelease,
-    })),
+    result
+      .filter((v: any) => !v.draft)
+      .map(async (v: any) => ({
+        version: v.tag_name,
+        changelog: await marked(v.body),
+        time: convertToLocalTime(v.published_at),
+        url: v.html_url,
+        prerelease: v.prerelease,
+      })),
   );
   return updateLogs;
 };

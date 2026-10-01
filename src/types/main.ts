@@ -346,7 +346,7 @@ export type SettingType =
 export type UpdateLogType = {
   version: string;
   changelog: string;
-  time: number;
+  time: string;
   url: string;
   prerelease: boolean;
   force?: boolean;

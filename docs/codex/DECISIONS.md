@@ -29,3 +29,9 @@
 - 状态：已验证
 - 决策：Debug 构建使用 `applicationIdSuffix` 与 `versionNameSuffix`，不覆盖正式签名安装。
 - 理由：平板已有签名不同的正式包；并存安装可保留数据并允许双端持续调试。
+
+## D-006 GitHub API 限流回退
+
+- 状态：已验证
+- 决策：更新检查优先读取 GitHub Releases API；Android 遇到匿名额度限制时，使用原生 HTTP 读取同仓库官方 Releases Atom 源。
+- 理由：匿名 API 额度按出口 IP 共享，模拟器和公共网络容易耗尽；Atom 源可继续提供版本、发布日期和更新日志，且不依赖不稳定的页面抓取。

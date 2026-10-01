@@ -35,6 +35,11 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // 调试包与正式签名版本并存，避免自动化测试覆盖用户数据
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
         release {
             minifyEnabled false
             signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug

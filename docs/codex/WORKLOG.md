@@ -12,6 +12,8 @@
 - `VERIFIED`：`pnpm typecheck` 与 `pnpm lint` 通过。
 - `VERIFIED`：`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 通过。
 - `VERIFIED`：手机成功安装 x86_64 Debug APK 并完成协议、首页、全局设置和关于页截图。
-- `BLOCKED`：平板已有不同签名的同包名版本，系统拒绝覆盖；未卸载、未清除数据。下一步使用并存 Debug 包名。
+- `VERIFIED`：Debug 构建使用 `top.imsyy.splayer.android.debug`，手机与平板均可安装并冷启动，且不覆盖原正式版或清除用户数据。
+- `VERIFIED`：手机 480 dpi 进入 Debug 首页；平板 280 dpi 在 MuMu 多显示面中完成许可协议并进入 Debug 首页，截图已留存于工作区外的测试证据目录。
+- `IMPLEMENTED`：同步 Capacitor 生成的 Gradle 依赖路径，使其与锁文件安装的 Capacitor 8.4.0 / Status Bar 8.0.2 一致。
 - `VERIFIED`：构建工具在 Windows 上引入 989 个已跟踪文件的换行/生成噪音；已仅还原本次构建产生的跟踪文件修改，保留计划文档。
 - 待验证：双端播放页、短暂停顿、更新 API 错误场景。

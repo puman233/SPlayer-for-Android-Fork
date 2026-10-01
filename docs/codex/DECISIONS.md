@@ -26,6 +26,6 @@
 
 ## D-005 Debug 包与正式包并存
 
-- 状态：待实现验证
+- 状态：已验证
 - 决策：Debug 构建使用 `applicationIdSuffix` 与 `versionNameSuffix`，不覆盖正式签名安装。
 - 理由：平板已有签名不同的正式包；并存安装可保留数据并允许双端持续调试。

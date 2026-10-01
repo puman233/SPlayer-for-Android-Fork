@@ -1,4 +1,4 @@
-import type { CoverType, UpdateInfoType, SettingType, SongType } from "@/types/main";
+import type { CoverType, UpdateInfoType, UpdateLogType, SettingType, SongType } from "@/types/main";
 import { CURRENT_AGREEMENT_VERSION } from "@/constants/agreement";
 import { NScrollbar } from "naive-ui";
 import { isLogin } from "./auth";
@@ -385,6 +385,22 @@ export const openUpdateApp = async (data: UpdateInfoType) => {
     title: "发现新版本",
     content: () => {
       return h(UpdateApp, { data, onClose: () => modal.destroy() });
+    },
+  });
+};
+
+// Android 应用内更新：下载、校验后仅唤起系统安装器，不执行静默安装
+export const openAndroidUpdateApp = async (data: UpdateLogType) => {
+  const { default: AndroidUpdateApp } = await import("@/components/Modal/AndroidUpdateApp.vue");
+  const modal = window.$modal.create({
+    preset: "card",
+    transformOrigin: "center",
+    autoFocus: false,
+    maskClosable: false,
+    style: { width: "min(600px, calc(100vw - 24px))" },
+    title: "发现 Android 新版本",
+    content: () => {
+      return h(AndroidUpdateApp, { data, onClose: () => modal.destroy() });
     },
   });
 };

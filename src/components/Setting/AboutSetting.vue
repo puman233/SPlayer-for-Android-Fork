@@ -157,9 +157,10 @@ import { useStatusStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import { Capacitor } from "@capacitor/core";
 import packageJson from "@/../package.json";
-import { ANDROID_RELEASES_URL, ANDROID_REPOSITORY_URL } from "@/config/repository";
+import { ANDROID_REPOSITORY_URL } from "@/config/repository";
 import { isVersionNewer } from "@/core/update/version";
 import axios from "axios";
+import { openAndroidUpdateApp } from "@/utils/modal";
 
 import "github-markdown-css/github-markdown.css";
 
@@ -303,8 +304,7 @@ const checkUpdate = debounce(
           positiveText: "查看下载",
           negativeText: "稍后再说",
           onPositiveClick: () => {
-            // 下载安装需原生支持，先打开 Release 页
-            openLink(ANDROID_RELEASES_URL, "_blank");
+            openAndroidUpdateApp(latest);
           },
         });
       } else {

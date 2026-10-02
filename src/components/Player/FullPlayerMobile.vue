@@ -104,68 +104,10 @@ let savedPageType: MobilePageType = "info";
               </PlayerData>
             </div>
           </div>
-
-          <div class="progress-section" data-no-page-swipe>
-            <span class="time" @click="toggleTimeFormat">{{ timeDisplay[0] }}</span>
-            <PlayerSlider class="player" :show-tooltip="false" />
-            <span class="time" @click="toggleTimeFormat">{{ timeDisplay[1] }}</span>
-          </div>
-
-          <div class="control-section">
-            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="mode-btn" @click.stop="player.toggleShuffle()">
-                <SvgIcon
-                  :name="statusStore.shuffleIcon"
-                  :size="24"
-                  :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
-                />
-              </div>
-            </template>
-            <div v-else class="placeholder"></div>
-
-            <div class="ctrl-btn" @click.stop="player.nextOrPrev('prev')">
-              <SvgIcon name="SkipPrev" :size="36" />
-            </div>
-
-            <n-button
-              :loading="statusStore.playLoading"
-              class="play-btn"
-              type="primary"
-              strong
-              secondary
-              circle
-              @click.stop="player.playOrPause()"
-            >
-              <template #icon>
-                <Transition name="fade" mode="out-in">
-                  <SvgIcon
-                    :key="statusStore.playStatus ? 'Pause' : 'Play'"
-                    :name="statusStore.playStatus ? 'Pause' : 'Play'"
-                    :size="40"
-                  />
-                </Transition>
-              </template>
-            </n-button>
-
-            <div class="ctrl-btn" @click.stop="player.nextOrPrev('next')">
-              <SvgIcon name="SkipNext" :size="36" />
-            </div>
-
-            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="mode-btn" @click.stop="player.toggleRepeat()">
-                <SvgIcon
-                  :name="statusStore.repeatIcon"
-                  :size="24"
-                  :depth="statusStore.repeatMode === 'off' ? 3 : 1"
-                />
-              </div>
-            </template>
-            <div v-else class="placeholder"></div>
-          </div>
         </div>
       </div>
 
-      <div v-if="hasLyric" class="page lyric-page" @pointerdown="onLyricPagePointerDown">
+      <div v-if="hasLyric" class="page lyric-page">
         <div class="lyric-header">
           <div
             class="lyric-cover"
@@ -203,80 +145,18 @@ let savedPageType: MobilePageType = "info";
             />
           </div>
         </div>
-        <div class="lyric-main" :class="{ 'with-control': lyricControlShow }">
+        <div class="lyric-main">
           <PlayerLyric />
-        </div>
-        <!-- 歌词页播放控制模块：与播放页控制栏样式一致 -->
-        <div
-          class="lyric-control"
-          :class="{ show: lyricControlShow }"
-          data-no-page-swipe
-          @click.stop
-        >
-          <div class="progress-section">
-            <span class="time" @click="toggleTimeFormat">{{ timeDisplay[0] }}</span>
-            <PlayerSlider class="player" :show-tooltip="false" />
-            <span class="time" @click="toggleTimeFormat">{{ timeDisplay[1] }}</span>
-          </div>
-          <div class="control-section">
-            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="mode-btn" @click.stop="player.toggleShuffle()">
-                <SvgIcon
-                  :name="statusStore.shuffleIcon"
-                  :size="24"
-                  :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
-                />
-              </div>
-            </template>
-            <div v-else class="placeholder"></div>
-            <div class="ctrl-btn" @click.stop="player.nextOrPrev('prev')">
-              <SvgIcon name="SkipPrev" :size="36" />
-            </div>
-            <n-button
-              :loading="statusStore.playLoading"
-              class="play-btn"
-              type="primary"
-              strong
-              secondary
-              circle
-              @click.stop="player.playOrPause()"
-            >
-              <template #icon>
-                <Transition name="fade" mode="out-in">
-                  <SvgIcon
-                    :key="statusStore.playStatus ? 'Pause' : 'Play'"
-                    :name="statusStore.playStatus ? 'Pause' : 'Play'"
-                    :size="40"
-                  />
-                </Transition>
-              </template>
-            </n-button>
-            <div class="ctrl-btn" @click.stop="player.nextOrPrev('next')">
-              <SvgIcon name="SkipNext" :size="36" />
-            </div>
-            <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="mode-btn" @click.stop="player.toggleRepeat()">
-                <SvgIcon
-                  :name="statusStore.repeatIcon"
-                  :size="24"
-                  :depth="statusStore.repeatMode === 'off' ? 3 : 1"
-                />
-              </div>
-            </template>
-            <div v-else class="placeholder"></div>
-          </div>
         </div>
       </div>
     </div>
 
-    <div v-if="totalPages > 1" class="pagination">
-      <div
-        v-for="i in totalPages"
-        :key="i"
-        :class="['dot', { active: pageIndex === i - 1 }]"
-        @click="pageIndex = i - 1"
-      />
-    </div>
+    <MobilePlayerBottomControls
+      :page-count="totalPages"
+      :page-index="pageIndex"
+      :large="isPadDevice"
+      @update:page-index="pageIndex = $event"
+    />
 
     <!-- 移动端竖屏频谱：贴底浮层，与封面/歌词页共享展示 -->
     <PlayerSpectrum
@@ -292,8 +172,6 @@ let savedPageType: MobilePageType = "info";
 <script setup lang="ts">
 import { useSwipe } from "@vueuse/core";
 import { useMusicStore, useStatusStore, useDataStore, useSettingStore } from "@/stores";
-import { usePlayerController } from "@/core/player/PlayerController";
-import { useTimeFormat } from "@/composables/useTimeFormat";
 import { useDevice } from "@/composables/useDevice";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
 import { isCapacitorAndroid } from "@/utils/env";
@@ -306,8 +184,6 @@ const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const dataStore = useDataStore();
-const player = usePlayerController();
-const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
 const LYRIC_HEADER_MAX_PADDING = 60;
 
@@ -454,41 +330,6 @@ const currentPageType = computed<MobilePageType>(() => {
   if (pageIndex.value === lyricIdx.value) return "lyric";
   return "info";
 });
-
-// 歌词页播放控制模块：显示状态与自动隐藏（3 秒无操作渐隐）
-const lyricControlShow = ref(true);
-let lyricControlTimer: number | null = null;
-const clearLyricControlTimer = () => {
-  if (lyricControlTimer) {
-    window.clearTimeout(lyricControlTimer);
-    lyricControlTimer = null;
-  }
-};
-const scheduleLyricControlHide = () => {
-  clearLyricControlTimer();
-  lyricControlTimer = window.setTimeout(() => {
-    lyricControlShow.value = false;
-  }, 3000);
-};
-const showLyricControl = () => {
-  lyricControlShow.value = true;
-  scheduleLyricControlHide();
-};
-const onLyricPagePointerDown = () => {
-  showLyricControl();
-};
-// 进入歌词页时显示并计时，离开时清理
-watch(
-  currentPageType,
-  (type) => {
-    if (type === "lyric") {
-      showLyricControl();
-    } else {
-      clearLyricControlTimer();
-    }
-  },
-  { immediate: true },
-);
 
 // 下拉关闭手势捕获区：信息页覆盖顶栏 + 封面区域；歌词页限定在歌曲信息块
 const dragHandleStyle = computed(() => {
@@ -682,7 +523,6 @@ const { lengthX: topLengthX, lengthY: topLengthY } = useSwipe(dragHandleRef, {
 onBeforeUnmount(() => {
   if (rafId) cancelAnimationFrame(rafId);
   if (pageTransitionTimer) window.clearTimeout(pageTransitionTimer);
-  clearLyricControlTimer();
   resetInlineStyles();
 });
 
@@ -865,9 +705,10 @@ const contentTransform = computed(() => {
 
   .mobile-content {
     flex: 1;
+    min-height: 0;
     display: flex;
     width: calc(var(--page-count, 1) * 100%);
-    height: 100%;
+    height: auto;
     transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
     // 横滑交给 useSwipe
     touch-action: pan-y;
@@ -889,8 +730,7 @@ const contentTransform = computed(() => {
     display: flex;
     flex-direction: column;
     align-items: center;
-    // 底部预留更多空间，确保分页圆点始终位于控制卡下方不重叠
-    padding: 0 20px calc(40px + var(--mobile-safe-bottom));
+    padding: 0 20px 12px;
     overflow-y: auto;
 
     .cover-section {
@@ -926,8 +766,6 @@ const contentTransform = computed(() => {
       width: 100%;
       display: flex;
       flex-direction: column;
-      // 占满信息页剩余高度，便于将控制卡底部锚定，与歌词页一致
-      flex: 1;
       min-height: 0;
     }
 
@@ -1004,91 +842,6 @@ const contentTransform = computed(() => {
         }
       }
     }
-
-    .progress-section {
-      display: flex;
-      align-items: center;
-      // 底部锚定：控制卡下移至信息页底部，与歌词页控制模块对齐
-      margin: auto 0 24px;
-
-      .time {
-        width: 40px;
-        font-size: 12px;
-        text-align: center;
-        color: rgb(var(--main-cover-color));
-        opacity: 0.6;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .n-slider {
-        margin: 0 12px;
-      }
-    }
-
-    .control-section {
-      width: 100%;
-      max-width: 420px;
-      margin: 0 auto 24px;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-
-      .placeholder {
-        width: 24px;
-      }
-
-      .mode-btn {
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        opacity: 0.8;
-
-        .n-icon {
-          color: rgb(var(--main-cover-color));
-        }
-      }
-
-      .ctrl-btn {
-        width: 50px;
-        height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-
-        .n-icon {
-          color: rgb(var(--main-cover-color));
-        }
-      }
-
-      .play-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 26px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: transform 0.2s;
-        background-color: rgba(var(--main-cover-color), 0.2);
-        color: rgb(var(--main-cover-color));
-
-        &.n-button--primary-type {
-          --n-color: rgba(var(--main-cover-color), 0.14);
-          --n-color-hover: rgba(var(--main-cover-color), 0.2);
-          --n-color-focus: rgba(var(--main-cover-color), 0.2);
-          --n-color-pressed: rgba(var(--main-cover-color), 0.12);
-        }
-
-        &:active {
-          transform: scale(0.95);
-        }
-      }
-    }
   }
 
   .lyric-page {
@@ -1158,123 +911,11 @@ const contentTransform = computed(() => {
       flex: 1;
       min-height: 0;
       position: relative;
-      transition: padding-bottom 0.3s;
-
-      // 控制模块显示时，预留底部空间，避免遮挡歌词
-      &.with-control {
-        padding-bottom: 150px;
-      }
-    }
-
-    // 歌词页播放控制模块：与播放页控制栏样式一致
-    .lyric-control {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 8;
-      // 为底部翻页圆点预留空间，避免控制按键与圆点重叠
-      padding: 12px 20px calc(34px + var(--mobile-safe-bottom));
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      opacity: 0;
-      pointer-events: none;
-      background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.45) 100%);
-      transition: opacity 1s;
-
-      &.show {
-        opacity: 1;
-        pointer-events: auto;
-        transition: opacity 0.3s;
-      }
-
-      .progress-section {
-        display: flex;
-        align-items: center;
-
-        .time {
-          width: 40px;
-          font-size: 12px;
-          text-align: center;
-          color: rgb(var(--main-cover-color));
-          opacity: 0.6;
-          font-variant-numeric: tabular-nums;
-        }
-
-        .n-slider {
-          margin: 0 12px;
-        }
-      }
-
-      .control-section {
-        width: 100%;
-        max-width: 420px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-
-        .placeholder {
-          width: 24px;
-        }
-
-        .mode-btn {
-          width: 40px;
-          height: 40px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          opacity: 0.8;
-
-          .n-icon {
-            color: rgb(var(--main-cover-color));
-          }
-        }
-
-        .ctrl-btn {
-          width: 50px;
-          height: 50px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-
-          .n-icon {
-            color: rgb(var(--main-cover-color));
-          }
-        }
-
-        .play-btn {
-          width: 60px;
-          height: 60px;
-          font-size: 26px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: transform 0.2s;
-          background-color: rgba(var(--main-cover-color), 0.2);
-          color: rgb(var(--main-cover-color));
-
-          &.n-button--primary-type {
-            --n-color: rgba(var(--main-cover-color), 0.14);
-            --n-color-hover: rgba(var(--main-cover-color), 0.2);
-            --n-color-focus: rgba(var(--main-cover-color), 0.2);
-            --n-color-pressed: rgba(var(--main-cover-color), 0.12);
-          }
-
-          &:active {
-            transform: scale(0.95);
-          }
-        }
-      }
     }
   }
 
   .comment-page {
-    padding: calc(56px + var(--mobile-safe-top)) 0 calc(24px + var(--mobile-safe-bottom));
+    padding: calc(56px + var(--mobile-safe-top)) 0 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1334,40 +975,13 @@ const contentTransform = computed(() => {
     }
   }
 
-  .pagination {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: calc(16px + var(--mobile-safe-bottom));
-    display: flex;
-    justify-content: center;
-    gap: 8px;
-    pointer-events: none;
-
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background-color: rgba(255, 255, 255, 0.2);
-      transition: all 0.3s;
-      pointer-events: auto;
-
-      &.active {
-        width: 16px;
-        border-radius: 4px;
-        background-color: rgb(var(--main-cover-color));
-        opacity: 0.8;
-      }
-    }
-  }
-
   @media (max-width: 512px) {
     .top-bar {
       padding: var(--mobile-safe-top) 16px 0;
     }
 
     .info-page {
-      padding: 0 16px calc(20px + var(--mobile-safe-bottom));
+      padding: 0 16px 8px;
 
       .cover-section {
         min-height: clamp(200px, 38vh, 320px);
@@ -1377,17 +991,10 @@ const contentTransform = computed(() => {
       .song-info-bar {
         margin-bottom: 16px;
       }
-
-      .control-section {
-        .ctrl-btn {
-          width: 44px;
-          height: 44px;
-        }
-      }
     }
 
     .lyric-page {
-      padding: calc(52px + var(--mobile-safe-top)) 16px calc(20px + var(--mobile-safe-bottom));
+      padding: calc(52px + var(--mobile-safe-top)) 16px 0;
 
       .lyric-header {
         gap: 12px;
@@ -1395,7 +1002,7 @@ const contentTransform = computed(() => {
     }
 
     .comment-page {
-      padding: calc(52px + var(--mobile-safe-top)) 0 calc(20px + var(--mobile-safe-bottom));
+      padding: calc(52px + var(--mobile-safe-top)) 0 0;
 
       :deep(.mobile-comment) {
         .song-data {
@@ -1415,7 +1022,7 @@ const contentTransform = computed(() => {
   // 矮屏首屏优先保证进度与播放控制完整可见，超长元数据仍可纵向滚动
   @media (max-width: 512px) and (max-height: 700px) {
     .info-page {
-      padding-bottom: calc(24px + var(--mobile-safe-bottom));
+      padding-bottom: 4px;
 
       .cover-section {
         min-height: clamp(168px, 32vh, 220px);
@@ -1440,28 +1047,6 @@ const contentTransform = computed(() => {
       .song-info-bar {
         margin-bottom: 8px;
       }
-
-      .progress-section {
-        margin-bottom: 10px;
-      }
-
-      .control-section {
-        margin-bottom: 8px;
-
-        .ctrl-btn {
-          width: 42px;
-          height: 42px;
-        }
-
-        .play-btn {
-          width: 54px;
-          height: 54px;
-        }
-      }
-    }
-
-    .pagination {
-      bottom: calc(8px + var(--mobile-safe-bottom));
     }
   }
 
@@ -1480,7 +1065,7 @@ const contentTransform = computed(() => {
     }
 
     .info-page {
-      padding: 0 clamp(32px, 6vw, 56px) calc(32px + var(--mobile-safe-bottom));
+      padding: 0 clamp(32px, 6vw, 56px) 16px;
 
       .cover-section {
         min-height: clamp(340px, 44vh, 520px);
@@ -1557,44 +1142,10 @@ const contentTransform = computed(() => {
         width: 52px;
         height: 52px;
       }
-
-      .progress-section {
-        margin-bottom: 32px;
-
-        .time {
-          width: 52px;
-          font-size: 14px;
-        }
-
-        .n-slider {
-          margin: 0 16px;
-        }
-      }
-
-      .control-section {
-        max-width: 520px;
-        margin-bottom: 32px;
-
-        .placeholder,
-        .mode-btn {
-          width: 52px;
-          height: 52px;
-        }
-
-        .ctrl-btn {
-          width: 64px;
-          height: 64px;
-        }
-
-        .play-btn {
-          width: 76px;
-          height: 76px;
-        }
-      }
     }
 
     .lyric-page {
-      padding: calc(72px + var(--mobile-safe-top)) 20px calc(32px + var(--mobile-safe-bottom));
+      padding: calc(72px + var(--mobile-safe-top)) 20px 0;
 
       .lyric-header {
         gap: 20px;
@@ -1668,20 +1219,6 @@ const contentTransform = computed(() => {
 
         :deep(.lyric-menu) {
           display: none;
-        }
-      }
-    }
-
-    .pagination {
-      bottom: calc(24px + var(--mobile-safe-bottom));
-      gap: 10px;
-
-      .dot {
-        width: 8px;
-        height: 8px;
-
-        &.active {
-          width: 22px;
         }
       }
     }

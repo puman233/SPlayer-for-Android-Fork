@@ -60,6 +60,7 @@ declare module 'vue' {
     MainPlayer: typeof import('./src/components/Player/MainPlayer.vue')['default']
     MainSetting: typeof import('./src/components/Setting/MainSetting.vue')['default']
     Menu: typeof import('./src/components/Layout/Menu.vue')['default']
+    MobilePlayerBottomControls: typeof import('./src/components/Player/MobilePlayerBottomControls.vue')['default']
     MobileSongMenu: typeof import('./src/components/Menu/MobileSongMenu.vue')['default']
     NA: typeof import('naive-ui')['NA']
     NAlert: typeof import('naive-ui')['NAlert']

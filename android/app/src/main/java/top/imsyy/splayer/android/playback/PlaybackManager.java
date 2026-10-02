@@ -39,6 +39,7 @@ import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -151,9 +152,11 @@ public final class PlaybackManager {
   private final PlaybackUrlResolver urlResolver = new PlaybackUrlResolver();
 
   private TrackMetadata currentMetadata = new TrackMetadata();
-  private static final int NATIVE_ERROR_RECOVERY_MAX_ATTEMPTS = 2;
   private long nativeRecoverySongId = 0L;
   private int nativeRecoveryAttempts = 0;
+  private boolean playbackRequested = false;
+  @Nullable private Runnable pendingRecoveryRunnable;
+  @Nullable private Runnable pendingRecoveryResetRunnable;
 
   /**
    * Java 端自治播放队列（滑动窗口）。
@@ -366,12 +369,22 @@ public final class PlaybackManager {
   }
 
   public synchronized JSObject load(String url, long positionMs, boolean autoPlay) {
-    Log.d(TAG, "load: url=" + url + " positionMs=" + positionMs + " autoPlay=" + autoPlay);
+    String sourceScheme = url == null ? "none" : String.valueOf(Uri.parse(url).getScheme());
+    Log.d(
+        TAG,
+        "load: sourceScheme="
+            + sourceScheme
+            + " positionMs="
+            + positionMs
+            + " autoPlay="
+            + autoPlay);
     ensureInitialized();
     ensureServiceRunning();
 
     // ExoPlayer 直接驱动播放，退出 remote mode（JS 驱动模式）
     remoteMode = false;
+    resetNativeRecoveryState();
+    playbackRequested = autoPlay;
     currentSource = url == null ? "" : url;
     currentMetadata.url = currentSource;
 
@@ -422,7 +435,9 @@ public final class PlaybackManager {
   public synchronized JSObject play() {
     ensureInitialized();
     ensureServiceRunning();
+    playbackRequested = true;
     player.play();
+    emitPlaybackDiagnostic("play", null);
     updateNotification();
     emitPlaybackState(true);
     return buildState();
@@ -430,7 +445,10 @@ public final class PlaybackManager {
 
   public synchronized JSObject pause() {
     ensureInitialized();
+    playbackRequested = false;
+    cancelRecoveryReset();
     player.pause();
+    emitPlaybackDiagnostic("pause", null);
     updateNotification();
     emitPlaybackState(true);
     return buildState();
@@ -440,6 +458,9 @@ public final class PlaybackManager {
     ensureInitialized();
     // 软停止：不清 MediaItem / 通知栏，留给下一次 load() 无缝替换，避免切歌瞬间闪烁。
     // 进程级清理走 cleanup() / onDestroy。
+    playbackRequested = false;
+    resetNativeRecoveryState();
+    resolveTokenCounter.incrementAndGet();
     player.pause();
     player.seekTo(0L);
     clearPendingSeek();
@@ -524,6 +545,8 @@ public final class PlaybackManager {
   /** 硬清理：清播放列表 / 登入登出等场景，清空 MediaItem、通知栏、queuedNext 及快路径锁。 */
   public synchronized JSObject cleanup() {
     ensureInitialized();
+    playbackRequested = false;
+    resetNativeRecoveryState();
     player.pause();
     player.seekTo(0L);
     player.stop();
@@ -553,7 +576,7 @@ public final class PlaybackManager {
         || currentSource == null
         || currentSource.isEmpty()
         || player.getPlaybackState() == Player.STATE_IDLE) {
-      boolean wasPlaying = player.getPlayWhenReady();
+      boolean wasPlaying = playbackRequested;
       player.setMediaItem(buildMediaItem(currentSource), safePositionMs);
       player.prepare();
       player.setPlayWhenReady(wasPlaying);
@@ -908,7 +931,8 @@ public final class PlaybackManager {
             cachedFactory,
             new DefaultExtractorsFactory()
                 .setConstantBitrateSeekingEnabled(true)
-                .setConstantBitrateSeekingAlwaysEnabled(true));
+                .setConstantBitrateSeekingAlwaysEnabled(true))
+            .setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(5));
 
     player =
         new ExoPlayer.Builder(appContext, renderersFactory)
@@ -928,6 +952,7 @@ public final class PlaybackManager {
         new Player.Listener() {
           @Override
           public void onPlaybackStateChanged(int playbackState) {
+            emitPlaybackDiagnostic("state", null);
             if (playbackState == Player.STATE_ENDED) {
               stopProgressUpdates();
               if (handleAutoAdvanceOnEnded()) {
@@ -939,6 +964,7 @@ public final class PlaybackManager {
               startProgressUpdates();
               if (playbackState == Player.STATE_READY) {
                 calibrateDurationFromPlayer();
+                scheduleRecoveryResetIfStable();
               }
             }
 
@@ -951,6 +977,9 @@ public final class PlaybackManager {
             // 不在 false 分支 stopProgressUpdates：BUFFERING/seek/stall 也是 false，停链路会卡切歌
             if (isPlaying) {
               startProgressUpdates();
+              scheduleRecoveryResetIfStable();
+            } else if (!player.getPlayWhenReady()) {
+              cancelRecoveryReset();
             }
             updateNotification();
             emitPlaybackState(true);
@@ -971,6 +1000,7 @@ public final class PlaybackManager {
 
           @Override
           public void onPlayerError(PlaybackException error) {
+            emitPlaybackDiagnostic("error", error);
             if (recoverCurrentTrackAfterError(error)) {
               return;
             }
@@ -1356,8 +1386,7 @@ public final class PlaybackManager {
     // 切歌即失效旧 async 回调 + 清 pending，防止旧 URL 覆盖 / 补窗误消费
     resolveTokenCounter.incrementAndGet();
     pendingResumeAfterRefill = false;
-    nativeRecoverySongId = 0L;
-    nativeRecoveryAttempts = 0;
+    resetNativeRecoveryState();
     TrackMetadata metadata = trackToMetadata(track);
     startTrackFromState(track.url, metadata, track.liked, true);
 
@@ -1380,68 +1409,131 @@ public final class PlaybackManager {
 
   private boolean recoverCurrentTrackAfterError(PlaybackException error) {
     long songId = currentMetadata.songId;
-    if (songId <= 0 || !currentMetadata.canLike) return false;
+    if (songId <= 0) return false;
     if (currentSource == null || currentSource.isEmpty()) return false;
-    if (!isRecoverablePlaybackError(error)) return false;
+    Uri sourceUri = Uri.parse(currentSource);
+    String sourceScheme = sourceUri.getScheme();
+    if (!"http".equals(sourceScheme) && !"https".equals(sourceScheme)) return false;
+    if (!PlaybackRecoveryPolicy.isRecoverable(error.errorCode)) return false;
     if (nativeRecoverySongId != songId) {
+      resetNativeRecoveryState();
       nativeRecoverySongId = songId;
-      nativeRecoveryAttempts = 0;
     }
-    if (nativeRecoveryAttempts >= NATIVE_ERROR_RECOVERY_MAX_ATTEMPTS) return false;
-    nativeRecoveryAttempts++;
-    long positionMs = Math.max(0L, getPositionMs());
-    TrackMetadata metadataSnapshot = currentMetadata.copy();
-    boolean likedSnapshot = liked;
-    Log.w(TAG, "native recover playback error code=" + error.errorCode + " songId=" + songId);
-    final long myToken = resolveTokenCounter.incrementAndGet();
-    urlResolver.clear(songId);
-    urlResolver.submitResolve(
-        songId,
-        url ->
-            mainHandler.post(
-                () -> {
-                  if (player == null) return;
-                  if (myToken != resolveTokenCounter.get()) return;
-                  if (url == null || url.isEmpty()) {
-                    emitError(error.errorCode, error.getMessage());
-                    updateNotification();
-                    return;
-                  }
-                  metadataSnapshot.url = url;
-                  currentSource = url;
-                  currentMetadata = metadataSnapshot.copy();
-                  playbackQueue.updateTrackUrl(songId, url);
-                  liked = likedSnapshot;
-                  clearPendingSeek();
-                  durationCalibratedForSource = "";
-                  player.setMediaItem(buildMediaItem(url));
-                  player.prepare();
-                  if (positionMs > 0) {
-                    player.seekTo(positionMs);
-                    beginPendingSeek(positionMs);
-                  }
-                  player.play();
-                  updateNotification();
-                  emitPlaybackState(true);
-                  emitProgressChanged();
-                  nativeRecoverySongId = 0L;
-                  nativeRecoveryAttempts = 0;
-                  prefetchUpcomingUrls();
-                }));
+    if (nativeRecoveryAttempts >= PlaybackRecoveryPolicy.MAX_ATTEMPTS) return false;
+
+    scheduleNativeRecoveryAttempt(error, songId, Math.max(0L, getPositionMs()));
     return true;
   }
 
-  private boolean isRecoverablePlaybackError(PlaybackException error) {
-    int code = error.errorCode;
-    return code == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
-        || code == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
-        || code == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
-        || code == PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE
-        || code == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
-        || code == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
-        || code == PlaybackException.ERROR_CODE_IO_NO_PERMISSION
-        || code == PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED
-        || code == PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE;
+  private void scheduleNativeRecoveryAttempt(
+      PlaybackException error, long songId, long positionMs) {
+    if (nativeRecoveryAttempts >= PlaybackRecoveryPolicy.MAX_ATTEMPTS) {
+      finishNativeRecoveryWithError(error);
+      return;
+    }
+
+    nativeRecoveryAttempts++;
+    int attempt = nativeRecoveryAttempts;
+    long delayMs = PlaybackRecoveryPolicy.retryDelayMs(attempt);
+    TrackMetadata metadataSnapshot = currentMetadata.copy();
+    boolean likedSnapshot = liked;
+    final long myToken = resolveTokenCounter.incrementAndGet();
+    Log.w(
+        TAG,
+        "native recovery scheduled code="
+            + error.errorCode
+            + " attempt="
+            + attempt
+            + "/"
+            + PlaybackRecoveryPolicy.MAX_ATTEMPTS
+            + " delayMs="
+            + delayMs);
+    emitPlaybackDiagnostic("recovery-scheduled", error);
+
+    Runnable recoveryTask =
+        () -> {
+          pendingRecoveryRunnable = null;
+          if (player == null || myToken != resolveTokenCounter.get()) return;
+          if (currentMetadata.songId != songId) return;
+          urlResolver.clear(songId);
+          urlResolver.submitResolve(
+              songId,
+              url ->
+                  mainHandler.post(
+                      () -> {
+                        if (player == null || myToken != resolveTokenCounter.get()) return;
+                        if (currentMetadata.songId != songId) return;
+                        if (url == null || url.isEmpty()) {
+                          emitPlaybackDiagnostic("recovery-resolve-failed", error);
+                          scheduleNativeRecoveryAttempt(error, songId, positionMs);
+                          return;
+                        }
+
+                        metadataSnapshot.url = url;
+                        currentSource = url;
+                        currentMetadata = metadataSnapshot.copy();
+                        playbackQueue.updateTrackUrl(songId, url);
+                        liked = likedSnapshot;
+                        clearPendingSeek();
+                        durationCalibratedForSource = "";
+                        player.setMediaItem(buildMediaItem(url));
+                        player.prepare();
+                        if (positionMs > 0) {
+                          player.seekTo(positionMs);
+                          beginPendingSeek(positionMs);
+                        }
+                        player.setPlayWhenReady(playbackRequested);
+                        updateNotification();
+                        emitPlaybackState(true);
+                        emitProgressChanged();
+                        emitPlaybackDiagnostic("recovery-reloaded", null);
+                        prefetchUpcomingUrls();
+                      }));
+        };
+    pendingRecoveryRunnable = recoveryTask;
+    mainHandler.postDelayed(recoveryTask, delayMs);
+  }
+
+  private void finishNativeRecoveryWithError(PlaybackException error) {
+    emitPlaybackDiagnostic("recovery-exhausted", error);
+    emitError(error.errorCode, error.getMessage());
+    updateNotification();
+  }
+
+  private void scheduleRecoveryResetIfStable() {
+    if (nativeRecoveryAttempts <= 0 || player == null || !playbackRequested) return;
+    cancelRecoveryReset();
+    final long songId = nativeRecoverySongId;
+    Runnable resetTask =
+        () -> {
+          pendingRecoveryResetRunnable = null;
+          if (player == null || currentMetadata.songId != songId) return;
+          if (player.getPlaybackState() != Player.STATE_READY || !player.isPlaying()) return;
+          emitPlaybackDiagnostic("recovery-stable", null);
+          nativeRecoverySongId = 0L;
+          nativeRecoveryAttempts = 0;
+        };
+    pendingRecoveryResetRunnable = resetTask;
+    mainHandler.postDelayed(resetTask, PlaybackRecoveryPolicy.STABLE_PLAYBACK_RESET_MS);
+  }
+
+  private void cancelRecoveryReset() {
+    Runnable resetTask = pendingRecoveryResetRunnable;
+    if (resetTask != null) {
+      mainHandler.removeCallbacks(resetTask);
+      pendingRecoveryResetRunnable = null;
+    }
+  }
+
+  private void resetNativeRecoveryState() {
+    Runnable recoveryTask = pendingRecoveryRunnable;
+    if (recoveryTask != null) {
+      mainHandler.removeCallbacks(recoveryTask);
+      pendingRecoveryRunnable = null;
+    }
+    cancelRecoveryReset();
+    nativeRecoverySongId = 0L;
+    nativeRecoveryAttempts = 0;
   }
 
   /** 转换 PlaybackQueue.Track → TrackMetadata（复用现有切歌路径） */
@@ -1485,6 +1577,48 @@ public final class PlaybackManager {
     currentPlugin.emitEvent("diagnosticLog", payload, false);
   }
 
+  /** 仅输出状态与数值，不包含 URL、Cookie、歌名或账号信息。 */
+  private void emitPlaybackDiagnostic(String event, @Nullable PlaybackException error) {
+    if (player == null) return;
+    String state;
+    switch (player.getPlaybackState()) {
+      case Player.STATE_IDLE:
+        state = "IDLE";
+        break;
+      case Player.STATE_BUFFERING:
+        state = "BUFFERING";
+        break;
+      case Player.STATE_READY:
+        state = "READY";
+        break;
+      case Player.STATE_ENDED:
+        state = "ENDED";
+        break;
+      default:
+        state = "UNKNOWN";
+    }
+    StringBuilder message =
+        new StringBuilder()
+            .append("event=")
+            .append(event)
+            .append(" state=")
+            .append(state)
+            .append(" requested=")
+            .append(playbackRequested)
+            .append(" playing=")
+            .append(player.isPlaying())
+            .append(" positionMs=")
+            .append(Math.max(0L, player.getCurrentPosition()))
+            .append(" bufferedMs=")
+            .append(Math.max(0L, player.getBufferedPosition()))
+            .append(" attempt=")
+            .append(nativeRecoveryAttempts);
+    if (error != null) {
+      message.append(" errorCode=").append(error.errorCode);
+    }
+    emitDiagnosticLog("DIAG-Playback", message.toString());
+  }
+
   private void startTrackFromState(
       String source, TrackMetadata metadata, boolean likedState, boolean emitProgressImmediately) {
     if (player == null) {
@@ -1492,6 +1626,7 @@ public final class PlaybackManager {
     }
 
     currentSource = source == null ? "" : source;
+    playbackRequested = true;
     currentMetadata = metadata == null ? new TrackMetadata() : metadata.copy();
     liked = likedState;
     clearPendingSeek();

@@ -45,3 +45,11 @@
 - `VERIFIED`：手机竖→横→竖、平板横→竖→横过程中，全屏设置尺寸正确、内容可继续滚动；关闭后手机底部导航与滑动指示器恢复。
 - `VERIFIED`：手机横屏完整播放页与平板竖屏完整播放页无裁切、重叠或越界；测试后双终端自动旋转与备用方向值均恢复基线。
 - `VERIFIED`：视口测试 4/4、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 通过。
+- `IMPLEMENTED`：Media3 加载错误采用 5 次内部重试；终态网络错误再按 750ms、2s、5s 三次换 URL，保留当前播放位置和用户播放/暂停意图。
+- `IMPLEMENTED`：恢复预算不再在 URL 解析成功时立即清零，只有连续稳定播放 10 秒才重置，防止坏链路形成无限恢复循环。
+- `IMPLEMENTED`：新增去敏播放时间线，仅记录状态、播放意图、位置、缓冲位置、恢复次数和错误码；移除 PlaybackManager 与低磁盘预取日志中的完整 URL。
+- `VERIFIED`：3 项恢复策略单测和 Android Java 编译通过；`pnpm format`、`pnpm build:android` 与四 ABI `assembleDebug` 通过，新 x86_64 APK 已覆盖安装到手机和平板。
+- `VERIFIED`：手机短时断网并 seek 到未缓存区后由 BUFFERING 回到 READY/PLAYING；恢复歌曲结束后原生队列继续切歌。
+- `VERIFIED`：长断网触发 Media3 2001 后，原生恢复实际执行三档退避；前两次 URL 解析失败，第三次在网络恢复后从 114730ms 断点重载并继续播放。
+- `VERIFIED`：缓冲期间主动暂停后，网络恢复保持 `requested=false` 和 MediaSession `PAUSED`，位置保持 146290ms，未擅自自播。
+- `BLOCKED`：手机剩余空间低于 1GB，SimpleCache 按既有低磁盘策略只读，无法新建完整缓存验证离线重播；未清理用户数据。MuMu 无 root/tc 或可控代理，精确限速场景未运行。

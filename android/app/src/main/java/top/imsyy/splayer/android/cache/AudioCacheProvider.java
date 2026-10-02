@@ -477,7 +477,7 @@ public final class AudioCacheProvider {
     if (url == null || url.isEmpty()) return;
     // 低磁盘：不启动任何 prefetch（短预载 / 预载 都被拦）。在 PlaybackManager.schedulePromotion 调用前路拦截。
     if (isLowDiskSpace(appContext)) {
-      Log.d(TAG, "low disk: prefetch skipped for " + url);
+      Log.d(TAG, "low disk: prefetch skipped");
       return;
     }
     Uri uri = Uri.parse(url);

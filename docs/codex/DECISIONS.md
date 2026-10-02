@@ -14,9 +14,9 @@
 
 ## D-003 在现有原生播放链路上增强
 
-- 状态：待实现验证
-- 决策：复用 Media3 ExoPlayer、SimpleCache、预取和 URL resolver，不建立第二套播放器。
-- 理由：避免队列、MediaSession、缓存与前端状态产生双重真相。
+- 状态：已验证
+- 决策：复用 Media3 ExoPlayer、SimpleCache、预取和 URL resolver；Media3 先做有限加载重试，终态网络错误再执行 750ms/2s/5s 三次换 URL 断点恢复，不建立第二套播放器。
+- 理由：避免队列、MediaSession、缓存与前端状态产生双重真相；恢复预算只在连续稳定播放 10 秒后清零，并始终服从用户当前播放/暂停意图。
 
 ## D-004 系统安装器保留最终确认
 

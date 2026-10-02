@@ -48,3 +48,10 @@
 - 状态：正式签名构建与证书核验 `VERIFIED`
 - 决策：后续本地 Release 使用用户提供的 `my-release-key.jks`，通过 Git 已忽略的 `android/key.properties` 配置 `storeFile`、`storePassword`、`keyAlias` 和 `keyPassword`；密钥、密码和生成配置均不得提交。
 - 理由：复用既有签名可保证安装升级链路连续，同时把敏感材料留在版本库之外；本机已从旧项目保留忽略的签名配置，JKS 迁至仓库外 `C:/Users/ihyj/SPlayer/signing`，四 ABI 签名验证通过。
+
+## D-009 手机 Pager 与播放控制分离
+
+- 状态：已验证
+- 决策：Cover、Lyrics 和评论页只渲染可横滑内容；时间、进度条、五键控制和分页指示器由 Pager 外单一 `MobilePlayerBottomControls` 实例渲染，并在同一布局流中承接底部安全区。
+- 理由：原信息页使用 `margin: auto` 的文档流控制区，歌词页使用绝对定位浮层，分页点又单独绝对定位，三套坐标与占位规则无法保证切页稳定，也只能依赖经验 padding 避让重叠。
+- 验证：1080×1920、1080×2400、1080×2520 的 Cover / Lyrics 截图中进度条、播放按钮和分页点位置一致，三键导航模式下控制区未进入系统栏。

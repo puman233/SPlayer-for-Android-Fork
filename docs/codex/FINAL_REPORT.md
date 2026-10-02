@@ -2,7 +2,7 @@
 
 ## 交付状态
 
-- 分支：`codex/android-stability-update`
+- 集成分支：`dev`
 - 基线：`origin/dev` / `d834171d`
 - Debug 交付：`VERIFIED`
 - 正式 Release 签名构建与证书核验：`VERIFIED`；递增版本升级安装：`BLOCKED`，本次保持 30014 / 3.0.8
@@ -10,6 +10,7 @@
 ## 已完成范围
 
 - 手机、平板、横竖屏、矮屏、字体缩放和安全区自适应。
+- 手机 Cover / Lyrics / 评论分页共用 Pager 外单一播放底栏，切页不再改变控制区坐标。
 - Media3 弱网有界重试、三档退避、断点恢复、暂停意图保护和去敏诊断。
 - GitHub Releases 稳定通道、API 限流回退、ABI 匹配和包体大小展示。
 - APK 下载进度、取消、清理、SHA-256、包名、版本号和签名证书校验。
@@ -25,6 +26,7 @@
 - Android：`testDebugUnitTest assembleDebug` 通过，四 ABI 产物完整。
 - 手机和平板：x86_64 Debug 包覆盖安装、冷启动和前台 Activity 通过。
 - 手机：1080×1920 / 480 dpi 完整播放页无裁切。
+- 手机：1080×2400、1080×2520 下 Cover / Lyrics 的时间、Slider、五键控制和分页点位置一致，三键导航安全区无侵入。
 - 平板：1920×1080 / 280 dpi 首页、侧栏和播放栏无越界。
 - 离线缓存：飞行模式保持开启时从 0 ms 播放至 194037 ms，自然切换下一首。
 - 更新安装器：实际 FileProvider URI 进入系统 PackageInstaller，未授予未知来源权限、未确认最终安装。
@@ -46,10 +48,10 @@
 
 | 文件                        |     字节 | SHA-256                                                            |
 | --------------------------- | -------: | ------------------------------------------------------------------ |
-| `app-arm64-v8a-debug.apk`   | 64720796 | `9ec64854ab95dc909c5cc7c6e23c164855ea1bbead1bc9d0760d6ca4965ce830` |
-| `app-armeabi-v7a-debug.apk` | 63898890 | `503842ff8220f471e9d0621f126e6f0f2a2198bcd19341a15ce59a5ce71850b2` |
-| `app-x86_64-debug.apk`      | 70272547 | `2133b46caa637ec7cc09f9f43bd823aec8a9da0adf70ce229ff33751f417060e` |
-| `app-x86-debug.apk`         | 67029286 | `a99b95572f4ed35b41433ce74b117423b5eedb866cbb44a2461e71319632d5fc` |
+| `app-arm64-v8a-debug.apk`   | 64256649 | `fadd16e08395a84095c30a1601ab1c0b03c4886a213581d67f8f7471fe87d472` |
+| `app-armeabi-v7a-debug.apk` | 63434759 | `0c99c56c91c74d706f30bef2080638af290377a565d887769e9e7538cb6881e0` |
+| `app-x86_64-debug.apk`      | 69808400 | `a8371cb0f30bb65d9cb24901d779dcc1ccfa231921747183a3671b3cbecbd734` |
+| `app-x86-debug.apk`         | 66565155 | `a96b24021f5f82e4772a454a2612efb0a7166c396e712cc658162c83a9e56843` |
 
 Debug 包名为 `top.imsyy.splayer.android.debug`，不会覆盖正式版用户数据。
 
@@ -63,6 +65,9 @@ Debug 包名为 `top.imsyy.splayer.android.debug`，不会覆盖正式版用户�
 6. `0a6b744e` `fix(playback): recover from transient network failures`
 7. `29033fed` `fix(update): verify and harden Android upgrades`
 8. `e935da92` `fix(update): enforce stable release channel`
+9. `407635cf` `docs: finalize Android stability delivery`
+10. `bcea4841` `docs: record project consolidation and signed release verification`
+11. `ecffa396` `refactor(player): share mobile bottom controls`
 
 ## 回滚
 

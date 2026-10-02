@@ -1,5 +1,13 @@
 # 工作日志
 
+## 2026-10-03 手机播放器共享底栏与分支归并复核
+
+- `VERIFIED`：`dev` 工作区起始干净；本地/远程仅有 `dev` 与 `codex/android-stability-update`，后者已是 `dev` 祖先，未发现遗漏的功能分支，未执行机械合并或删除分支。
+- `IMPLEMENTED`：新增 `MobilePlayerBottomControls`，将 CurrentTime、Slider、Duration、随机、上一曲、播放暂停、下一曲、循环和分页指示器移到 Pager 外的唯一真实布局区域。
+- `IMPLEMENTED`：删除信息页文档流控制区、歌词页绝对定位浮层、自动隐藏计时器及独立分页绝对定位层；Cover / Lyrics 仅保留各自内容。
+- `VERIFIED`：TypeScript 双配置类型检查、零警告 ESLint、8 个 suite / 42 项 TypeScript 测试、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 通过。
+- `VERIFIED`：新 x86_64 Debug APK 覆盖安装到手机和平板；手机 1080×1920、1080×2400、1080×2520 下 Cover / Lyrics 共享底栏坐标一致，播放按钮与分页点不重叠，底部安全区位于三键导航栏之上。
+
 ## 2026-10-02 项目目录归并与签名包
 
 - `VERIFIED`：主目录 `C:/Users/ihyj/SPlayer/SPlayer-for-Android-Fork` 的 `dev` 已快进到 `407635cf`，作为后续开发入口。

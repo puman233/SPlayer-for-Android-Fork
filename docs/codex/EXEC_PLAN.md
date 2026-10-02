@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `codex/android-stability-update` 分支完成 UI 自适应、弱网播放恢复、GitHub Releases 检查与应用内更新，并在手机/平板 MuMu 终端验证。
+在 `dev` 集成 UI 自适应、弱网播放恢复、GitHub Releases 检查与应用内更新，并在手机/平板 MuMu 终端验证。
 
 ## 当前基线
 
@@ -42,6 +42,8 @@
 - [x] 修复设置页、弹层和底部导航边界问题
 - [x] 增加可复用布局规则和边界测试
 - [x] 双终端多 density/方向/字体回归（手机 480/420 dpi、字体 1.0/1.3，双端横竖屏恢复）
+- [x] 将手机 Cover / Lyrics 的进度、播放控制和分页指示器收敛为 Pager 外唯一共享底栏
+- [x] 验证 1080×1920、1080×2400、1080×2520 下共享底栏不跳动、不重叠并避开导航栏
 
 ### M2 播放连续性
 
@@ -69,17 +71,17 @@
 
 ### M4 文档与最终回归
 
-状态：Debug 交付 `VERIFIED`，正式 Release 签名 `BLOCKED`
+状态：Debug 交付与正式 Release 签名构建 `VERIFIED`，递增版本升级安装 `BLOCKED`
 
 - [x] README 与 CHANGELOG
 - [x] 完整质量门和双终端回归
 - [x] 四 ABI Debug 安装包、摘要与双端安装验证
 - [x] 最终报告、回滚说明和提交清单
-- [ ] 使用外部 JKS 构建并验证正式 Release 升级包
+- [x] 使用外部 JKS 构建并验证四 ABI 正式 Release 签名包
+- [ ] 递增版本后验证正式 Release 原位升级（当前产物仍为 30014 / 3.0.8）
 
 ## 当前下一步
 
-1. Debug 交付已完成；最终证据、产物摘要和回滚步骤见 `docs/codex/FINAL_REPORT.md`。
+1. 手机播放器共享底栏改造已完成，当前 `dev` 包含全部有效稳定性分支提交。
 2. 若提供可控代理或有 root 的测试终端，可补跑精确限速场景。
 3. 已使用仓库外 JKS 和忽略的 `android/key.properties` 构建四 ABI 正式签名包并验证证书；产物为 30014 / 3.0.8 同版本重构建，递增版本升级安装仍未验证。
-4. 后续工作使用 `C:/Users/ihyj/SPlayer/SPlayer-for-Android-Fork` 的 `dev`；旧 Android 仓库已归档，重复工作树受 Windows 进程占用阻塞，待解除占用后归档。

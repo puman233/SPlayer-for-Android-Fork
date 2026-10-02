@@ -3,6 +3,12 @@ interface ParsedVersion {
   prerelease: Array<number | string>;
 }
 
+interface VersionedRelease {
+  tag_name: string;
+  draft?: boolean;
+  prerelease?: boolean;
+}
+
 const VERSION_PREFIX_RE = /^[=\s]*v?/i;
 
 /**
@@ -71,3 +77,15 @@ export const compareVersions = (left: string, right: string): number | null => {
 
 export const isVersionNewer = (candidate: string, current: string): boolean =>
   compareVersions(candidate, current) === 1;
+
+/** 默认稳定通道排除草稿、预发布和非法版本标签。 */
+export const filterUpdateReleases = <T extends VersionedRelease>(
+  releases: T[],
+  includePrerelease = false,
+): T[] =>
+  releases.filter(
+    (release) =>
+      !release.draft &&
+      (includePrerelease || !release.prerelease) &&
+      parseVersion(release.tag_name) !== null,
+  );

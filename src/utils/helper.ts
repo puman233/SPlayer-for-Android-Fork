@@ -11,6 +11,7 @@ import { marked } from "marked";
 import { isElectron } from "./env";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
 import Fuse from "fuse.js";
+import { filterUpdateReleases } from "@/core/update/version";
 
 type AnyObject = { [key: string]: any };
 
@@ -257,15 +258,13 @@ export const getUpdateLog = async (forceRefresh = false): Promise<UpdateLogType[
   });
   if (!result || isEmpty(result)) return [];
   const updateLogs = await Promise.all(
-    result
-      .filter((v: any) => !v.draft)
-      .map(async (v: any) => ({
-        version: v.tag_name,
-        changelog: await marked(v.body),
-        time: convertToLocalTime(v.published_at),
-        url: v.html_url,
-        prerelease: v.prerelease,
-      })),
+    filterUpdateReleases(result).map(async (v: any) => ({
+      version: v.tag_name,
+      changelog: await marked(v.body),
+      time: convertToLocalTime(v.published_at),
+      url: v.html_url,
+      prerelease: v.prerelease,
+    })),
   );
   return updateLogs;
 };

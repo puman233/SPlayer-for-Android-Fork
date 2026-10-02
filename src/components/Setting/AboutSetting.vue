@@ -158,8 +158,8 @@ import { isElectron } from "@/utils/env";
 import { Capacitor } from "@capacitor/core";
 import packageJson from "@/../package.json";
 import { ANDROID_REPOSITORY_URL } from "@/config/repository";
+import { getUpdateCheckErrorMessage } from "@/core/update/errors";
 import { isVersionNewer } from "@/core/update/version";
-import axios from "axios";
 import { openAndroidUpdateApp } from "@/utils/modal";
 
 import "github-markdown-css/github-markdown.css";
@@ -263,21 +263,6 @@ const oldVersion = computed<UpdateLogType[]>(() => {
   return oldData ? oldData : [];
 });
 
-const getUpdateErrorMessage = (error: unknown): string => {
-  if (axios.isAxiosError(error)) {
-    if (error.response?.status === 403 || error.response?.status === 429) {
-      return "GitHub 请求次数已达上限，请稍后重试";
-    }
-    if (error.response?.status === 404) {
-      return "未找到更新仓库，请检查仓库地址或网络代理";
-    }
-    if (error.code === "ECONNABORTED" || !error.response) {
-      return "无法连接 GitHub，请检查网络后重试";
-    }
-  }
-  return "检查更新失败，请稍后重试";
-};
-
 // 检查更新（Android：应用内检查，不再跳转外部）
 const checkUpdate = debounce(
   async () => {
@@ -312,7 +297,7 @@ const checkUpdate = debounce(
       }
     } catch (error) {
       console.error("检查 Android 更新失败", error);
-      window.$message.error(getUpdateErrorMessage(error));
+      window.$message.error(getUpdateCheckErrorMessage(error));
     } finally {
       statusStore.updateCheck = false;
     }

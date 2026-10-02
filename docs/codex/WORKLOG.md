@@ -59,4 +59,5 @@
 - `VERIFIED`：官方 APK 包名/版本为 `top.imsyy.splayer.android` / 30014；同签名测试升级夹具为 `.debug` / 30015，证书 SHA-256 与已装 30014 Debug 包一致。
 - `VERIFIED`：手机使用实际 FileProvider URI 成功进入 `com.android.packageinstaller/.PackageInstallerActivity`；未知来源权限保持默认，未授予权限、未确认安装、未覆盖正式包。
 - `VERIFIED`：新增 2 项 Release API 附件/大小测试（更新资源测试共 5 项）通过，TypeScript 类型检查和 Android Debug 编译通过。
-- `VERIFIED`：更新相关 9 项测试、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 全部通过；最终 x86_64 Debug APK 已覆盖安装并冷启动于手机和平板，版本均为 30014 / 3.0.8-debug。
+- `VERIFIED`：更新相关 12 项测试、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 全部通过；最终 x86_64 Debug APK 已覆盖安装并冷启动于手机和平板，版本均为 30014 / 3.0.8-debug。
+- `IMPLEMENTED`：默认稳定更新通道过滤 draft、prerelease 和非法 SemVer 标签；断网、超时、限流、404 与未知错误提示提取为可测试纯函数。

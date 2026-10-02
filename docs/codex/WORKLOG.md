@@ -61,3 +61,8 @@
 - `VERIFIED`：新增 2 项 Release API 附件/大小测试（更新资源测试共 5 项）通过，TypeScript 类型检查和 Android Debug 编译通过。
 - `VERIFIED`：更新相关 12 项测试、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 全部通过；最终 x86_64 Debug APK 已覆盖安装并冷启动于手机和平板，版本均为 30014 / 3.0.8-debug。
 - `IMPLEMENTED`：默认稳定更新通道过滤 draft、prerelease 和非法 SemVer 标签；断网、超时、限流、404 与未知错误提示提取为可测试纯函数。
+- `VERIFIED`：M4 完整质量门通过：格式化、类型检查、零警告 lint、8 个 suite / 42 项 TypeScript 测试、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug`。
+- `VERIFIED`：最终 x86_64 Debug APK 覆盖安装到手机和平板，版本均为 30014 / 3.0.8-debug；手机冷启动 2220 ms，平板冷启动 3152 ms，最终竖屏/横屏布局无裁切或越界。
+- `VERIFIED`：手机可用空间恢复到 2.7 GB 后，先完整在线播放形成缓存，再在飞行模式下从 0 ms 连续播放至 194037 ms 并自然切换下一首；测试结束后网络已恢复。
+- `VERIFIED`：分支已推送并跟踪 `origin/codex/android-stability-update`；README、CHANGELOG、最终报告、APK 摘要和回滚说明完成。
+- `BLOCKED`：正式 Release 签名升级包仍需工作区外 JKS、别名和密码；未用 Debug 签名产物冒充正式发布包。精确限速仍需可控代理或有 root 的测试终端。

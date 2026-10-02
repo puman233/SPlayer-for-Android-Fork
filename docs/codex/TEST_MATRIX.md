@@ -26,16 +26,16 @@
 
 ## 播放稳定性
 
-| 场景                     | 状态    | 证据/备注                                                    |
-| ------------------------ | ------- | ------------------------------------------------------------ |
-| 正常网络完整播放         | PASS    | MediaSession 持续 PLAYING，进度与缓冲正常增长                |
-| 短暂断网 3-5 秒并恢复    | PASS    | 未缓存区进入 BUFFERING，恢复网络后回到 READY/PLAYING         |
-| 高延迟/低带宽耗尽缓冲    | BLOCKED | MuMu 无 root/tc 或可控代理，不能精确整形流量                 |
-| HTTP 5xx/连接重置恢复    | PASS    | 实机触发 2001；HTTP bad status 纳入恢复策略单测              |
-| 已缓存歌曲离线重播       | BLOCKED | 手机低于 1 GB 可用空间，SimpleCache 按设计只读且不清用户数据 |
-| seek 到未缓存区后恢复    | PASS    | 断网 seek 后从 114730 ms 断点恢复，无回退到 0                |
-| 切歌时网络波动           | PASS    | 恢复歌曲结束后原生队列自动进入下一首并 READY/PLAYING         |
-| 主动暂停后网络恢复不自播 | PASS    | requested=false，恢复后 READY/PAUSED，位置保持 146290 ms     |
+| 场景                     | 状态    | 证据/备注                                                  |
+| ------------------------ | ------- | ---------------------------------------------------------- |
+| 正常网络完整播放         | PASS    | MediaSession 持续 PLAYING，进度与缓冲正常增长              |
+| 短暂断网 3-5 秒并恢复    | PASS    | 未缓存区进入 BUFFERING，恢复网络后回到 READY/PLAYING       |
+| 高延迟/低带宽耗尽缓冲    | BLOCKED | MuMu 无 root/tc 或可控代理，不能精确整形流量               |
+| HTTP 5xx/连接重置恢复    | PASS    | 实机触发 2001；HTTP bad status 纳入恢复策略单测            |
+| 已缓存歌曲离线重播       | PASS    | 飞行模式下从 0 播至 194037 ms 后自然切歌，全程保持 PLAYING |
+| seek 到未缓存区后恢复    | PASS    | 断网 seek 后从 114730 ms 断点恢复，无回退到 0              |
+| 切歌时网络波动           | PASS    | 恢复歌曲结束后原生队列自动进入下一首并 READY/PLAYING       |
+| 主动暂停后网络恢复不自播 | PASS    | requested=false，恢复后 READY/PAUSED，位置保持 146290 ms   |
 
 ## 应用更新
 
@@ -54,3 +54,17 @@
 | 包名/版本/签名安全校验     | PASS | 官方包元数据已核对；30015 Debug 夹具与已装 30014 证书一致        |
 | 未知来源权限关闭           | PASS | appops 保持 default；未自动授权，产品流程引导用户到系统设置      |
 | 唤起系统安装器             | PASS | FileProvider URI 进入 PackageInstallerActivity；未确认最终安装   |
+
+## M4 最终质量门
+
+| 场景                         | 状态    | 证据/备注                                       |
+| ---------------------------- | ------- | ----------------------------------------------- |
+| TypeScript 类型检查          | PASS    | Node 与 Web 两套配置均通过                      |
+| ESLint                       | PASS    | `--max-warnings=0`                              |
+| TypeScript 自动化测试        | PASS    | 8 个 suite、42 项测试全部通过                   |
+| Android Web/Capacitor/Node   | PASS    | `pnpm build:android` 完成                       |
+| Android 单元测试与四 ABI APK | PASS    | `testDebugUnitTest assembleDebug` 完成          |
+| 双终端覆盖安装与冷启动       | PASS    | 30014 / 3.0.8-debug，手机和平板前台 Activity    |
+| 手机竖屏最终布局             | PASS    | 1080×1920 / 480 dpi，完整播放控制无裁切         |
+| 平板横屏最终布局             | PASS    | 1920×1080 / 280 dpi，侧栏、内容和播放栏无越界   |
+| 正式 Release 签名升级包      | BLOCKED | 缺少工作区外 JKS、别名和密码，不使用 Debug 冒充 |

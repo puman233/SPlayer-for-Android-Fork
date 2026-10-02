@@ -102,6 +102,8 @@ cd android && ./gradlew assembleDebug
 
 产物：`android/app/build/outputs/apk/debug/`（按 ABI 分包）
 
+Debug 包使用 `top.imsyy.splayer.android.debug` 包名，可直接安装并与正式版并存，适合本地验证。正式发布必须通过 GitHub Actions Secrets，或在工作区外准备 keystore 并通过已忽略的 `android/key.properties` 注入签名参数；没有正式签名材料时，不应把 Debug 签名产物用于覆盖安装或公开发布。
+
 ### 分步构建
 
 ```bash

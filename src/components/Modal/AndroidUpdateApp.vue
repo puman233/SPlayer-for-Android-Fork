@@ -11,7 +11,7 @@
     </n-alert>
     <n-alert v-if="errorMessage" type="error" :bordered="false">{{ errorMessage }}</n-alert>
     <n-alert v-else-if="asset" type="info" :bordered="false">
-      已为设备选择 {{ asset.abi }} 安装包：{{ asset.name }}
+      已选择 {{ asset.abi }} 安装包：{{ asset.name }}（{{ formatAssetSize(asset.size) }}）
     </n-alert>
     <n-spin v-else size="small" description="正在识别设备安装包" />
 
@@ -52,6 +52,7 @@ import { openLink } from "@/utils/helper";
 import { AndroidAppUpdate } from "@/plugins/androidAppUpdate";
 import {
   fetchAndroidReleaseAssets,
+  formatAssetSize,
   selectAndroidApkAsset,
   type AndroidReleaseAsset,
 } from "@/core/update/assets";
@@ -86,6 +87,7 @@ const downloadUpdate = async () => {
   if (!asset.value) return;
   errorMessage.value = "";
   progress.value = 0;
+  downloaded.value = false;
   downloading.value = true;
   try {
     await AndroidAppUpdate.downloadApk({

@@ -1,11 +1,54 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { selectAndroidApkAsset, type AndroidReleaseAsset } from "./assets.ts";
+import {
+  formatAssetSize,
+  parseAssetSize,
+  parseReleaseApiAssets,
+  selectAndroidApkAsset,
+  type AndroidReleaseAsset,
+} from "./assets.ts";
 
 const asset = (name: string): AndroidReleaseAsset => ({
   name,
   url: `https://example.test/${name}`,
   sha256: "a".repeat(64),
+  size: 64 * 1024 * 1024,
+});
+
+describe("GitHub Release asset parsing", () => {
+  it("读取官方 digest、下载地址和文件大小", () => {
+    const assets = parseReleaseApiAssets({
+      assets: [
+        {
+          name: "app-x86_64-release.apk",
+          browser_download_url: "https://example.test/app.apk",
+          digest: `sha256:${"B".repeat(64)}`,
+          size: 65_677_430,
+        },
+        {
+          name: "app-arm64-v8a-release.apk",
+          browser_download_url: "https://example.test/unsigned.apk",
+          digest: null,
+          size: 1,
+        },
+      ],
+    });
+    assert.deepEqual(assets, [
+      {
+        name: "app-x86_64-release.apk",
+        url: "https://example.test/app.apk",
+        sha256: "b".repeat(64),
+        size: 65_677_430,
+      },
+    ]);
+  });
+
+  it("格式化附件大小并处理未知大小", () => {
+    assert.equal(formatAssetSize(65_677_430), "62.6 MB");
+    assert.equal(formatAssetSize(0), "大小未知");
+    assert.equal(parseAssetSize("SHA256:abc 62.6 MB"), 65_640_858);
+    assert.equal(parseAssetSize("没有大小"), 0);
+  });
 });
 
 describe("Android update asset selection", () => {

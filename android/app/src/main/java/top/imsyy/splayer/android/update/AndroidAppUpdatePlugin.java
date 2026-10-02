@@ -1,5 +1,6 @@
 package top.imsyy.splayer.android.update;
 
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -36,10 +37,13 @@ public class AndroidAppUpdatePlugin extends Plugin {
 
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
+  private final AtomicBoolean downloadInProgress = new AtomicBoolean(false);
+  private volatile HttpURLConnection activeConnection;
 
   @Override
   protected void handleOnDestroy() {
     cancelRequested.set(true);
+    disconnectActiveConnection();
     executor.shutdownNow();
   }
 
@@ -55,6 +59,7 @@ public class AndroidAppUpdatePlugin extends Plugin {
   @PluginMethod
   public void cancelDownload(PluginCall call) {
     cancelRequested.set(true);
+    disconnectActiveConnection();
     call.resolve();
   }
 
@@ -67,9 +72,22 @@ public class AndroidAppUpdatePlugin extends Plugin {
       call.reject("A valid APK url and fileName are required", "UPDATE_INVALID_ARGUMENT");
       return;
     }
+    if (expectedSha256.isEmpty()) {
+      call.reject("A valid SHA-256 digest is required", "UPDATE_INVALID_CHECKSUM");
+      return;
+    }
+    if (!downloadInProgress.compareAndSet(false, true)) {
+      call.reject("Another update download is already running", "UPDATE_DOWNLOAD_BUSY");
+      return;
+    }
 
     cancelRequested.set(false);
-    executor.execute(() -> runDownload(call, url, fileName, expectedSha256));
+    try {
+      executor.execute(() -> runDownload(call, url, fileName, expectedSha256));
+    } catch (RuntimeException error) {
+      downloadInProgress.set(false);
+      call.reject("Update downloader is unavailable", "UPDATE_DOWNLOAD_FAILED", error);
+    }
   }
 
   private void runDownload(
@@ -86,13 +104,18 @@ public class AndroidAppUpdatePlugin extends Plugin {
       if (partial.exists() && !partial.delete()) {
         throw new IllegalStateException("Cannot replace partial update");
       }
+      if (target.exists() && !target.delete()) {
+        throw new IllegalStateException("Cannot replace downloaded update");
+      }
 
       connection = (HttpURLConnection) new URL(sourceUrl).openConnection();
+      activeConnection = connection;
       connection.setConnectTimeout(15_000);
       connection.setReadTimeout(30_000);
       connection.setInstanceFollowRedirects(true);
       connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
       connection.setRequestProperty("User-Agent", "SPlayer-Android-Updater");
+      if (cancelRequested.get()) throw new DownloadCancelledException();
 
       int status = connection.getResponseCode();
       if (status < 200 || status >= 300) {
@@ -124,11 +147,8 @@ public class AndroidAppUpdatePlugin extends Plugin {
       }
 
       String actualSha256 = toHex(digest.digest());
-      if (!expectedSha256.isEmpty() && !actualSha256.equals(expectedSha256)) {
+      if (!actualSha256.equals(expectedSha256)) {
         throw new SecurityException("SHA-256 mismatch");
-      }
-      if (target.exists() && !target.delete()) {
-        throw new IllegalStateException("Cannot replace downloaded update");
       }
       if (!partial.renameTo(target)) {
         throw new IllegalStateException("Cannot finalize downloaded update");
@@ -149,10 +169,17 @@ public class AndroidAppUpdatePlugin extends Plugin {
       call.reject(error.getMessage(), "UPDATE_CHECKSUM_MISMATCH", error);
     } catch (Exception error) {
       deleteQuietly(partial);
-      call.reject(error.getMessage(), "UPDATE_DOWNLOAD_FAILED", error);
+      deleteQuietly(target);
+      if (cancelRequested.get()) {
+        call.reject("Download cancelled", "UPDATE_DOWNLOAD_CANCELLED", error);
+      } else {
+        call.reject(error.getMessage(), "UPDATE_DOWNLOAD_FAILED", error);
+      }
     } finally {
       if (connection != null) connection.disconnect();
+      activeConnection = null;
       cancelRequested.set(false);
+      downloadInProgress.set(false);
     }
   }
 
@@ -168,6 +195,7 @@ public class AndroidAppUpdatePlugin extends Plugin {
     try {
       validateInstallableApk(apk);
     } catch (ApkValidationException error) {
+      deleteQuietly(apk);
       call.reject(error.getMessage(), error.code, error);
       return;
     }
@@ -192,7 +220,12 @@ public class AndroidAppUpdatePlugin extends Plugin {
     Intent installIntent = new Intent(Intent.ACTION_VIEW);
     installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
     installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-    getContext().startActivity(installIntent);
+    try {
+      getContext().startActivity(installIntent);
+    } catch (ActivityNotFoundException | SecurityException error) {
+      call.reject("Android system installer is unavailable", "UPDATE_INSTALLER_UNAVAILABLE", error);
+      return;
+    }
 
     JSObject result = new JSObject();
     result.put("needsPermission", false);
@@ -279,6 +312,11 @@ public class AndroidAppUpdatePlugin extends Plugin {
 
   private static void deleteQuietly(File file) {
     if (file.exists()) file.delete();
+  }
+
+  private void disconnectActiveConnection() {
+    HttpURLConnection connection = activeConnection;
+    if (connection != null) connection.disconnect();
   }
 
   private static final class DownloadCancelledException extends Exception {}

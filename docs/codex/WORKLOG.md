@@ -53,3 +53,10 @@
 - `VERIFIED`：长断网触发 Media3 2001 后，原生恢复实际执行三档退避；前两次 URL 解析失败，第三次在网络恢复后从 114730ms 断点重载并继续播放。
 - `VERIFIED`：缓冲期间主动暂停后，网络恢复保持 `requested=false` 和 MediaSession `PAUSED`，位置保持 146290ms，未擅自自播。
 - `BLOCKED`：手机剩余空间低于 1GB，SimpleCache 按既有低磁盘策略只读，无法新建完整缓存验证离线重播；未清理用户数据。MuMu 无 root/tc 或可控代理，精确限速场景未运行。
+- `VERIFIED`：GitHub v3.0.8 x86_64 官方 APK（65,677,430 字节）完整下载，SHA-256 为 `aabd1eaecb4790c999aa4230be02673d307f29de6f6213c3a3f2ade42200b60d`，与 Release API digest 一致。
+- `IMPLEMENTED`：附件读取优先使用 GitHub Release API 的 digest/size，限流或异常时回退官方 expanded assets；更新弹层显示实际包体大小。
+- `IMPLEMENTED`：原生下载强制要求合法 SHA-256，拒绝并发重复任务；取消会断开活动连接，所有失败会清理部分文件和旧目标文件，无效 APK 校验失败后立即删除。
+- `VERIFIED`：官方 APK 包名/版本为 `top.imsyy.splayer.android` / 30014；同签名测试升级夹具为 `.debug` / 30015，证书 SHA-256 与已装 30014 Debug 包一致。
+- `VERIFIED`：手机使用实际 FileProvider URI 成功进入 `com.android.packageinstaller/.PackageInstallerActivity`；未知来源权限保持默认，未授予权限、未确认安装、未覆盖正式包。
+- `VERIFIED`：新增 2 项 Release API 附件/大小测试（更新资源测试共 5 项）通过，TypeScript 类型检查和 Android Debug 编译通过。
+- `VERIFIED`：更新相关 9 项测试、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 全部通过；最终 x86_64 Debug APK 已覆盖安装并冷启动于手机和平板，版本均为 30014 / 3.0.8-debug。

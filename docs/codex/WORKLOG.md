@@ -33,3 +33,15 @@
 - `VERIFIED`：手机与平板均以 3.0.7 前端测试版本检测到 v3.0.8，并自动选择 `app-x86_64-release.apk`；平板横屏弹层完整可见且无控件重叠。
 - `VERIFIED`：手机端下载进度持续增长；两次取消均返回 `UPDATE_DOWNLOAD_CANCELLED`，缓存目录中未残留 `.part` 文件，重新下载可再次启动并继续增长。
 - `BLOCKED`：模拟器访问 GitHub Release 约 40–50 KB/s，未在本阶段等待完整 62.6 MB 下载，因此远端整包 SHA-256 与系统安装器唤起尚未做端到端验证；未授予未知来源安装权限，也未执行静默安装。
+- `VERIFIED`：在 1080×1920 / 480 dpi 手机基线复现完整播放页控制区被矮屏裁切；在 1920×1080 / 280 dpi 平板确认主内容宽度边界和播放控制层均需纳入回归。
+- `IMPLEMENTED`：新增可测试的可用视口/缩放计算核心；布局形态继续使用稳定的 layout viewport，实际 CSS 容器尺寸优先使用 `visualViewport`，并将页面缩放变量换算为精确 CSS 像素。
+- `IMPLEMENTED`：为 360×640 级矮屏压缩封面、信息区、进度区和播放控制间距；为主布局和 Pad 内容区补充 `min-width: 0` 与横向溢出约束。
+- `VERIFIED`：4 个视口边界测试和 3 个更新资源测试通过；`pnpm typecheck`、`pnpm lint`、`pnpm build:android`、Android `testDebugUnitTest` 与 `assembleDebug` 通过。
+- `VERIFIED`：新 x86_64 Debug APK 已覆盖安装到手机和平板且保留数据。手机 480 dpi 竖屏的封面、元数据、进度条、五个控制按钮和分页点完整可见；歌词分页无重叠。
+- `VERIFIED`：手机字体比例 1.3 与临时 420 dpi 下完整播放页仍无裁切；测试结束后已恢复 480 dpi / 字体 1.0。
+- `VERIFIED`：平板调试实例位于 MuMu `displayId=5`；在 1920×1080 / 280 dpi 下首页无非预期横向滚动，完整播放页控制层无重叠或越界。
+- `IMPLEMENTED`：记录后续 Release 仅通过已忽略的 `android/key.properties` 引用用户提供的外部 `my-release-key.jks`；本轮未读取密钥内容、未生成密码配置、未提交签名材料。
+- `IMPLEMENTED`：为 Teleport 弹层新增未缩放的实际可见视口变量，全屏设置同步使用 Android 顶部/底部安全区。
+- `VERIFIED`：手机竖→横→竖、平板横→竖→横过程中，全屏设置尺寸正确、内容可继续滚动；关闭后手机底部导航与滑动指示器恢复。
+- `VERIFIED`：手机横屏完整播放页与平板竖屏完整播放页无裁切、重叠或越界；测试后双终端自动旋转与备用方向值均恢复基线。
+- `VERIFIED`：视口测试 4/4、`pnpm typecheck`、`pnpm lint`、`pnpm format`、`pnpm build:android`、Android `testDebugUnitTest` 与四 ABI `assembleDebug` 通过。

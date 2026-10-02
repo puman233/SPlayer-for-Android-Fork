@@ -512,7 +512,10 @@ onBeforeUnmount(() => {
 
 #main {
   flex: 1;
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
   transition:
     transform 0.3s var(--n-bezier),
     opacity 0.3s var(--n-bezier);
@@ -540,9 +543,14 @@ onBeforeUnmount(() => {
 }
 
 #pad-main {
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
 
   #main-layout {
+    min-width: 0;
+    overflow: hidden;
     background: linear-gradient(
       180deg,
       rgba(var(--background), 0.86),
@@ -551,7 +559,11 @@ onBeforeUnmount(() => {
   }
 
   #main-content {
+    left: 0;
+    right: 0;
+    min-width: 0;
     top: var(--app-header-height);
+    overflow-x: hidden;
     background-color: transparent;
     transition: bottom 0.3s;
   }

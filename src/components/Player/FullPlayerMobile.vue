@@ -1412,6 +1412,59 @@ const contentTransform = computed(() => {
     }
   }
 
+  // 矮屏首屏优先保证进度与播放控制完整可见，超长元数据仍可纵向滚动
+  @media (max-width: 512px) and (max-height: 700px) {
+    .info-page {
+      padding-bottom: calc(24px + var(--mobile-safe-bottom));
+
+      .cover-section {
+        min-height: clamp(168px, 32vh, 220px);
+        margin-top: calc(44px + var(--mobile-safe-top));
+        margin-bottom: 8px;
+
+        :deep(.player-cover) {
+          width: min(100%, clamp(180px, 58vw, 220px));
+
+          &.record {
+            width: clamp(176px, 54vw, 212px);
+
+            .cover-img {
+              width: clamp(176px, 54vw, 212px);
+              height: clamp(176px, 54vw, 212px);
+              min-width: clamp(176px, 54vw, 212px);
+            }
+          }
+        }
+      }
+
+      .song-info-bar {
+        margin-bottom: 8px;
+      }
+
+      .progress-section {
+        margin-bottom: 10px;
+      }
+
+      .control-section {
+        margin-bottom: 8px;
+
+        .ctrl-btn {
+          width: 42px;
+          height: 42px;
+        }
+
+        .play-btn {
+          width: 54px;
+          height: 54px;
+        }
+      }
+    }
+
+    .pagination {
+      bottom: calc(8px + var(--mobile-safe-bottom));
+    }
+  }
+
   &.pad-portrait {
     --mobile-title-max-width: 100%;
 

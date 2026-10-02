@@ -1,4 +1,5 @@
 import { computed, ref } from "vue";
+import { resolveAvailableViewport } from "@/core/layout/viewport";
 
 // Material Design 3 expanded 断点（dp/CSS px），覆盖多数 7~10 寸 Android 平板
 export const ANDROID_PAD_BREAKPOINT = 600;
@@ -7,6 +8,8 @@ export const ANDROID_PAD_BREAKPOINT = 600;
 const hasWindow = typeof window !== "undefined";
 const rawWidth = ref(hasWindow ? window.innerWidth : 0);
 const rawHeight = ref(hasWindow ? window.innerHeight : 0);
+const visualWidth = ref(hasWindow ? window.visualViewport?.width || 0 : 0);
+const visualHeight = ref(hasWindow ? window.visualViewport?.height || 0 : 0);
 
 /**
  * 基于 UA 的平板硬件识别（一次性计算，UA 不会变）：
@@ -35,6 +38,8 @@ const refreshSize = () => {
   if (!hasWindow) return;
   rawWidth.value = window.innerWidth;
   rawHeight.value = window.innerHeight;
+  visualWidth.value = window.visualViewport?.width || 0;
+  visualHeight.value = window.visualViewport?.height || 0;
   rawScreenWidth.value = window.screen?.width || 0;
   rawScreenHeight.value = window.screen?.height || 0;
 };
@@ -42,11 +47,23 @@ const refreshSize = () => {
 if (hasWindow) {
   window.addEventListener("resize", refreshSize);
   window.addEventListener("orientationchange", () => setTimeout(refreshSize, 300));
+  window.visualViewport?.addEventListener("resize", refreshSize);
+  window.visualViewport?.addEventListener("scroll", refreshSize);
 }
 
-// 设备视口（用于布局判断的等效像素，朝向用 viewport，因为 screen 在部分 Android 上不随旋转更新）
+// 设备视口：形态与朝向使用稳定的布局视口，可用空间使用 visualViewport
 const effectiveWidth = computed(() => rawWidth.value);
 const effectiveHeight = computed(() => rawHeight.value);
+const availableViewport = computed(() =>
+  resolveAvailableViewport({
+    layoutWidth: rawWidth.value,
+    layoutHeight: rawHeight.value,
+    visualWidth: visualWidth.value,
+    visualHeight: visualHeight.value,
+  }),
+);
+const availableWidth = computed(() => availableViewport.value.width);
+const availableHeight = computed(() => availableViewport.value.height);
 
 // 设备形态判定用「viewport 与 screen 短边取较大者」：
 // 部分 Android WebView 会把 status bar / 三键导航栏从 innerWidth/innerHeight 里扣掉，
@@ -93,6 +110,8 @@ export const useDevice = () => {
     // 用于布局判断的等效像素
     effectiveWidth,
     effectiveHeight,
+    availableWidth,
+    availableHeight,
     shortestSide,
     isLandscape,
     isPad,

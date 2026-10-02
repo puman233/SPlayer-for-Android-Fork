@@ -14,7 +14,7 @@
 :root {
   --safe-area-top: max(env(safe-area-inset-top), var(--android-fullscreen-safe-top, 0px));
   --safe-area-right: max(env(safe-area-inset-right), 0px);
-  --safe-area-bottom: max(env(safe-area-inset-bottom), 0px);
+  --safe-area-bottom: max(env(safe-area-inset-bottom), var(--android-fullscreen-safe-bottom, 0px));
   --safe-area-left: max(env(safe-area-inset-left), 0px);
 
   // 图片模式
@@ -483,4 +483,3 @@ audio {
     0 0 2px rgba(0, 0, 0, 0.9),
     0 1px 3px rgba(0, 0, 0, 0.7);
 }
-

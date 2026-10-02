@@ -64,11 +64,7 @@
         <n-h1>设置</n-h1>
         <n-text :depth="3">个性化与全局设置</n-text>
       </n-flex>
-      <n-scrollbar
-        ref="setScrollbar"
-        class="set-content"
-        :content-style="{ padding: '40px 10px' }"
-      >
+      <n-scrollbar ref="setScrollbar" class="set-content" :content-style="{ padding: '40px 10px' }">
         <Transition
           name="fade"
           mode="out-in"
@@ -360,6 +356,7 @@ onMounted(() => {
   display: flex;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 100%;
   overflow: hidden;
   .mobile-overlay {
@@ -369,8 +366,11 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     width: 280px;
+    max-width: calc(100% - var(--safe-area-left) - var(--safe-area-right));
     height: 100%;
-    padding: 20px;
+    min-height: 0;
+    padding: calc(20px + var(--safe-area-top)) 20px calc(20px + var(--safe-area-bottom));
+    box-sizing: border-box;
     background-color: var(--surface-container-hex);
     .title {
       height: 60px;
@@ -412,6 +412,13 @@ onMounted(() => {
   .set-right {
     flex: 1;
     height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding-top: var(--safe-area-top);
+    padding-right: var(--safe-area-right);
+    padding-bottom: var(--safe-area-bottom);
+    box-sizing: border-box;
+    overflow: hidden;
     background-color: var(--background-hex);
     .mobile-title {
       display: none !important;
@@ -483,8 +490,8 @@ onMounted(() => {
   }
   .n-card-header {
     position: absolute;
-    top: 0;
-    right: 0;
+    top: var(--safe-area-top);
+    right: var(--safe-area-right);
     padding: 20px;
     z-index: 1;
   }

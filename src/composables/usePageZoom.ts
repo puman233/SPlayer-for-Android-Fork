@@ -2,11 +2,13 @@ import { computed, onMounted, watch } from "vue";
 import { useSettingStore } from "@/stores";
 import { useDevice } from "@/composables/useDevice";
 import { isCapacitorAndroid, isElectron } from "@/utils/env";
+import { resolveScaledViewport } from "@/core/layout/viewport";
 
 /** 页面缩放 */
 export const usePageZoom = () => {
   const settingStore = useSettingStore();
-  const { isPad, isPadDevice, isPhone, isPhonePortrait } = useDevice();
+  const { isPad, isPadDevice, isPhone, isPhonePortrait, availableWidth, availableHeight } =
+    useDevice();
 
   const activeZoom = computed(() => {
     if (isElectron) return 100;
@@ -43,9 +45,18 @@ export const usePageZoom = () => {
     setTimeout(fire, 150);
   };
 
-  const apply = (zoom: number, safeTop: number, safeBottom: number) => {
-    const safe = Math.max(50, Math.min(200, Number(zoom) || 100));
-    const ratio = safe / 100;
+  const apply = (
+    zoom: number,
+    safeTop: number,
+    safeBottom: number,
+    viewportWidth: number,
+    viewportHeight: number,
+  ) => {
+    const { ratio, cssWidth, cssHeight } = resolveScaledViewport(
+      viewportWidth,
+      viewportHeight,
+      zoom,
+    );
 
     // 固定 viewport
     let viewport = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
@@ -56,15 +67,22 @@ export const usePageZoom = () => {
     }
     viewport.setAttribute("content", "width=device-width, initial-scale=1, viewport-fit=cover");
 
+    // Teleport 弹层不在 #app 内，需单独使用未缩放的实际可见视口
+    const rootEl = document.documentElement;
+    rootEl.style.setProperty("--overlay-viewport-width", `${viewportWidth}px`);
+    rootEl.style.setProperty("--overlay-viewport-height", `${viewportHeight}px`);
+    rootEl.style.setProperty("--android-fullscreen-safe-top", `${safeTop}px`);
+    rootEl.style.setProperty("--android-fullscreen-safe-bottom", `${safeBottom}px`);
+
     // 缩放变量挂到 #app，避免 teleport 到 body 的弹出层继承到反向补偿值
     const appEl = (document.getElementById("app") || document.documentElement) as HTMLElement;
     appEl.style.setProperty("--page-zoom-ratio", String(ratio));
-    appEl.style.setProperty("--page-zoom-width", `${100 / ratio}%`);
-    appEl.style.setProperty("--page-zoom-height", `${100 / ratio}%`);
-    appEl.style.setProperty("--page-zoom-100vw", `${100 / ratio}vw`);
-    appEl.style.setProperty("--page-zoom-100vh", `${100 / ratio}vh`);
-    appEl.style.setProperty("--page-zoom-100dvh", `${100 / ratio}dvh`);
-    appEl.style.setProperty("--page-zoom-60vw", `${60 / ratio}vw`);
+    appEl.style.setProperty("--page-zoom-width", `${cssWidth}px`);
+    appEl.style.setProperty("--page-zoom-height", `${cssHeight}px`);
+    appEl.style.setProperty("--page-zoom-100vw", `${cssWidth}px`);
+    appEl.style.setProperty("--page-zoom-100vh", `${cssHeight}px`);
+    appEl.style.setProperty("--page-zoom-100dvh", `${cssHeight}px`);
+    appEl.style.setProperty("--page-zoom-60vw", `${cssWidth * 0.6}px`);
     appEl.style.setProperty("--android-fullscreen-safe-top", `${safeTop / ratio}px`);
     appEl.style.setProperty("--android-fullscreen-safe-bottom", `${safeBottom / ratio}px`);
 
@@ -75,13 +93,23 @@ export const usePageZoom = () => {
     } else {
       appEl.style.transform = `scale(${ratio})`;
     }
-    (document.documentElement.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
+    (rootEl.style as CSSStyleDeclaration & { zoom?: string }).zoom = "";
 
     notifyResize();
   };
 
-  onMounted(() => apply(activeZoom.value, fullscreenSafeTop.value, fullscreenSafeBottom.value));
-  watch([activeZoom, fullscreenSafeTop, fullscreenSafeBottom], ([zoom, safeTop, safeBottom]) =>
-    apply(zoom, safeTop, safeBottom),
+  onMounted(() =>
+    apply(
+      activeZoom.value,
+      fullscreenSafeTop.value,
+      fullscreenSafeBottom.value,
+      availableWidth.value,
+      availableHeight.value,
+    ),
+  );
+  watch(
+    [activeZoom, fullscreenSafeTop, fullscreenSafeBottom, availableWidth, availableHeight],
+    ([zoom, safeTop, safeBottom, viewportWidth, viewportHeight]) =>
+      apply(zoom, safeTop, safeBottom, viewportWidth, viewportHeight),
   );
 };

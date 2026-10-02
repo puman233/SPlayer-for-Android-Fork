@@ -45,6 +45,6 @@
 
 ## D-008 Release 签名只从工作区外注入
 
-- 状态：已确定，待 Release 构建验证
+- 状态：正式签名构建与证书核验 `VERIFIED`
 - 决策：后续本地 Release 使用用户提供的 `my-release-key.jks`，通过 Git 已忽略的 `android/key.properties` 配置 `storeFile`、`storePassword`、`keyAlias` 和 `keyPassword`；密钥、密码和生成配置均不得提交。
-- 理由：复用既有签名可保证安装升级链路连续，同时把敏感材料留在版本库之外；实际打包前仍需用户提供别名和密码。
+- 理由：复用既有签名可保证安装升级链路连续，同时把敏感材料留在版本库之外；本机已从旧项目保留忽略的签名配置，JKS 迁至仓库外 `C:/Users/ihyj/SPlayer/signing`，四 ABI 签名验证通过。

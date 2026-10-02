@@ -81,4 +81,5 @@
 
 1. Debug 交付已完成；最终证据、产物摘要和回滚步骤见 `docs/codex/FINAL_REPORT.md`。
 2. 若提供可控代理或有 root 的测试终端，可补跑精确限速场景。
-3. 正式 Release 仍需用户提供外部 JKS、别名和密码，通过未跟踪的 `android/key.properties` 注入；没有签名材料时不得声称完成正式升级安装。
+3. 已使用仓库外 JKS 和忽略的 `android/key.properties` 构建四 ABI 正式签名包并验证证书；产物为 30014 / 3.0.8 同版本重构建，递增版本升级安装仍未验证。
+4. 后续工作使用 `C:/Users/ihyj/SPlayer/SPlayer-for-Android-Fork` 的 `dev`；旧 Android 仓库已归档，重复工作树受 Windows 进程占用阻塞，待解除占用后归档。

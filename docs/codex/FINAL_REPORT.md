@@ -5,7 +5,7 @@
 - 分支：`codex/android-stability-update`
 - 基线：`origin/dev` / `d834171d`
 - Debug 交付：`VERIFIED`
-- 正式 Release 签名升级包：`BLOCKED`，缺少工作区外 JKS、别名和密码
+- 正式 Release 签名构建与证书核验：`VERIFIED`；递增版本升级安装：`BLOCKED`，本次保持 30014 / 3.0.8
 
 ## 已完成范围
 
@@ -30,6 +30,17 @@
 - 更新安装器：实际 FileProvider URI 进入系统 PackageInstaller，未授予未知来源权限、未确认最终安装。
 
 ## Debug APK
+
+当前主项目路径：`C:/Users/ihyj/SPlayer/SPlayer-for-Android-Fork`。
+
+正式签名产物目录：`android/app/build/outputs/apk/release/`，版本 30014 / 3.0.8。
+
+| 文件                          | SHA-256                                                            |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `app-arm64-v8a-release.apk`   | `5d8e2c3dbd87930d38ba38ef638bbc9c2d8b1df7c75388ec76432a7c0a102126` |
+| `app-armeabi-v7a-release.apk` | `042bb2331ab67aa1fc5b3336472e5d64f31ec3fad18944be8bfa6c69e5749723` |
+| `app-x86_64-release.apk`      | `d5dd96eb9f4aff33f571e311580c116f49fa263c903cfb0e283a1c774e8f42cd` |
+| `app-x86-release.apk`         | `3066b69814568a4f8074b3534f5b7656b7b8c1869d551e8b291a14164265a9f5` |
 
 目录：`android/app/build/outputs/apk/debug/`
 
@@ -62,5 +73,5 @@ Debug 包名为 `top.imsyy.splayer.android.debug`，不会覆盖正式版用户�
 ## 已知边界
 
 - 精确带宽/延迟整形仍受 MuMu 无 root、无 `tc` 且当前无可控代理阻塞；短断网、长断网、HTTP 错误和离线完整缓存均已覆盖。
-- 正式 Release 必须由用户提供外部签名材料后重新构建并核对证书；Debug 签名 APK 不可冒充正式升级包。
+- 正式 Release 已使用外部 JKS 构建且证书与既有发布证书一致；本次仍为 30014 / 3.0.8，未验证递增版本升级安装。
 - 系统未知来源授权和安装确认属于用户安全操作，不做自动授权或静默安装。

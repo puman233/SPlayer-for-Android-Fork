@@ -1,5 +1,14 @@
 # 工作日志
 
+## 2026-10-02 项目目录归并与签名包
+
+- `VERIFIED`：主目录 `C:/Users/ihyj/SPlayer/SPlayer-for-Android-Fork` 的 `dev` 已快进到 `407635cf`，作为后续开发入口。
+- `VERIFIED`：旧 Android 仓库已移入 `retained-assets/project-archive/SPlayer-for-Android`；未跟踪文档保存在 `retained-assets/SPlayer-for-Android`，JKS 与原签名配置保存在仓库外 `signing` 目录。
+- `VERIFIED`：主项目依赖已按冻结锁文件重建，完整 Android 资源构建与四 ABI Release 打包完成，APK 签名验证通过。
+- `VERIFIED`：Release 证书 SHA-256 为 `d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea`，与既有正式发布证书一致；包名 `top.imsyy.splayer.android`、版本 30014 / 3.0.8、四 ABI 均已核对。
+- `BLOCKED`：重复工作树因 Windows 进程占用暂不能归档，原目录与 Git 注册均保留，主项目已包含全部代码和 Debug/Release 产物。
+- `BLOCKED`：本次为同版本正式签名重构建，未执行正式包覆盖安装；递增版本升级验收尚需确定下一发布版本。
+
 ## 2026-10-01
 
 - `VERIFIED`：目标仓库 remote 为 `https://github.com/puman233/SPlayer-for-Android-Fork.git`。

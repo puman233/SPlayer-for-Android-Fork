@@ -69,7 +69,7 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 
 ## v3.0.10 发布验证（2026-10-03）
 
-状态：VERIFIED（以下本地验证）；版本 3.0.10 / versionCode 30016。GitHub 发布尚待 CI。
+状态：VERIFIED；版本 3.0.10 / versionCode 30016 已正式发布。
 
 - 追加修复：底栏 grid 使用 minmax(0, 1fr)，按钮根据剩余宽度收缩，240px 极窄 WebView 下分页区域仍位于屏幕内。
 - 独立验证包 top.imsyy.splayer.android.uiverify，与模拟器现有正式包和 debug 包并存，没有清除已有应用数据。仅验证包生成资源启用 CDP；正式配置保持 WebView debugging=false。
@@ -80,3 +80,14 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - 测试后恢复模拟器物理分辨率、密度与原导航 overlay；停止测试音频；验证包、临时音频和验证脚本均已清理，截图与日志保存在仓库外的本轮验证目录。
 - 本地播放页状态测试 6 项、发布保护测试 15 项、Vue 类型检查与 ESLint 均通过；Android CI 增加播放页类型与状态测试。
 - Android Lint 的历史原生代码 205 errors / 33 warnings 仍保留，不修改播放服务来消除报告。
+
+### 正式发布结果
+
+- 发布源码提交：c8ec525c54d2d3480c10247ab30820dbb57ab13a；Tag v3.0.10，未移动或覆盖已有 Tag。
+- Android CI 成功：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37100263662。
+- 首次发布在创建草稿后读取不到草稿而停止（37100489935）；检查确认草稿指向正确提交且无附件，使用既有 workflow_dispatch 恢复入口，恢复流程成功：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37100748373。
+- 正式 Release：https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.10；isDraft=false、isPrerelease=false，四种 ABI 的正式签名 APK 均已上传。
+- 下载后的 ARM64 附件：包名 top.imsyy.splayer.android、versionName 3.0.10、versionCode 30016、非 debuggable；WebView debugging=false。
+- ARM64 文件 SHA-256：291cbe52a888a725993ca4abd484311080d5a2fe06f4431125c3df902f0517ab，与 GitHub 附件摘要一致；签名证书 SHA-256：d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea，与上一正式版本一致。
+- 下载验收产物：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10006-c2d5-7883-814d-cb84b0841a46/app-arm64-v8a-release.apk。
+- 剩余验证边界：Android 验收使用模拟器；真实硬件 cutout 注入、歌词长按的全场景回归仍未验证。评论内容使用固定响应，未声称真实评论接口验收成功。

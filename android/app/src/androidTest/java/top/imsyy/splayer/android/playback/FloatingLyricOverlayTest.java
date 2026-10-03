@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.util.Log;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.lang.reflect.Field;
@@ -90,6 +91,11 @@ public class FloatingLyricOverlayTest {
           "光に溢れて世界はまだ続いている何度も何度も同じ空の下で歌い続ける長い長い歌詞の表示を確認します",
           "🎵 光に溢れて 世界はまだ続いている ✨", "مرحبا بالعالم هذه كلمات طويلة لاختبار الاتجاه"};
       float size = (float) field(service, "fontPx");
+      float autoSp = size / service.getResources().getDisplayMetrics().scaledDensity;
+      assertTrue("自动字号应在范围内", autoSp >= 16 && autoSp <= 32);
+      Log.i("FloatingLyricVerify", "autoSp=" + autoSp + ", fontScale="
+          + service.getResources().getConfiguration().fontScale + ", smallestWidth="
+          + service.getResources().getConfiguration().smallestScreenWidthDp);
       for (String sample : samples) {
         String json = new org.json.JSONArray().put(new JSONObject().put("startTime", 0).put("endTime", 20000)
             .put("translatedLyric", sample).put("words", new org.json.JSONArray().put(
@@ -142,11 +148,24 @@ public class FloatingLyricOverlayTest {
       String oldAutoRotation = shell("settings get system accelerometer_rotation");
       try {
         shell("settings put system accelerometer_rotation 0");
+        Rect previousSafe = null;
         for (int rotation : new int[] {1, 0, 1, 0}) {
           shell("settings put system user_rotation " + rotation);
           SystemClock.sleep(900);
           WindowManager.LayoutParams rotated = (WindowManager.LayoutParams) field(service, "lp");
           Rect rotatedSafe = (Rect) field(service, "safeArea");
+          if (previousSafe != null) assertFalse("旋转必须改变实际安全区域，不能只检查命令成功",
+              previousSafe.equals(rotatedSafe));
+          previousSafe = new Rect(rotatedSafe);
+          int[] actual = new int[2];
+          main(() -> view.getLocationOnScreen(actual));
+          assertTrue("实际窗口左边界", actual[0] >= rotatedSafe.left);
+          assertTrue("实际窗口上边界", actual[1] >= rotatedSafe.top);
+          assertTrue("实际窗口右边界", actual[0] + view.getWidth() <= rotatedSafe.right);
+          assertTrue("实际窗口下边界", actual[1] + view.getHeight() <= rotatedSafe.bottom);
+          Log.i("FloatingLyricVerify", "rotation=" + rotation + ", safe=" + rotatedSafe
+              + ", actual=" + actual[0] + "," + actual[1] + ", size="
+              + view.getWidth() + "x" + view.getHeight());
           assertTrue(rotated.x >= rotatedSafe.left && rotated.x + rotated.width <= rotatedSafe.right);
           assertTrue(rotated.y >= rotatedSafe.top && rotated.y + rotated.height <= rotatedSafe.bottom);
           assertEquals("USER_DEFINED", service.fontSizeMode);

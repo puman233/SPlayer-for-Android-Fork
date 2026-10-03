@@ -109,3 +109,22 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - 验证截图/JSON：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a100b3-4db1-74d0-aef6-d68615bc299e。测试后恢复显示 size/density、旋转/字体设置；临时脚本与音频清理。
 - 交付 debug APK：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk（64,258,167 字节）；另含 armeabi-v7a、x86、x86_64。包名 top.imsyy.splayer.android.debug，versionName 3.0.10-debug / code 30016；四个包 ZIP 完整且 WebView debugging=false。ARM64 SHA-256：f3a270fde8f1655ce3a98cf22e08aca401bc3f04839eefca38e8d2100173aa83。未签发正式版本、推送或打 Tag。
 - 剩余验证：真实硬件 cutout/手势及三键导航矩阵、Android 10 inset 兼容路径、极端系统字号与逐字 RTL 高亮视觉质量未完成实际验收；超长且持续时间很短的歌词受可读速度上限约束，无法保证离行前展示完整尾部。远端 CI 未运行。完整真机矩阵标记 BLOCKED（当前只有模拟器环境）。
+
+## MuMu 手机与平板补充验收（2026-10-03）
+
+状态：IMPLEMENTED；下列已完成的设备测试为 VERIFIED。用户授权继续使用现有两台 MuMu 调试，未访问或清除正式应用数据。
+
+- 设备：emulator-5554（SM-A5560，1080×1920 / 480dpi）与 emulator-5556（ALT-AL10，1080×1920 / 280dpi）；均为 API 35，127.0.0.1:16416 为平板连接别名，不计第三台设备。ADB 会话为 shell 权限且 su 不可用；本轮不需要 root，也未改动 root 配置。
+- 独立包 top.imsyy.splayer.android.lyricsverify 与测试包安装到两台设备；无产品代码改动，新增/加强原生回归测试。
+- 桌面歌词矩阵共 12 组通过：两设备 × 手势/三键导航 × fontScale 1.0/1.5/2.0，均启用 tall cutout 系统模拟 overlay，逐组核实 overlay 实际启用。测试覆盖多语言、稳定字号、实际画布滚动/暂停/seek、锁定/解锁/自动渐隐、手动字号/颜色重开恢复。
+- 加强旋转断言：连续 4 次旋转必须改变实际 safeArea；view.getLocationOnScreen 实际窗口四边均在安全区域内，不能只断言命令执行。日志记录模拟 cutout 从顶部移至左侧，phone/pad 都通过；同一 Service 实例保持。
+- 新 PlayerDeviceLayoutTest 使用真实 APK 中的 WebView，通过原生 evaluateJavascript 读取实际 Vue 几何，未启用 WebView 调试。旋转按 Activity 实际 displayId 操作并恢复原策略，检查窗口宽度实际改变、底栏保持在窗口内、手机横屏封面/元信息/底栏无重叠。手机 360×640 ↔ 640×360；平板 618×1098 ↔ 1098×618，自动判型选择竖屏/平板双栏。
+- 播放页首次测试两设备失败：测试只查找共享 player-control，漏掉竖屏 mobile-player-bottom-controls，得到 null；修正选择器后两设备基线测试通过。这是测试定位错误，未据此修改产品。
+- 日志与矩阵 JSON 保存在 C:/Users/ihyj/.codex/visualizations/2026/10/03/01a100b3-4db1-74d0-aef6-d68615bc299e；本轮只保留日志证据，临时驱动脚本与隔离包结束后清理。系统字体、导航/cutout overlay、旋转模式恢复原值。
+- 原专项“模拟器导航/cutout/极端字号矩阵”阻塞已解除；仍未验证 Android 10 路径、物理硬件 cutout、RTL 逐字高亮视觉质量及硬件输入全场景。两台设备都是 API 35，不能据此声称覆盖 API 29。全项目 Android Lint 历史问题未改变。
+
+- 最终播放页矩阵也为 12/12 通过（两设备 × 两种导航 × 三种字体缩放，均启用模拟 tall cutout）。合计桌面歌词与播放页矩阵 24/24 通过，另两台设备播放页基线通过。系统模拟 cutout 测试不等同于物理硬件验收。
+- 提交前 pnpm build:android、pnpm format、pnpm lint 通过；构建仍有既有 chunk/ffmpeg.wasm/Gradle 环境警告，全库格式化的无关差异已恢复。未声称构建零警告或 Android Lint 历史问题已解决。
+
+- 最终普通 debug APK 已恢复：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk（64,258,191 字节），SHA-256：b733927817259c0d45f5b66415c060539b4f10fb41501bc92477d0bc590158df。包名 .debug，WebView debugging=false。另有其余三种 ABI；没有发布或推送。
+- 清理核查修正：wm user-rotation free 只恢复策略，不恢复最后一次全局角度偏好；两设备已恢复原始 user_rotation=0、accelerometer_rotation=1、font_scale=1.0，测试 finally 增加对应恢复。最终恢复逻辑已重新编译，未重复整套矩阵。

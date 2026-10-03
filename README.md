@@ -275,3 +275,7 @@ npx cap open android            # Android Studio 打开
 - 评论页仅显示评论内容与歌曲卡片，不显示进度、播放按钮或分页点；左右滑动返回歌曲或歌词页。
 - 歌词页控件与评论页歌曲卡片在无操作 4 秒后淡出，点击页面恢复。拖动歌词、进度条或打开快捷菜单期间保持显示，结束后重新计时；自动滚词不会重置计时。
 - 主播放页顶栏、内容、底栏均参与布局，封面随剩余空间收缩，过多的歌曲信息独立滚动；长标题、歌手与专辑名省略，安全区沿用 Android / WebView inset。
+
+### Android 设备回归测试
+
+`FloatingLyricOverlayTest` 和 `PlayerDeviceLayoutTest` 仅允许 `.lyricsverify` 隔离包运行。使用 `-PverificationSuffix=.lyricsverify` 构建测试包，不能对已有正式包清理数据。MuMu 手机/平板补充验收与验证边界见 [AGENT_CHECKPOINT.md](AGENT_CHECKPOINT.md)。

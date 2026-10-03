@@ -40,13 +40,15 @@ CI 在 dev push/PR 运行，无需 Secrets，不创建 Release。Gradle 缓存�
 
 Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改版本。预发布示例为 v3.0.10-rc.1，两处版本必须精确为 3.0.10-rc.1。非版本形式的 v\* Tag 明确报错。
 
-从 android/app/build/outputs/apk/\*_/output-metadata.json 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 release/ 目录仅包含已验证 APK，附件 glob 为 release/_.apk。名称包含版本、变体与 ABI/filter，例如 SFA-3.0.9-release-abi-arm64-v8a.apk。
+从 `android/app/build/outputs/apk/**/output-metadata.json` 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 `release/` 目录仅包含已验证 APK，附件 glob 为 `release/*.apk`。名称包含版本、变体与 ABI/filter，例如 `SFA-3.0.9-release-abi-arm64-v8a.apk`。
 
 Release 标题为 Tag，自动生成 GitHub Release Notes；包含 alpha/beta/rc（忽略大小写）时为 prerelease，否则正式版本。使用 --verify-tag，不创建或移动 Tag。
 
 ## 重跑与签名安全
 
 同一 Tag 串行执行，已公开 Release 跳过。先创建草稿，全部附件上传成功才公开。重跑检查草稿目标提交和已有附件 SHA-256，只上传缺失附件，不覆盖已有附件。
+
+如果发布脚本自身需要修复，先把修复推送到 `dev` 并等待 CI 通过，然后在 Actions → Android Release → Run workflow 选择 `dev`，填入原 Tag（例如 `v3.0.9`）。手动恢复使用原 Tag 的 Android/前端源码和当前工作流版本的环境配置及发布工具；草稿目标仍是原 Tag 提交，不移动或重建 Tag。普通 Tag push 则使用该 Tag 中的工作流工具。已公开版本仍然跳过。
 
 若重建 APK 与草稿附件字节不同（签名轮换或构建不能完全复现），停止发布。维护者检查后人工删除错误草稿/附件再重跑；禁止覆盖已公开版本。
 

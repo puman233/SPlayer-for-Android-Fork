@@ -25,21 +25,33 @@ def tag():
 
 
 def release():
-    url = (os.environ.get("GITHUB_API_URL", "https://api.github.com")
-           + "/repos/" + os.environ["GH_REPO"] + "/releases/tags/"
-           + urllib.parse.quote(tag(), safe=""))
-    request = urllib.request.Request(url, headers={
+    base_url = (os.environ.get("GITHUB_API_URL", "https://api.github.com")
+                + "/repos/" + os.environ["GH_REPO"] + "/releases")
+    headers = {
         "Authorization": "Bearer " + os.environ["GH_TOKEN"],
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-    })
+    }
+    value = tag()
+    request = urllib.request.Request(base_url + "/tags/" + urllib.parse.quote(value, safe=""), headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.load(response)
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        if error.code != 404:
+            raise
+    # 按 Tag 查询可能不返回草稿，分页列表才能可靠恢复未公开版本
+    page = 1
+    while True:
+        request = urllib.request.Request(f"{base_url}?per_page=100&page={page}", headers=headers)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            releases = json.load(response)
+        for current in releases:
+            if current["tag_name"] == value:
+                return current
+        if len(releases) < 100:
             return None
-        raise
+        page += 1
 
 
 def probe():
@@ -126,14 +138,17 @@ def publish():
         print("Release 已发布，跳过上传。")
         return
     prerelease = bool(re.search(r"alpha|beta|rc", value, re.IGNORECASE))
+    commit = os.environ.get("RELEASE_COMMIT", os.environ["GITHUB_SHA"])
     if current is None:
         args = ["gh", "release", "create", value, "--verify-tag", "--title", value,
-                "--generate-notes", "--draft", "--target", os.environ["GITHUB_SHA"]]
+                "--generate-notes", "--draft", "--target", commit]
         if prerelease:
             args.append("--prerelease")
         run(*args)
         current = release()
-    if current["target_commitish"] != os.environ["GITHUB_SHA"]:
+    if current is None:
+        raise ValueError("创建后仍无法读取 Release 草稿，请检查 GitHub API 状态及 contents: write 权限")
+    if current["target_commitish"] != commit:
         raise ValueError("已有草稿不是本工作流当前提交创建的，请人工检查，禁止覆盖")
     assets = {item["name"] for item in current["assets"]}
     files = sorted(Path("release").glob("*.apk"))

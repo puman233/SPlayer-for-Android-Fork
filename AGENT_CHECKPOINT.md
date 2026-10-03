@@ -12,7 +12,7 @@
 ## VERIFIED
 
 - 三个 Actions YAML 语法、触发条件、CI 只读/发布写权限及格式检查。
-- Python 语法与 8 项发布保护测试。
+- Python 语法与 12 项发布保护测试，包括草稿 API 回退、分页、权限错误及恢复时的 Tag 提交检查。
 - pnpm lint：通过；pnpm build:android：通过；pnpm format：通过。清理构建生成及全库格式化带来的无关已跟踪文件变化。
 - 实际 Gradle 命令 :app:assembleDebug :app:testDebugUnitTest :app:lintDebug：通过（首次 offline 因测试依赖缺缓存失败，联网解析后通过）。
 - 临时测试证书的 :app:verifyReleaseConfiguration :app:assembleRelease：通过，四个 ABI 均生成 APK。
@@ -22,7 +22,8 @@
 
 ## BLOCKED
 
-- 已确认 GitHub 四项正式签名 Secrets 的名称已配置；不会读取或导出其内容。GitHub 托管 runner 和真实 Release API 创建/上传待 v3.0.9 首次发布验证。
+- 已确认四项 Secrets 已配置。dev CI 37095215774 实际通过；v3.0.9 Tag 指向 d6cf53c2。正式 runner 的签名构建及四 ABI APK 校验通过。
+- 首次 Release 37095509169 因按 Tag API 未返回新草稿而失败，留下空草稿（未公开、无附件）。已实现分页草稿查询及从 dev 手动恢复原 Tag 的入口，待修复版 CI 与恢复发布验证。
 - 本机 build 目录中的 release APK 使用临时测试证书，不属于正式发布产物。
 
 ## 下一步

@@ -2,10 +2,16 @@ name: Android Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已存在的版本 Tag，用于恢复失败发布
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: android-release-${{ github.ref }}
+  group: android-release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 jobs:
   release:
@@ -15,18 +21,29 @@ jobs:
       contents: write
     env:
       GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
+      - name: 检出当前工作流的发布工具
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            .github/scripts
+            .github/actions
+          persist-credentials: false
+      - name: 确认 Tag 提交
+        run: echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: 检查已存在的 Release
         id: existing
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/android-release.py probe
-      - uses: ./.github/actions/setup-android
+        run: python3 .release-tools/.github/scripts/android-release.py probe
+      - uses: ./.release-tools/.github/actions/setup-android
         if: steps.existing.outputs.exists == 'false'
       - name: 注入签名并验证版本
         if: steps.existing.outputs.exists == 'false'
@@ -37,7 +54,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
         run: |
-          python3 .github/scripts/android-release.py signing
+          python3 .release-tools/.github/scripts/android-release.py signing
           cd android
           ./gradlew --no-daemon :app:verifyReleaseConfiguration
       - name: 构建正式 APK
@@ -56,12 +73,12 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
-        run: python3 .github/scripts/android-release.py collect
+        run: python3 .release-tools/.github/scripts/android-release.py collect
       - name: 创建或恢复 Release
         if: steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 .github/scripts/android-release.py publish
+        run: python3 .release-tools/.github/scripts/android-release.py publish
       - name: 清理签名材料
         if: always()
         run: rm -f "$RUNNER_TEMP/splayer-release.keystore" "$RUNNER_TEMP/splayer-release-cert.der"

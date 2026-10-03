@@ -1,10 +1,12 @@
 import hashlib
+import io
 import importlib.util
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("release_script", Path(__file__).with_name("android-release.py"))
@@ -128,6 +130,44 @@ class ReleaseTests(unittest.TestCase):
             module.tag()
         with patch.dict(os.environ, {"ANDROID_KEYSTORE_BASE64": ""}), self.assertRaises(ValueError):
             module.signing()
+
+    def test_draft_is_found_when_tag_endpoint_returns_404(self):
+        current = {"tag_name": "v1.3.0", "draft": True}
+        response = io.BytesIO(json.dumps([current]).encode())
+        missing = urllib.error.HTTPError("https://api.github.com", 404, "Not Found", {}, None)
+        with patch.dict(os.environ, {"GH_TOKEN": "test-token", "GH_REPO": "owner/repo"}), \
+                patch.object(module.urllib.request, "urlopen", side_effect=[missing, response]) as request:
+            self.assertEqual(module.release(), current)
+            self.assertIn("per_page=100&page=1", request.call_args.args[0].full_url)
+
+    def test_release_list_is_paginated(self):
+        other = [{"tag_name": "v0.0.1"}] * 100
+        current = {"tag_name": "v1.3.0", "draft": True}
+        missing = urllib.error.HTTPError("https://api.github.com", 404, "Not Found", {}, None)
+        with patch.dict(os.environ, {"GH_TOKEN": "test-token", "GH_REPO": "owner/repo"}), \
+                patch.object(module.urllib.request, "urlopen", side_effect=[
+                    missing, io.BytesIO(json.dumps(other).encode()),
+                    io.BytesIO(json.dumps([current]).encode()),
+                ]) as request:
+            self.assertEqual(module.release(), current)
+            self.assertIn("page=2", request.call_args.args[0].full_url)
+
+    def test_api_permission_failure_is_not_treated_as_missing_release(self):
+        denied = urllib.error.HTTPError("https://api.github.com", 403, "Forbidden", {}, None)
+        with patch.dict(os.environ, {"GH_TOKEN": "test-token", "GH_REPO": "owner/repo"}), \
+                patch.object(module.urllib.request, "urlopen", side_effect=denied), \
+                self.assertRaises(urllib.error.HTTPError):
+            module.release()
+
+    def test_recovery_uses_tag_commit_instead_of_workflow_commit(self):
+        Path("release").mkdir()
+        Path("release/app.apk").write_bytes(b"apk")
+        current = {"draft": True, "target_commitish": "tag-commit", "assets": []}
+        with patch.dict(os.environ, {"RELEASE_COMMIT": "tag-commit"}), \
+                patch.object(module, "release", return_value=current), \
+                patch.object(module, "run", return_value="") as command:
+            module.publish()
+            self.assertIn("--draft=false", command.call_args.args)
 
 
 if __name__ == "__main__":

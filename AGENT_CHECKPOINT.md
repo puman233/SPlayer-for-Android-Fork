@@ -128,3 +128,13 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 
 - 最终普通 debug APK 已恢复：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk（64,258,191 字节），SHA-256：b733927817259c0d45f5b66415c060539b4f10fb41501bc92477d0bc590158df。包名 .debug，WebView debugging=false。另有其余三种 ABI；没有发布或推送。
 - 清理核查修正：wm user-rotation free 只恢复策略，不恢复最后一次全局角度偏好；两设备已恢复原始 user_rotation=0、accelerometer_rotation=1、font_scale=1.0，测试 finally 增加对应恢复。最终恢复逻辑已重新编译，未重复整套矩阵。
+
+## v3.0.11 发布准备（2026-10-03）
+
+状态：IMPLEMENTED。用户明确授权同步 Git 仓库并发布 Release；沿用现有自动签名发布流程，不覆盖已有版本。
+
+- 源码为已通过 MuMu 手机/平板 24 组矩阵的桌面歌词与横屏专项，版本更新为 3.0.11 / versionCode 30017。旧设置保守迁移，不修改数据库 schema，正式签名由现有 CI 注入。
+- 本地 dev 相对 origin/dev 无分叉，发布前领先两个已验证专项提交。发布前重新执行相关测试、发布保护、类型检查、构建与 lint；远端 CI 成功后再创建新 Tag。
+- 保留实际验证边界：Android Lint 历史报告仍有 187 errors / 27 warnings；API 29 与物理 cutout 未验证，不能声称零风险或全项目 Lint 零错误。
+
+- 本轮发布前本地验证：22 项 JavaScript、15 项发布保护、18 项 Android JVM 测试通过；类型检查、ESLint、pnpm build:android、pnpm format 与 Gradle assembleDebug/testDebugUnitTest/lintDebug 执行成功。Lint XML 仍为 187 errors / 27 warnings，专项 FloatingLyric 无报告问题。无关格式变更已恢复。

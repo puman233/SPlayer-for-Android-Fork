@@ -6,35 +6,58 @@ let savedPageType: MobilePageType = "info";
 <template>
   <div
     ref="mobileStart"
-    :class="['full-player-mobile', { 'pad-portrait': isPadDevice }]"
+    :class="[
+      'full-player-mobile',
+      {
+        'pad-portrait': isPadDevice,
+        'controls-hidden': !controlsVisible,
+        'comment-active': currentPageType === 'comment',
+      },
+    ]"
     :style="{
       '--lyric-h-offset': lyricHeaderHorizontalPadding,
+      '--cover-size': `${Math.max(0, Math.min(coverWidth, coverHeight / (settingStore.playerType === 'record' ? 1.45 : 1), 380))}px`,
+      '--top-bar-height': `${topBarHeight}px`,
+      '--cover-bottom': `${coverBottom}px`,
       '--pad-portrait-lrc-size': padPortraitLyricSize,
       '--pad-portrait-lrc-tran-size': padPortraitLyricTranSize,
       '--pad-portrait-lrc-roma-size': padPortraitLyricRomaSize,
     }"
+    @pointerdown.capture="pointerDown"
+    @touchstart.capture.passive="touchStart"
+    @click.capture="interact"
+    @wheel.capture.passive="interact"
+    @keydown.capture="interact"
   >
-    <div ref="topBarRef" class="top-bar">
-      <!-- 左：进入横屏沉浸式（仅 Android 手机有意义） -->
-      <div
-        v-if="showPureLyricButton && currentPageType === 'lyric'"
-        :class="['btn pure-btn', { open: statusStore.pureLyricMode }]"
-        @click.stop="togglePureLyricMode"
-      >
-        <SvgIcon name="TextPlay" :size="26" />
+    <Transition name="mobile-controls">
+      <div v-show="controlsVisible" ref="topBarRef" class="top-bar">
+        <!-- 左：进入横屏沉浸式（仅 Android 手机有意义） -->
+        <div
+          v-if="showPureLyricButton && currentPageType === 'lyric'"
+          :class="['btn pure-btn', { open: statusStore.pureLyricMode }]"
+          @click.stop="togglePureLyricMode"
+        >
+          <SvgIcon name="TextPlay" :size="26" />
+        </div>
+        <div v-else-if="canEnterImmersive" class="btn" @click.stop="enterImmersive">
+          <SvgIcon name="Fullscreen" :size="24" />
+        </div>
+        <div v-else class="btn-placeholder" aria-hidden="true" />
+        <!-- 右：下拉关闭 -->
+        <div class="btn" @click.stop="statusStore.showFullPlayer = false">
+          <SvgIcon name="Down" :size="26" />
+        </div>
       </div>
-      <div v-else-if="canEnterImmersive" class="btn" @click.stop="enterImmersive">
-        <SvgIcon name="Fullscreen" :size="24" />
-      </div>
-      <div v-else class="btn-placeholder" aria-hidden="true" />
-      <!-- 右：下拉关闭 -->
-      <div class="btn" @click.stop="statusStore.showFullPlayer = false">
-        <SvgIcon name="Down" :size="26" />
-      </div>
-    </div>
+    </Transition>
 
     <!-- 下拉手势捕获区：信息页覆盖顶栏 + 封面区域；歌词页限定在歌曲信息块 -->
-    <div ref="dragHandleRef" class="drag-handle" :style="dragHandleStyle" aria-hidden="true" />
+    <div
+      v-show="controlsVisible"
+      ref="dragHandleRef"
+      class="drag-handle"
+      :style="dragHandleStyle"
+      aria-hidden="true"
+    />
 
     <div
       :class="[
@@ -45,7 +68,12 @@ let savedPageType: MobilePageType = "info";
       @click.stop
     >
       <div v-if="hasComment" class="page comment-page">
-        <PlayerComment :active="pageIndex === commentIdx" embedded class="mobile-comment" />
+        <PlayerComment
+          :active="pageIndex === commentIdx"
+          :song-data-visible="controlsVisible"
+          embedded
+          class="mobile-comment"
+        />
       </div>
 
       <div class="page info-page">
@@ -108,59 +136,65 @@ let savedPageType: MobilePageType = "info";
       </div>
 
       <div v-if="hasLyric" class="page lyric-page">
-        <div class="lyric-header">
-          <div
-            class="lyric-cover"
-            data-no-page-swipe
-            @pointerdown.stop
-            @pointerup="onLyricCoverPointerUp"
-          >
-            <s-image
-              :src="musicStore.getSongCover('s')"
-              cache-type="covers"
-              class="lyric-cover-image"
-            />
-          </div>
-          <div class="lyric-info">
-            <div class="name text-hidden">
-              {{
-                settingStore.hideBracketedContent
-                  ? removeBrackets(musicStore.playSong.name)
-                  : musicStore.playSong.name
-              }}
+        <Transition name="mobile-controls">
+          <div v-show="controlsVisible" class="lyric-header">
+            <div
+              class="lyric-cover"
+              data-no-page-swipe
+              @pointerdown.stop
+              @pointerup="onLyricCoverPointerUp"
+            >
+              <s-image
+                :src="musicStore.getSongCover('s')"
+                cache-type="covers"
+                class="lyric-cover-image"
+              />
             </div>
-            <div class="artist text-hidden">{{ artistName }}</div>
+            <div class="lyric-info">
+              <div class="name text-hidden">
+                {{
+                  settingStore.hideBracketedContent
+                    ? removeBrackets(musicStore.playSong.name)
+                    : musicStore.playSong.name
+                }}
+              </div>
+              <div class="artist text-hidden">{{ artistName }}</div>
+            </div>
+            <div
+              v-if="musicStore.playSong.type !== 'radio'"
+              class="action-btn"
+              @click.stop="
+                toLikeSong(musicStore.playSong, !dataStore.isLikeSong(musicStore.playSong.id))
+              "
+            >
+              <SvgIcon
+                :name="dataStore.isLikeSong(musicStore.playSong.id) ? 'Favorite' : 'FavoriteBorder'"
+                :size="24"
+                :class="{ liked: dataStore.isLikeSong(musicStore.playSong.id) }"
+              />
+            </div>
           </div>
-          <div
-            v-if="musicStore.playSong.type !== 'radio'"
-            class="action-btn"
-            @click.stop="
-              toLikeSong(musicStore.playSong, !dataStore.isLikeSong(musicStore.playSong.id))
-            "
-          >
-            <SvgIcon
-              :name="dataStore.isLikeSong(musicStore.playSong.id) ? 'Favorite' : 'FavoriteBorder'"
-              :size="24"
-              :class="{ liked: dataStore.isLikeSong(musicStore.playSong.id) }"
-            />
-          </div>
-        </div>
+        </Transition>
         <div class="lyric-main">
           <PlayerLyric />
         </div>
       </div>
     </div>
 
-    <MobilePlayerBottomControls
-      :page-count="totalPages"
-      :page-index="pageIndex"
-      :large="isPadDevice"
-      @update:page-index="pageIndex = $event"
-    />
+    <Transition name="mobile-controls">
+      <MobilePlayerBottomControls
+        v-if="currentPageType !== 'comment'"
+        v-show="controlsVisible"
+        :page-count="totalPages"
+        :page-index="pageIndex"
+        :large="isPadDevice"
+        @update:page-index="pageIndex = $event"
+      />
+    </Transition>
 
     <!-- 移动端竖屏频谱：贴底浮层，与封面/歌词页共享展示 -->
     <PlayerSpectrum
-      v-if="settingStore.showSpectrums"
+      v-if="settingStore.showSpectrums && currentPageType !== 'comment'"
       class="mobile-spectrum"
       :color="statusStore.mainColor ? `rgb(${statusStore.mainColor})` : 'rgb(239 239 239)'"
       :show="true"
@@ -170,7 +204,9 @@ let savedPageType: MobilePageType = "info";
 </template>
 
 <script setup lang="ts">
-import { useSwipe } from "@vueuse/core";
+import { useMobilePlayerControls } from "@/composables/useMobilePlayerControls";
+import { PLAYER_META_HOLD_KEY } from "@/composables/usePlayerMetaHold";
+import { useSwipe, useElementSize, useElementBounding, useEventListener } from "@vueuse/core";
 import { useMusicStore, useStatusStore, useDataStore, useSettingStore } from "@/stores";
 import { useDevice } from "@/composables/useDevice";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
@@ -215,6 +251,11 @@ onBeforeUnmount(() => orientationTransition.setCoverEl(null, "portrait"));
 const mobileStart = ref<HTMLElement | null>(null);
 const topBarRef = ref<HTMLElement | null>(null);
 const dragHandleRef = ref<HTMLElement | null>(null);
+const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
+const { height: topBarHeight } = useElementSize(topBarRef);
+const { bottom: coverViewportBottom } = useElementBounding(coverSectionRef);
+const { top: playerViewportTop } = useElementBounding(mobileStart);
+const coverBottom = computed(() => coverViewportBottom.value - playerViewportTop.value);
 
 // 歌词/评论可用性
 const hasLyric = computed(() => musicStore.isHasLrc && musicStore.playSong.type !== "radio");
@@ -331,6 +372,24 @@ const currentPageType = computed<MobilePageType>(() => {
   return "info";
 });
 
+const {
+  visible: controlsVisible,
+  interact,
+  pointerDown,
+  pointerEnd,
+  touchStart,
+  touchEnd,
+  resetPointers,
+  hold,
+} = useMobilePlayerControls(currentPageType);
+provide(PLAYER_META_HOLD_KEY, hold);
+// 只观察事件，不消费歌词点击、滚动、长按和进度条拖动
+useEventListener(window, "pointerup", pointerEnd, { capture: true, passive: true });
+useEventListener(window, "pointercancel", pointerEnd, { capture: true, passive: true });
+useEventListener(window, "touchend", touchEnd, { capture: true, passive: true });
+useEventListener(window, "touchcancel", touchEnd, { capture: true, passive: true });
+useEventListener(window, "blur", resetPointers);
+
 // 下拉关闭手势捕获区：信息页覆盖顶栏 + 封面区域；歌词页限定在歌曲信息块
 const dragHandleStyle = computed(() => {
   if (currentPageType.value === "info") {
@@ -338,12 +397,12 @@ const dragHandleStyle = computed(() => {
       top: "0",
       left: "0",
       right: "0",
-      height: "calc(40px + var(--mobile-safe-top) + var(--page-zoom-100vh, 100vh) * 0.32)",
+      height: "var(--cover-bottom)",
     };
   }
   if (currentPageType.value === "lyric") {
     return {
-      top: "calc(52px + var(--mobile-safe-top))",
+      top: "var(--top-bar-height)",
       // 歌词页保留下滑手势，但避开左侧封面区域，防止封面双点被捕获层吃掉
       left: "calc(20px + var(--lyric-h-offset, 0px) + 72px)",
       right: "72px",
@@ -354,7 +413,7 @@ const dragHandleStyle = computed(() => {
     top: "0",
     left: "0",
     right: "0",
-    height: "calc(56px + var(--mobile-safe-top))",
+    height: "var(--top-bar-height)",
   };
 });
 
@@ -617,12 +676,13 @@ const contentTransform = computed(() => {
 
 <style lang="scss" scoped>
 .full-player-mobile {
-  --mobile-safe-top: max(env(safe-area-inset-top), 0px);
+  --mobile-safe-top: var(--safe-area-top, env(safe-area-inset-top));
   --mobile-safe-bottom: var(--safe-area-bottom);
-  --mobile-title-max-width: min(70vw, 50vh);
+
   width: 100%;
   height: 100%;
   position: relative;
+  padding: 0 var(--safe-area-right) 0 var(--safe-area-left);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -647,9 +707,9 @@ const contentTransform = computed(() => {
   }
 
   .top-bar {
-    position: absolute;
-    inset: 0 0 auto;
-    height: calc(56px + var(--mobile-safe-top));
+    position: relative;
+    flex: 0 0 auto;
+    min-height: calc(56px + var(--mobile-safe-top));
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -731,38 +791,38 @@ const contentTransform = computed(() => {
     flex-direction: column;
     align-items: center;
     padding: 0 20px 12px;
-    overflow-y: auto;
+    overflow: hidden;
 
     .cover-section {
       width: 100%;
-      min-height: clamp(220px, 42vh, 420px);
-      margin-top: calc(52px + var(--mobile-safe-top));
-      margin-bottom: 16px;
+      flex: 1 1 0;
+      min-height: 0;
+      margin-bottom: clamp(4px, 1.5dvh, 16px);
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
 
       :deep(.player-cover) {
-        width: min(100%, clamp(240px, 72vw, 380px));
-
+        width: var(--cover-size);
+        max-width: 100%;
+        flex-shrink: 0;
         &.record {
-          width: clamp(220px, 64vw, 360px);
-
+          margin-bottom: 0;
           .cover-img {
-            width: clamp(220px, 64vw, 360px);
-            height: clamp(220px, 64vw, 360px);
-            min-width: clamp(220px, 64vw, 360px);
-          }
-
-          .pointer {
-            width: clamp(56px, 16vw, 88px);
-            top: clamp(-72px, -12vw, -52px);
+            width: 100%;
+            height: 100%;
+            min-width: 0;
           }
         }
       }
     }
 
     .info-group {
+      flex: 0 1 auto;
+      max-height: 60%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -771,7 +831,7 @@ const contentTransform = computed(() => {
 
     .song-info-bar {
       width: 100%;
-      margin-bottom: 20px;
+      margin-bottom: clamp(4px, 1.5dvh, 20px);
 
       .info-section {
         width: 100%;
@@ -779,12 +839,15 @@ const contentTransform = computed(() => {
         :deep(.mobile-data) {
           width: 100%;
           max-width: 100%;
+          min-width: 0;
+          margin-top: 0;
+          padding: 0;
 
           .name {
             margin-left: 0;
 
             .name-text {
-              max-width: min(100%, var(--mobile-title-max-width));
+              max-width: 100%;
             }
           }
 
@@ -844,8 +907,53 @@ const contentTransform = computed(() => {
     }
   }
 
+  .info-page :deep(.mobile-data) {
+    .meta-actions-row {
+      flex-wrap: wrap;
+    }
+    .play-meta {
+      flex: 1 1 auto;
+    }
+    .artists,
+    .album,
+    .dj {
+      min-width: 0;
+    }
+    .artists .n-icon,
+    .album .n-icon,
+    .dj .n-icon {
+      flex-shrink: 0;
+    }
+    .ar-list {
+      min-width: 0;
+      flex: 1;
+    }
+    .ar-list .ar {
+      display: inline;
+      overflow-wrap: anywhere;
+    }
+    .album .name-text,
+    .dj .name-text {
+      min-width: 0;
+      flex: 1;
+    }
+  }
+
+  &.comment-active,
+  &.controls-hidden {
+    padding-bottom: var(--mobile-safe-bottom);
+  }
+  .mobile-controls-enter-active,
+  .mobile-controls-leave-active {
+    transition: opacity 0.2s ease;
+  }
+  .mobile-controls-enter-from,
+  .mobile-controls-leave-to {
+    opacity: 0;
+  }
+
   .lyric-page {
-    padding: calc(56px + var(--mobile-safe-top)) 20px calc(24px + var(--mobile-safe-bottom));
+    padding: 0 20px;
     display: flex;
     flex-direction: column;
 
@@ -915,7 +1023,7 @@ const contentTransform = computed(() => {
   }
 
   .comment-page {
-    padding: calc(56px + var(--mobile-safe-top)) 0 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -983,18 +1091,13 @@ const contentTransform = computed(() => {
     .info-page {
       padding: 0 16px 8px;
 
-      .cover-section {
-        min-height: clamp(200px, 38vh, 320px);
-        margin-top: calc(48px + var(--mobile-safe-top));
-      }
-
       .song-info-bar {
         margin-bottom: 16px;
       }
     }
 
     .lyric-page {
-      padding: calc(52px + var(--mobile-safe-top)) 16px 0;
+      padding: 0 16px;
 
       .lyric-header {
         gap: 12px;
@@ -1002,7 +1105,7 @@ const contentTransform = computed(() => {
     }
 
     .comment-page {
-      padding: calc(52px + var(--mobile-safe-top)) 0 0;
+      padding: 0;
 
       :deep(.mobile-comment) {
         .song-data {
@@ -1019,42 +1122,9 @@ const contentTransform = computed(() => {
     }
   }
 
-  // 矮屏首屏优先保证进度与播放控制完整可见，超长元数据仍可纵向滚动
-  @media (max-width: 512px) and (max-height: 700px) {
-    .info-page {
-      padding-bottom: 4px;
-
-      .cover-section {
-        min-height: clamp(168px, 32vh, 220px);
-        margin-top: calc(44px + var(--mobile-safe-top));
-        margin-bottom: 8px;
-
-        :deep(.player-cover) {
-          width: min(100%, clamp(180px, 58vw, 220px));
-
-          &.record {
-            width: clamp(176px, 54vw, 212px);
-
-            .cover-img {
-              width: clamp(176px, 54vw, 212px);
-              height: clamp(176px, 54vw, 212px);
-              min-width: clamp(176px, 54vw, 212px);
-            }
-          }
-        }
-      }
-
-      .song-info-bar {
-        margin-bottom: 8px;
-      }
-    }
-  }
-
   &.pad-portrait {
-    --mobile-title-max-width: 100%;
-
     .top-bar {
-      height: calc(72px + var(--mobile-safe-top));
+      min-height: calc(72px + var(--mobile-safe-top));
       padding: var(--mobile-safe-top) 32px 0;
 
       .btn,
@@ -1066,31 +1136,6 @@ const contentTransform = computed(() => {
 
     .info-page {
       padding: 0 clamp(32px, 6vw, 56px) 16px;
-
-      .cover-section {
-        min-height: clamp(340px, 44vh, 520px);
-        margin-top: calc(72px + var(--mobile-safe-top));
-        margin-bottom: 24px;
-
-        :deep(.player-cover) {
-          width: min(100%, clamp(240px, 72vw, 380px));
-
-          &.record {
-            width: clamp(220px, 64vw, 360px);
-
-            .cover-img {
-              width: clamp(220px, 64vw, 360px);
-              height: clamp(220px, 64vw, 360px);
-              min-width: clamp(220px, 64vw, 360px);
-            }
-
-            .pointer {
-              width: clamp(56px, 16vw, 88px);
-              top: clamp(-72px, -12vw, -52px);
-            }
-          }
-        }
-      }
 
       .info-group {
         max-width: 640px;
@@ -1145,7 +1190,7 @@ const contentTransform = computed(() => {
     }
 
     .lyric-page {
-      padding: calc(72px + var(--mobile-safe-top)) 20px 0;
+      padding: 0 20px;
 
       .lyric-header {
         gap: 20px;

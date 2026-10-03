@@ -18,6 +18,8 @@ const compat = new FlatCompat({
 export default [
   {
     ignores: [
+      "**/.verify*/**",
+      ".verify*",
       "**/node_modules",
       "**/dist",
       "**/out",

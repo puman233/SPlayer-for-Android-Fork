@@ -1,43 +1,57 @@
 <!-- 播放器 - 评论 -->
 <template>
   <div class="player-comment" :class="{ 'no-song-data': hideSongData, embedded }">
-    <n-flex v-if="!hideSongData" :wrap="false" align="center" class="song-data">
-      <n-image
-        :src="musicStore.songCover"
-        :alt="musicStore.songCover"
-        class="cover-img"
-        preview-disabled
-        @load="coverLoaded"
+    <Transition name="comment-song-data">
+      <n-flex
+        v-if="!hideSongData"
+        v-show="songDataVisible"
+        :wrap="false"
+        align="center"
+        class="song-data"
       >
-        <template #placeholder>
-          <div class="cover-loading">
-            <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
-          </div>
-        </template>
-      </n-image>
-      <n-flex :size="2" class="song-info" vertical>
-        <span class="title text-hidden">{{
-          settingStore.hideBracketedContent
-            ? removeBrackets(musicStore.playSong.name)
-            : musicStore.playSong.name
-        }}</span>
-        <span class="artist text-hidden">
-          {{
-            Array.isArray(musicStore.playSong.artists)
-              ? musicStore.playSong.artists.map((item) => item.name).join(" / ")
-              : String(musicStore.playSong.artists)
-          }}
-        </span>
+        <n-image
+          :src="musicStore.songCover"
+          :alt="musicStore.songCover"
+          class="cover-img"
+          preview-disabled
+          @load="coverLoaded"
+        >
+          <template #placeholder>
+            <div class="cover-loading">
+              <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
+            </div>
+          </template>
+        </n-image>
+        <n-flex :size="2" class="song-info" vertical>
+          <span class="title text-hidden">{{
+            settingStore.hideBracketedContent
+              ? removeBrackets(musicStore.playSong.name)
+              : musicStore.playSong.name
+          }}</span>
+          <span class="artist text-hidden">
+            {{
+              Array.isArray(musicStore.playSong.artists)
+                ? musicStore.playSong.artists.map((item) => item.name).join(" / ")
+                : String(musicStore.playSong.artists)
+            }}
+          </span>
+        </n-flex>
+        <div class="actions">
+          <n-flex class="close" align="center" justify="center" @click="openExcludeComment">
+            <SvgIcon name="Tag" :size="20" />
+          </n-flex>
+          <n-flex
+            v-if="!embedded"
+            class="close"
+            align="center"
+            justify="center"
+            @click="handleClose"
+          >
+            <SvgIcon name="Music" :size="24" />
+          </n-flex>
+        </div>
       </n-flex>
-      <div class="actions">
-        <n-flex class="close" align="center" justify="center" @click="openExcludeComment">
-          <SvgIcon name="Tag" :size="20" />
-        </n-flex>
-        <n-flex v-if="!embedded" class="close" align="center" justify="center" @click="handleClose">
-          <SvgIcon name="Music" :size="24" />
-        </n-flex>
-      </div>
-    </n-flex>
+    </Transition>
     <n-scrollbar ref="commentScroll" class="comment-scroll">
       <Transition name="fade">
         <div
@@ -96,12 +110,13 @@ const props = withDefaults(
   defineProps<{
     /** 隐藏顶部歌曲卡片 */
     hideSongData?: boolean;
+    songDataVisible?: boolean;
     /** 嵌入模式下是否激活 */
     active?: boolean;
     /** 嵌入式布局 */
     embedded?: boolean;
   }>(),
-  { hideSongData: false, embedded: false },
+  { hideSongData: false, songDataVisible: true, embedded: false },
 );
 
 const emit = defineEmits<{ (e: "close"): void }>();
@@ -284,6 +299,14 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.comment-song-data-enter-active,
+.comment-song-data-leave-active {
+  transition: opacity 0.2s ease;
+}
+.comment-song-data-enter-from,
+.comment-song-data-leave-to {
+  opacity: 0;
+}
 .player-comment {
   position: absolute;
   right: 0;
@@ -302,6 +325,15 @@ onMounted(() => {
     flex-direction: column;
     .song-data {
       flex: 0 0 auto;
+      min-width: 0;
+      .song-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .cover-img,
+      .actions {
+        flex-shrink: 0;
+      }
     }
     :deep(.comment-scroll) {
       flex: 1 1 auto;

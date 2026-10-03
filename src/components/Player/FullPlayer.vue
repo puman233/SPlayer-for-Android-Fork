@@ -10,7 +10,8 @@
       <div
         v-if="statusStore.showFullPlayer"
         :style="{
-          cursor: statusStore.playerMetaShow || showComment ? 'auto' : 'none',
+          cursor:
+            isCompactMobilePlayer || statusStore.playerMetaShow || showComment ? 'auto' : 'none',
           '--lyric-blend-mode': settingStore.lyricsBlendMode,
         }"
         :class="[
@@ -128,7 +129,9 @@ const { phase: orientationPhase } = useOrientationTransition();
 
 const { isPhone, isPhonePortrait, isPad } = useDevice();
 // tap-restore 仅沉浸式 / 平板生效；其他场景保留 autohide
-const tapRestoreEnabled = computed(() => statusStore.isImmersiveFullscreen || isPad.value);
+const tapRestoreEnabled = computed(
+  () => !isCompactMobilePlayer.value && (statusStore.isImmersiveFullscreen || isPad.value),
+);
 const tapRestoreShield = ref(false);
 let tapRestoreShieldTimer: number | undefined;
 const isCompactMobilePlayer = computed(() => isPhonePortrait.value);

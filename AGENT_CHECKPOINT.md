@@ -49,3 +49,20 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - Python 15 项保护测试通过，新增历史文案格式、当前版本日志提取、缺失日志拒绝以及 flavor 文件名保留检查。
 - YAML 语法检查通过；HEAD 加本次发布改动的隔离副本执行 pnpm lint、pnpm build:android、pnpm format 均通过。主工作区 lint 被另一路临时 .verify-player.cjs 的 require 规则错误影响，因此没有删除或修改该脚本。
 - 并行播放器改动及临时验证脚本保留；本次提交仅包含发布脚本、模板、对应测试和文档。
+
+## 手机播放页面 UI 修复（2026-10-03）
+
+状态：IMPLEMENTED；下列构建、状态测试与浏览器场景为 VERIFIED，真机矩阵仍未验证。分支 dev。
+
+- FullPlayerMobile：顶栏、内容与底栏都参与纵向布局；评论页不挂载底栏和频谱；安全区统一沿用项目变量。封面根据真实剩余区域 ResizeObserver 测量缩小，Metadata 最大占内容区域 60%，过多时独立滚动。
+- useMobilePlayerControls：复用 useTimeoutFn 和 PlayerMetaHold 接口，页面隔离的 4 秒计时；多指拖动、菜单 hold 不隐藏；切页恢复；点击捕获不消费事件，隐藏时不在 pointerdown/pointerup 阶段移动命中目标。程序自动滚词不重置计时。
+- PlayerComment：可单独淡出歌曲卡片，评论列表一直存在；卡片长标题不挤压操作按钮。FullPlayer：手机竖屏不使用父级点击拦截层。
+- 状态回归 6 项通过：隐藏/恢复/重置、多指拖动、嵌套 hold、切页、失焦、卸载、隐藏时点击命中保护，以及浏览器接管触摸滚动后 pointercancel 不提前结束保护。
+- 浏览器实际 Vue 页面：360×640、360×800、480×1067 CSS 视口（对应需求中常见 DPR 下四组物理分辨率），分别模拟 16/48px 导航安全区、30px 顶部和左右 8px cutout；长标题、多歌手、长专辑和多个标签的封面、信息、底栏无重叠。320×480 极小视口中 Metadata 可滚动到专辑，仍不进入底栏。
+- 浏览器交互：歌词初始显示、4 秒淡出、点击恢复、长时间按住进度区域不隐藏、抬起后计时正常；评论无底栏、卡片淡出/恢复、评论可用高度增加。
+- 普通歌曲的普通封面与唱片封面模式均已浏览器验证，封面、歌曲信息和专辑不进入底栏。
+- 已执行 pnpm build:android、pnpm typecheck:web、pnpm lint、pnpm format；Android :app:assembleDebug 与 :app:testDebugUnitTest 通过；:app:lintDebug 任务返回成功，但 XML 报告仍有 205 errors / 33 warnings（203 UnsafeOptInUsageError、2 WrongConstant，涉及本轮未修改的原生播放代码），不视为零错误通过。格式与 ESLint 排除生成资源及临时验证目录。
+- 未验证：真实手机手势/三键导航、系统 cutout inset 注入、真实后台音频播放、歌词长按/跳转在 Android WebView 的硬件交互。未修改 Service、队列、MediaSession 或音频引擎。
+- 普通按钮、图标、顶栏最小触摸尺寸和封面首选上限仍使用固定 CSS px；没有固定底部占位高度或针对单机型的遮挡补丁。
+
+- 最终 debug APK：`android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`（64,723,584 字节），另含 armeabi-v7a、x86、x86_64；仅用于测试，未执行正式发布或真机安装。

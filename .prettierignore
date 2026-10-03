@@ -8,3 +8,8 @@ native/**/index.d.ts
 # tsconfig.json
 # tsconfig.*.json
 auto-eslint.mjs
+
+android/app/libs/
+android/app/src/main/assets/
+android/capacitor-cordova-android-plugins/
+.verify*/

@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { effectScope, nextTick, ref } from "vue";
+import { useMobilePlayerControls, type MobilePlayerPage } from "./useMobilePlayerControls.ts";
+
+describe("手机播放器控件", () => {
+  const setup = () => {
+    const scope = effectScope();
+    const page = ref<MobilePlayerPage>("lyric");
+    const controls = scope.run(() => useMobilePlayerControls(page, 4000))!;
+    return { scope, page, controls };
+  };
+  it("隐藏、恢复与操作重新计时", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, controls } = setup();
+    t.mock.timers.tick(3999);
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(1);
+    assert.equal(controls.visible.value, false);
+    controls.interact();
+    t.mock.timers.tick(3000);
+    controls.interact();
+    t.mock.timers.tick(3000);
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(1000);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+  });
+  it("多指拖动与菜单打开期间保持显示", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, controls } = setup();
+    controls.pointerDown({ pointerId: 1 } as PointerEvent);
+    controls.pointerDown({ pointerId: 2 } as PointerEvent);
+    t.mock.timers.tick(9000);
+    controls.pointerEnd({ pointerId: 1 } as PointerEvent);
+    t.mock.timers.tick(9000);
+    assert.equal(controls.visible.value, true);
+    controls.pointerEnd({ pointerId: 2 } as PointerEvent);
+    controls.hold.acquire();
+    controls.hold.acquire();
+    controls.hold.release();
+    t.mock.timers.tick(9000);
+    assert.equal(controls.visible.value, true);
+    controls.hold.release();
+    t.mock.timers.tick(4000);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+  });
+  it("切页重新显示，信息页始终显示", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, page, controls } = setup();
+    t.mock.timers.tick(4000);
+    page.value = "comment";
+    await nextTick();
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(4000);
+    assert.equal(controls.visible.value, false);
+    page.value = "info";
+    await nextTick();
+    t.mock.timers.tick(9000);
+    assert.equal(controls.visible.value, true);
+    page.value = "lyric";
+    await nextTick();
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(4000);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+  });
+  it("失焦结束拖动，卸载清理计时器", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, controls } = setup();
+    controls.pointerDown({ pointerId: 1 } as PointerEvent);
+    controls.resetPointers();
+    t.mock.timers.tick(4000);
+    assert.equal(controls.visible.value, false);
+    controls.interact();
+    scope.stop();
+    t.mock.timers.tick(9000);
+    assert.equal(controls.visible.value, true);
+  });
+  it("隐藏时不在按下或抬起阶段移动歌词命中目标", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, controls } = setup();
+    t.mock.timers.tick(4000);
+    controls.pointerDown({ pointerId: 1 } as PointerEvent);
+    controls.pointerEnd({ pointerId: 2 } as PointerEvent);
+    assert.equal(controls.visible.value, false);
+    controls.pointerEnd({ pointerId: 1 } as PointerEvent);
+    assert.equal(controls.visible.value, false);
+    controls.interact();
+    assert.equal(controls.visible.value, true);
+    scope.stop();
+  });
+  it("纵向滚动接管 pointercancel 后，手指松开前不隐藏", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { scope, controls } = setup();
+    const event = { changedTouches: [{ identifier: 1 }] } as unknown as TouchEvent;
+    controls.pointerDown({ pointerId: 1 } as PointerEvent);
+    controls.touchStart(event);
+    controls.pointerEnd({ pointerId: 1 } as PointerEvent);
+    t.mock.timers.tick(9000);
+    assert.equal(controls.visible.value, true);
+    controls.touchEnd(event);
+    t.mock.timers.tick(4000);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+  });
+});

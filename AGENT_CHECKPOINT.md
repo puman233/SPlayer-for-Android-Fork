@@ -1,5 +1,25 @@
 # Android 自动发布工作流检查点
 
+## v3.0.11 同版本修补交付（2026-10-04）
+
+状态：VERIFIED（仅以下实际验收范围）。已通过工作流更新既有 v3.0.11 四 ABI APK；未创建新版本、Release 或 Tag，未增加 versionCode。完整自适应工程仍为 IMPLEMENTED，不能将本轮交付等同于所有页面和全部设备矩阵完成。
+
+- 正式源码：`99c2c3ce3290668ca4d7123e71f551590d65e4de`；Android CI [37135395678](https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37135395678) success。签名准备 [运行 37135681053](https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37135681053)、附件替换 [运行 37137618497](https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37137618497) 均 success。最终文档随后单独提交、同步 dev；APK 来源固定为上述源码提交。
+- 既有 Release ID 402442837、公开正式/latest 状态及 target_commitish 保持不变；Tag 对象仍为 `b34c36013e063ce280334a261ed2c877609741e1`。最终恰好四个标准 ABI 附件，已核对新附件 ID、大小、GitHub digest，并重新下载四个公开 APK，完整 SHA-256 与候选清单一致，暂存/备份附件已清理。原正文保留并追加来源与哈希。
+- 本地核对整个准备 artifact 的 GitHub SHA-256、ZIP 与路径；八个新旧 APK 均通过 ZIP/资源、包名 top.imsyy.splayer.android、3.0.11 / 30017、单一正确 ABI、非 debuggable、WebView debugging=false、正式证书检查。签名 SHA-256：`d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea`。
+- MuMu 手机 SM-A5560 与平板 ALT-AL10（API 35）分别使用正式 ARM64 候选包执行 adb install -r，均 Success，实际启动 Status: ok、进程存在，启动后当前进程日志未出现 FATAL EXCEPTION。firstInstallTime 分别保持 2026-10-03 15:20:07、2026-10-01 18:11:04；未清除正式包数据。此项是覆盖升级/启动检查，不代表所有真实音源或用户数据语义均已验证。
+- 补充双端导航/cutout 矩阵：每端真实启用手势与三键导航 overlay，各自启用模拟 corner cutout，四套完整仪器测试均 OK (7 tests)，合计 28 次测试执行。覆盖五档实际字体 × 横竖屏，合计 120 个播放器、40 个共享组件几何场景和 80 次列表中部/末尾检查；已检查 Activity PixelCopy 截图。测试使用隔离包，完成后卸载隔离包/仪器包并恢复原导航/cutout、fontScale=1.0、旋转设置，正式包保留。
+- 最终文档提交前再次执行 pnpm build:android、pnpm format，均成功；pnpm lint 零错误/警告。32 项 TS、26 项 Python 发布保护、18 项 JVM 回归及远端源码 CI 通过。原生 Lint 历史 187 errors / 27 warnings，Vite 已有 ffmpeg.wasm URL/大 chunk 提示继续保留，不能称全项目零告警。
+- 未完整验证：API 29、物理 cutout、真实系统分屏生命周期、AMLL 全内容矩阵、物理触摸拖拽/重排、真实音源全流程及所有页面大字号。极端字号下最近播放页仍依赖页面滚动，歌曲标题沿用省略/提示，其他页面仍可逐步迁移共享控件。
+- 正式产物、旧包备份与本地证据：`C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10146-a8d1-7132-a8a7-785cf718820d/patch-final`；正式 APK 在 `bundle/new/`，旧包在 `bundle/old/`。准备 artifact 保留 90 天，本地备份独立保留。候选、双端覆盖升级、导航矩阵、最终公开附件的 JSON/log/截图均在该目录。
+
+| APK                         | 字节数     | SHA-256                                                            |
+| --------------------------- | ---------- | ------------------------------------------------------------------ |
+| app-arm64-v8a-release.apk   | 60,023,212 | `4abf816fd226131f2ba97a7e58f1eec1e466d781d3c5483e2941e8d0dfa809a7` |
+| app-armeabi-v7a-release.apk | 59,227,554 | `7e97e4d0fe79c954ee389993d1f1f31808a59e90e3ed7db708580f1ecd48d522` |
+| app-x86-release.apk         | 62,329,770 | `7caf0a46533b615bb45eb4bd51299e99cd4317dcd83d02fdf1d4e1a4c2b5a51e` |
+| app-x86_64-release.apk      | 65,576,859 | `7ff1ed76736ecfb02704f6f339be3de0472798be4d3e420b5712cb371477afb3` |
+
 ## v3.0.11 最终修补发布阶段（2026-10-03）
 
 状态：IMPLEMENTED；同版本修补工作流及本地保护测试已实现，尚未更新公开附件。用户已授权更新现有 v3.0.11 APK，不创建新版本，并同步仓库。

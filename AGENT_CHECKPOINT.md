@@ -2,7 +2,7 @@
 
 日期：2026-10-03；分支：dev。
 
-## IMPLEMENTED
+## 工作流（VERIFIED）
 
 - Android CI：dev push/PR，JDK 21、pnpm 10.28.1、Gradle 缓存，资源构建、发布保护测试、ESLint、debug 编译/单元测试/Android Lint。
 - Tag Release：v\* 触发，检出 Tag，正式签名 Secrets 注入，Gradle 版本校验，所有 release ABI/flavor 元数据收集，真实 APK 清单与证书校验。
@@ -20,12 +20,23 @@
 - Gradle 负向验证：v1.3.0 与 versionName=3.0.8 不一致时明确失败。
 - 没有已跟踪 keystore/key.properties；临时测试签名材料与测试复制附件已清理。
 
-## BLOCKED
+## GitHub 实际发布（VERIFIED）
 
-- 已确认四项 Secrets 已配置。dev CI 37095215774 实际通过；v3.0.9 Tag 指向 d6cf53c2。正式 runner 的签名构建及四 ABI APK 校验通过。
-- 首次 Release 37095509169 因按 Tag API 未返回新草稿而失败，留下空草稿（未公开、无附件）。已实现分页草稿查询及从 dev 手动恢复原 Tag 的入口，待修复版 CI 与恢复发布验证。
-- 本机 build 目录中的 release APK 使用临时测试证书，不属于正式发布产物。
+- 已确认四项 Secrets 已配置并由 runner 实际用于正式签名，没有读取或导出 Secrets 内容。
+- dev CI：37095215774、修复后的 37096060939 均实际通过。首次环境配置失败为 setup-android 默认请求已移除 tools 包，已显式配置 platform-tools 修复。
+- v3.0.9 Tag 保持指向 d6cf53c2；版本为 3.0.9 / 30015。首次 Release 37095509169 因按 Tag API 未返回新草稿而失败，留下空草稿。修复发布工具位于 dev 提交 a97c56f1。
+- 恢复发布 37096228847（workflow_dispatch）成功，原草稿转为正式公开 Release：draft=false、prerelease=false、标题 v3.0.9，自动生成 Release Notes。
+- 正式附件只有四个 APK：SFA-3.0.9-release-abi-arm64-v8a.apk（60001030 字节）、armeabi-v7a（59205372）、x86（62307588）、x86_64（65554677）。不含 debug 或中间文件。
+- 下载正式 arm64 APK 并检查 SHA-256 与 GitHub 附件 digest 相同，真实清单为 versionName=3.0.9、versionCode=30015、非 debuggable；证书与 v3.0.8 相同，SHA-256 为 d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea。
+- 同一发布运行的 attempt 2 实际成功，构建和上传均跳过；四个附件 ID、数量、大小及哈希均未变化，确认没有重复上传。
+- 本机 build 目录中的先前 release APK 使用临时测试证书，不属于正式发布产物；正式安装包请从下方 Release 下载。下载核验使用的临时文件已清理。
+
+发布地址：https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.9
+
+CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37096060939
+
+发布/重跑：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37096228847
 
 ## 下一步
 
-v3.0.8 已发布，因此使用 v3.0.9 / versionCode 30015。先推送 dev 验证 CI，再推送 v3.0.9 Tag；当前提交后将继续检查线上运行和附件。
+本轮发布完成。下次修改 Android 与前端版本并递增 versionCode，推送 dev 等待 CI，通过后推送新 Tag。若旧 Tag 发布工具需要修复，使用 dev 的 Android Release 手动恢复入口，保留旧 Tag 源码。

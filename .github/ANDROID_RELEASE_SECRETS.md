@@ -34,13 +34,13 @@ CI 在 dev push/PR 运行，无需 Secrets，不创建 Release。Gradle 缓存�
 
 ## 发布步骤
 
-1. 修改 android/app/build.gradle 的 versionName 和递增 versionCode，并同步 package.json.version。当前值为 3.0.8 / 30014。
+1. 修改 android/app/build.gradle 的 versionName 和递增 versionCode，并同步 package.json.version。当前值为 3.0.9 / 30015。
 2. 提交推送 dev，等待 CI 通过。
-3. 对已验证提交创建、推送 Tag，例如 `git tag v3.0.8` 和 `git push origin v3.0.8`。若对应 Release 已存在，应使用新版本。
+3. 对已验证提交创建、推送 Tag，例如 `git tag v3.0.9` 和 `git push origin v3.0.9`。若对应 Release 已存在，应使用新版本。
 
-Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改版本。预发布示例为 v3.0.9-rc.1，两处版本必须精确为 3.0.9-rc.1。非版本形式的 v\* Tag 明确报错。
+Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改版本。预发布示例为 v3.0.10-rc.1，两处版本必须精确为 3.0.10-rc.1。非版本形式的 v\* Tag 明确报错。
 
-从 android/app/build/outputs/apk/\*_/output-metadata.json 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 release/ 目录仅包含已验证 APK，附件 glob 为 release/_.apk。名称包含版本、变体与 ABI/filter，例如 SFA-3.0.8-release-abi-arm64-v8a.apk。
+从 android/app/build/outputs/apk/\*_/output-metadata.json 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 release/ 目录仅包含已验证 APK，附件 glob 为 release/_.apk。名称包含版本、变体与 ABI/filter，例如 SFA-3.0.9-release-abi-arm64-v8a.apk。
 
 Release 标题为 Tag，自动生成 GitHub Release Notes；包含 alpha/beta/rc（忽略大小写）时为 prerelease，否则正式版本。使用 --verify-tag，不创建或移动 Tag。
 

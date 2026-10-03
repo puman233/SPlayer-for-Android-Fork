@@ -22,9 +22,9 @@
 
 ## BLOCKED
 
-- GitHub 托管 runner、正式签名 Secrets、真实 Release API 创建/上传尚未实测。需维护者配置四个 Secrets 并推送新版本 Tag；本轮没有创建 Tag、推送或公开 Release。
+- 已确认 GitHub 四项正式签名 Secrets 的名称已配置；不会读取或导出其内容。GitHub 托管 runner 和真实 Release API 创建/上传待 v3.0.9 首次发布验证。
 - 本机 build 目录中的 release APK 使用临时测试证书，不属于正式发布产物。
 
 ## 下一步
 
-按签名文档配置 ANDROID_KEYSTORE_BASE64、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD，先推送 dev 验证 CI，再推送与 Android/前端版本完全一致的新 Tag。
+v3.0.8 已发布，因此使用 v3.0.9 / versionCode 30015。先推送 dev 验证 CI，再推送 v3.0.9 Tag；当前提交后将继续检查线上运行和附件。

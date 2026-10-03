@@ -234,7 +234,8 @@ public class FloatingLyricService extends Service {
     float newFontPx = effectiveSp * dm.scaledDensity;
     int buttonCount = tabletMode ? 6 : 5;
     int controlColumns = Math.max(1, width / Math.round(48 * d));
-    int requestedControlHeight = (int) Math.ceil(buttonCount / (double) controlColumns) * Math.round(48 * d);
+    int requestedControlHeight = (int) Math.ceil(buttonCount / (double) controlColumns) * Math.round(48 * d)
+        + (tabletMode ? Math.round(tabletTitleHeight(d)) : 0);
     int newIdleHeight = Math.min(Math.max(1, bounds.height() - requestedControlHeight), Math.round(Math.max(requestedHeightDp * d,
         newFontPx * (doubleLine ? 2.8f : 1.6f) + 16 * d)));
     int newControlHeight = Math.min(requestedControlHeight, Math.max(0, bounds.height() - newIdleHeight));
@@ -258,6 +259,10 @@ public class FloatingLyricService extends Service {
     if (changed && view != null) view.resetLayout();
     updateWindow();
     updateUnlockPosition();
+  }
+
+  private float tabletTitleHeight(float density) {
+    return Math.max(32 * density, 21 * getResources().getDisplayMetrics().scaledDensity + 8 * density);
   }
 
   private void projectPosition() {
@@ -685,6 +690,21 @@ public class FloatingLyricService extends Service {
     }
 
     private void paintControls(Canvas canvas, int width, float height, float d) {
+      float titleHeight = tabletMode ? tabletTitleHeight(d) : 0;
+      if (tabletMode) {
+        // 平板保留歌名和歌手，独立信息行不挤压触控按钮
+        FloatingLyricTextLayout title = run(songName.isEmpty() ? "SPlayer" : songName + " - " + artistName,
+            15 * getResources().getDisplayMetrics().scaledDensity);
+        title.paint.setShader(null);
+        title.paint.setColor(0xEEFFFFFF);
+        title.paint.clearShadowLayer();
+        int saved = canvas.save();
+        canvas.clipRect(14 * d, 0, width - 14 * d, titleHeight);
+        canvas.translate(title.rtl ? width - 14 * d - title.width : 14 * d,
+            (titleHeight - title.layout.getHeight()) / 2);
+        title.layout.draw(canvas);
+        canvas.restoreToCount(saved);
+      }
       int count = tabletMode ? 6 : 5;
       int columns = Math.min(count, Math.max(1, width / Math.round(48 * d)));
       float size = Math.min(48 * d, width / (float) columns);
@@ -698,7 +718,7 @@ public class FloatingLyricService extends Service {
       rFavorite.setEmpty();
       for (int i = 0; i < count; i++) {
         drawBtn(canvas, rects[i], gap + (i % columns) * (size + gap),
-            (i / columns) * size + size / 2, size, icons[i]);
+            titleHeight + (i / columns) * size + size / 2, size, icons[i]);
       }
     }
 

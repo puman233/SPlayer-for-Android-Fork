@@ -8,19 +8,17 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-/**
- * Instrumented test, which will execute on an Android device.
- *
- * @see <a href="http://d.android.com/tools/testing">Testing documentation</a>
- */
+/** 验证实际应用上下文，兼容正式与隔离验证包 */
 @RunWith(AndroidJUnit4.class)
 public class ExampleInstrumentedTest {
 
     @Test
     public void useAppContext() throws Exception {
-        // Context of the app under test.
+        // 校验 SPlayer 包名及构建后缀，不能沿用模板占位值
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        assertEquals("com.getcapacitor.app", appContext.getPackageName());
+        String packageName = appContext.getPackageName();
+        assertTrue(packageName.equals("top.imsyy.splayer.android")
+            || packageName.startsWith("top.imsyy.splayer.android."));
     }
 }

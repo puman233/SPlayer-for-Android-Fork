@@ -44,6 +44,17 @@ public class FloatingLyricOverlayTest {
 
   private void main(Runnable action) { instrumentation.runOnMainSync(action); }
 
+  private void awaitControlsAlpha(float expected) throws Exception {
+    long deadline = SystemClock.uptimeMillis() + 2000;
+    do {
+      // 等主线程处理当前帧，避免模拟器负载造成固定 sleep 的误判
+      main(() -> {});
+      if (Math.abs((float) field(service, "controlsAlpha") - expected) < 0.001f) return;
+      SystemClock.sleep(30);
+    } while (SystemClock.uptimeMillis() < deadline);
+    assertEquals(expected, (float) field(service, "controlsAlpha"), 0.001f);
+  }
+
   private void tap(View view, float x, float y) {
     main(() -> {
       long now = SystemClock.uptimeMillis();
@@ -124,22 +135,32 @@ public class FloatingLyricOverlayTest {
       assertTrue("seek 后从起点重置", initial.sameAs(reset));
       initial.recycle(); scrolled.recycle(); paused.recycle(); pausedAgain.recycle(); reset.recycle();
       tap(view, view.getWidth() / 2f, view.getHeight() / 2f);
-      SystemClock.sleep(350);
-      assertEquals(1f, (float) field(service, "controlsAlpha"), 0.001f);
+      awaitControlsAlpha(1f);
       draw(view);
       android.graphics.RectF lock = (android.graphics.RectF) field(service, "rLock");
+      if (service.tabletMode) {
+        main(() -> service.pushSongInfo("平板歌名🎵", "平板歌手"));
+        Bitmap titleA = capture(view);
+        main(() -> service.pushSongInfo("另一首歌🎵", "另一位歌手"));
+        Bitmap titleB = capture(view);
+        Bitmap headerA = Bitmap.createBitmap(titleA, 0, 0, titleA.getWidth(), Math.round(lock.top));
+        Bitmap headerB = Bitmap.createBitmap(titleB, 0, 0, titleB.getWidth(), Math.round(lock.top));
+        assertFalse("平板控制栏必须保留歌曲信息", headerA.sameAs(headerB));
+        assertTrue("信息行不能覆盖锁定按钮", lock.top >= 32 * service.getResources().getDisplayMetrics().density);
+        titleA.recycle(); titleB.recycle();
+        headerA.recycle(); headerB.recycle();
+      }
       tap(view, lock.centerX(), lock.centerY());
-      SystemClock.sleep(250);
-      assertEquals(0f, (float) field(service, "controlsAlpha"), 0.001f);
+      awaitControlsAlpha(0f);
       FloatingLyricInteraction interaction = (FloatingLyricInteraction) field(service, "interaction");
       assertTrue(interaction.locked());
       assertTrue((boolean) field(service, "unlockAttached"));
       main(() -> service.setLocked(false));
-      SystemClock.sleep(350);
+      awaitControlsAlpha(1f);
       assertFalse(interaction.locked());
       assertFalse((boolean) field(service, "unlockAttached"));
       SystemClock.sleep(4400);
-      assertEquals(0f, (float) field(service, "controlsAlpha"), 0.001f);
+      awaitControlsAlpha(0f);
       assertFalse(interaction.controls());
       JSONObject user = new JSONObject().put("fontSizeMode", "USER_DEFINED").put("fontSize", 30)
           .put("playedColor", "#123456");

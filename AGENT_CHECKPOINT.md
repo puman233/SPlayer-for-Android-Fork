@@ -138,3 +138,10 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - 保留实际验证边界：Android Lint 历史报告仍有 187 errors / 27 warnings；API 29 与物理 cutout 未验证，不能声称零风险或全项目 Lint 零错误。
 
 - 本轮发布前本地验证：22 项 JavaScript、15 项发布保护、18 项 Android JVM 测试通过；类型检查、ESLint、pnpm build:android、pnpm format 与 Gradle assembleDebug/testDebugUnitTest/lintDebug 执行成功。Lint XML 仍为 187 errors / 27 warnings，专项 FloatingLyric 无报告问题。无关格式变更已恢复。
+
+- 发布前兼容复查发现平板悬浮歌词控制栏旧版歌名/歌手显示遗漏，已恢复为独立信息行，按系统字号计算高度；保留六个按钮及收藏操作。新增仅比较信息行截图的断言，确保实际内容变化。该修复将重新验证后提交，原 fb7ed870 的 CI 已成功，但不能替代新修复的 CI。
+
+- 完整仪器套件首次运行发现历史 Capacitor ExampleInstrumentedTest 仍断言 com.getcapacitor.app，两台专项测试各自通过但套件失败；改为验证 SPlayer 包名与构建后缀。尝试引用 BuildConfig 时因本项目未生成该类编译失败，改为显式包名校验后重新编译成功。失败日志保留，未把首次套件运行计为通过。
+
+- 补充恢复平板歌曲信息后最终矩阵：12/12 场景通过，每场景完整仪器套件 OK (3 tests)，合计 36 次测试；覆盖两设备 × 两导航 × 三字体，并启用模拟 cutout。首次平板 2.0 字体因固定 350ms 等待得到 controlsAlpha=0.37059042，断言失败；改为主线程确认且最长 2 秒等待动画终态后重跑全矩阵通过，未修改产品动画时长。失败日志保留。
+- 最终补充修复的 pnpm build:android、pnpm format、ESLint、原生 assembleDebug/testDebugUnitTest/lintDebug 与仪器包编译均成功；Lint 仍 187 errors / 27 warnings。没有清除现有正式包数据。

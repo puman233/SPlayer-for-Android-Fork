@@ -1,8 +1,8 @@
 <template>
   <div class="player-control">
     <Transition name="fade" mode="out-in">
-      <div v-show="statusStore.playerMetaShow" class="control-content" @click.stop>
-        <n-flex class="left" align="center">
+      <div v-show="persistent || statusStore.playerMetaShow" class="control-content" @click.stop>
+        <n-flex class="left" align="center" :wrap="!persistent" :size="persistent ? 0 : 12">
           <!-- 收起：沉浸式横屏 / 平板下改为隐藏页面 UI（用 WindowHide 图标区分，再次轻触播放器主体恢复）；其他场景关闭全屏播放器 -->
           <div class="menu-icon" @click.stop="onDownClick">
             <SvgIcon :name="hideUiOnly ? 'WindowHide' : 'Down'" />
@@ -140,9 +140,9 @@
             </div>
           </div>
         </div>
-        <n-flex class="right" align="center" justify="end">
+        <n-flex class="right" align="center" justify="end" :wrap="!persistent">
           <!-- 功能区 -->
-          <PlayerRightMenu />
+          <PlayerRightMenu :persistent="persistent" />
         </n-flex>
       </div>
     </Transition>
@@ -168,7 +168,10 @@ const settingStore = useSettingStore();
 const { isPad } = useDevice();
 
 // 沉浸式 / 平板下 Down 仅藏 UI（轻触屏幕恢复）；其他场景关闭全屏
-const hideUiOnly = computed(() => statusStore.isImmersiveFullscreen || isPad.value);
+const props = defineProps<{ persistent?: boolean }>();
+const hideUiOnly = computed(
+  () => !props.persistent && (statusStore.isImmersiveFullscreen || isPad.value),
+);
 const onDownClick = () => {
   if (hideUiOnly.value) {
     statusStore.playerMetaShow = false;
@@ -376,15 +379,15 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 38px;
-        height: 38px;
+        width: var(--play-control-touch-size, 38px);
+        height: var(--play-control-touch-size, 38px);
         border-radius: 50%;
         will-change: transform;
         transition:
           background-color 0.3s,
           transform 0.3s;
         cursor: pointer;
-        margin: 0 4px;
+        margin: 0 var(--play-control-gap, 4px);
         .n-icon {
           color: rgb(var(--main-cover-color));
         }
@@ -397,8 +400,8 @@ onBeforeUnmount(() => {
         }
       }
       .play-pause {
-        --n-width: 44px;
-        --n-height: 44px;
+        --n-width: var(--play-control-touch-size, 44px);
+        --n-height: var(--play-control-touch-size, 44px);
         --n-color: rgba(var(--main-cover-color), 0.14);
         --n-color-hover: rgba(var(--main-cover-color), 0.2);
         --n-color-focus: rgba(var(--main-cover-color), 0.2);

@@ -11,7 +11,9 @@
         v-if="statusStore.showFullPlayer"
         :style="{
           cursor:
-            isCompactMobilePlayer || statusStore.playerMetaShow || showComment ? 'auto' : 'none',
+            isCompactMobilePlayer || isMobileLandscape || statusStore.playerMetaShow || showComment
+              ? 'auto'
+              : 'none',
           '--lyric-blend-mode': settingStore.lyricsBlendMode,
         }"
         :class="[
@@ -34,6 +36,7 @@
         />
         <!-- 移动端 -->
         <FullPlayerMobile v-if="isCompactMobilePlayer" />
+        <FullPlayerMobileLandscape v-else-if="isMobileLandscape" />
         <!-- 桌面端 -->
         <template v-else>
           <!-- 独立歌词 -->
@@ -51,14 +54,7 @@
           <!-- 切歌不再 unmount/remount 整个 player-content（之前 :key 含 playSong.id 会导致每次切歌都缩放重建，视觉抖动）；
                仅当布局形态切换（pureLyricMode 等）时才走 zoom 过渡 -->
           <Transition name="zoom" mode="out-in">
-            <!-- 手机横屏：紧凑专用布局 -->
-            <FullPlayerMobileLandscape
-              v-if="isMobileLandscape"
-              :key="`landscape-${playerContentKey}`"
-            />
-            <!-- 桌面 / 平板 -->
             <div
-              v-else
               :key="`desktop-${playerContentKey}`"
               :class="['player-content', playerContentClasses]"
               @mousemove="playerMove"
@@ -130,7 +126,10 @@ const { phase: orientationPhase } = useOrientationTransition();
 const { isPhone, isPhonePortrait, isPad } = useDevice();
 // tap-restore 仅沉浸式 / 平板生效；其他场景保留 autohide
 const tapRestoreEnabled = computed(
-  () => !isCompactMobilePlayer.value && (statusStore.isImmersiveFullscreen || isPad.value),
+  () =>
+    !isCompactMobilePlayer.value &&
+    !isMobileLandscape.value &&
+    (statusStore.isImmersiveFullscreen || isPad.value),
 );
 const tapRestoreShield = ref(false);
 let tapRestoreShieldTimer: number | undefined;
@@ -602,51 +601,6 @@ onBeforeUnmount(() => {
       &:not(.pure) {
         transform: scale(0.95);
         opacity: 0;
-      }
-    }
-  }
-
-  // === 手机横屏：紧凑顶/底栏 ===
-  &.landscape {
-    :deep(.player-menu) {
-      min-height: 56px;
-      .menu-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        .n-icon {
-          font-size: 22px !important;
-        }
-      }
-      .left,
-      .right {
-        padding: 0 12px;
-      }
-      .drag-dom {
-        margin: 0 40px;
-      }
-    }
-    :deep(.player-control) {
-      height: 60px;
-      .control-content {
-        .left,
-        .right {
-          padding: 0 12px;
-        }
-        .center {
-          max-height: 60px;
-          .btn {
-            gap: 0;
-            .btn-icon {
-              width: 32px;
-              height: 32px;
-            }
-            .play-pause {
-              --n-width: 38px;
-              --n-height: 38px;
-            }
-          }
-        }
       }
     }
   }

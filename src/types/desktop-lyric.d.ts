@@ -37,6 +37,10 @@ export interface LyricConfig {
   fontFamily: string;
   /** 字体大小 */
   fontSize: number;
+  /** Android 自动字号或用户字号 */
+  fontSizeMode?: "AUTO_DEFAULT" | "USER_DEFINED";
+  /** Android 配置版本 */
+  configVersion?: number;
   /** 字体字重设置 */
   fontWeight: number;
   /** 是否双行 */

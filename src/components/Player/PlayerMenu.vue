@@ -1,7 +1,7 @@
 <template>
   <div class="player-menu">
     <Transition name="fade" mode="out-in">
-      <div v-show="statusStore.playerMetaShow" class="menu-content">
+      <div v-show="persistent || statusStore.playerMetaShow" class="menu-content">
         <n-flex class="left">
           <div
             v-if="musicStore.isHasLrc && musicStore.playSong.type !== 'radio'"
@@ -29,6 +29,8 @@
 import { useStatusStore, useMusicStore } from "@/stores";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
 import { isCapacitorAndroid } from "@/utils/env";
+
+defineProps<{ persistent?: boolean }>();
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();

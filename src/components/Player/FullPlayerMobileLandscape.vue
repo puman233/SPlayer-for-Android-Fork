@@ -6,41 +6,41 @@
       '--lrc-landscape-size': lrcLandscapeSize,
       '--lrc-landscape-tran-size': lrcLandscapeTranSize,
       '--lrc-landscape-roma-size': lrcLandscapeRomaSize,
-      '--landscape-cover-offset-x': landscapeCoverOffsetX,
+      '--landscape-cover-size': `${coverSize}px`,
       '--landscape-lyric-padding-x': landscapeLyricPaddingX,
     }"
   >
-    <!-- 左：封面 + 紧凑信息 -->
-    <div class="left-section" :class="{ 'show-comment': showComment }">
-      <PlayerComment v-if="showComment" class="landscape-comment" embedded :active="showComment" />
-      <template v-else>
-        <div ref="coverRef" class="cover" data-stagger="cover">
-          <!-- 复用 PlayerCover：跟随 settingStore.playerType / dynamicCover 走动态封面逻辑 -->
-          <PlayerCover />
-        </div>
-        <div class="info" data-stagger="title">
-          <div class="name text-hidden">{{ songNameText }}</div>
-          <div v-if="aliaText" class="alia text-hidden">{{ aliaText }}</div>
-          <div class="ar-line text-hidden">
-            <SvgIcon :depth="3" name="Artist" :size="14" />
-            <span class="ar">{{ artistText }}</span>
+    <PlayerMenu persistent />
+    <div class="landscape-content">
+      <!-- 左：封面 + 紧凑信息 -->
+      <div ref="leftRef" class="left-section" :class="{ 'show-comment': showComment }">
+        <PlayerComment
+          v-if="showComment"
+          class="landscape-comment"
+          embedded
+          :active="showComment"
+        />
+        <template v-else>
+          <div ref="coverRef" class="landscape-cover" data-stagger="cover">
+            <!-- 复用 PlayerCover：跟随 settingStore.playerType / dynamicCover 走动态封面逻辑 -->
+            <PlayerCover />
           </div>
-          <div v-if="albumText" class="album-line text-hidden">
-            <SvgIcon :depth="3" name="Album" :size="14" />
-            <span class="album">{{ albumText }}</span>
+          <div ref="infoRef" class="info" data-stagger="title">
+            <PlayerData :center="true" :light="false" />
           </div>
-        </div>
-      </template>
-    </div>
+        </template>
+      </div>
 
-    <!-- 右：歌词 -->
-    <div class="right-section" data-stagger="lyric">
-      <PlayerLyric v-if="!noLrc" />
-      <div v-else class="no-lrc">
-        <SvgIcon name="MusicNote" :size="36" :depth="3" />
-        <span>暂无歌词</span>
+      <!-- 右：歌词 -->
+      <div class="right-section" data-stagger="lyric">
+        <PlayerLyric v-if="!noLrc" persistent />
+        <div v-else class="no-lrc">
+          <SvgIcon name="MusicNote" :size="36" :depth="3" />
+          <span>暂无歌词</span>
+        </div>
       </div>
     </div>
+    <PlayerControl persistent />
   </div>
 </template>
 
@@ -51,7 +51,10 @@ import { useOrientationTransition } from "@/composables/useOrientationTransition
 import PlayerComment from "@/components/Player/PlayerComponents/PlayerComment.vue";
 import PlayerLyric from "@/components/Player/PlayerLyric/index.vue";
 import PlayerCover from "@/components/Player/PlayerMeta/PlayerCover.vue";
-import { removeBrackets } from "@/utils/format";
+import PlayerData from "@/components/Player/PlayerMeta/PlayerData.vue";
+import PlayerMenu from "@/components/Player/PlayerMenu.vue";
+import PlayerControl from "@/components/Player/PlayerControl.vue";
+import { useResizeObserver } from "@vueuse/core";
 
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
@@ -86,67 +89,140 @@ const lrcLandscapeRomaSize = computed(
   () => `${Math.round(settingStore.lyricFontSizeLandscape * 0.43)}px`,
 );
 
-// 封面 X 偏移 / 歌词左右内边距
-const landscapeCoverOffsetX = computed(() => `${settingStore.landscapeCoverOffsetX}px`);
+// 测量内容区和元信息，封面只使用真实剩余空间
+const leftRef = ref<HTMLElement | null>(null);
+const infoRef = ref<HTMLElement | null>(null);
+const coverSize = ref(0);
+const measureCover = () => {
+  const left = leftRef.value;
+  if (!left) return;
+  const style = getComputedStyle(left);
+  const usableWidth =
+    left.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const usableHeight =
+    left.clientHeight -
+    parseFloat(style.paddingTop) -
+    parseFloat(style.paddingBottom) -
+    (infoRef.value?.offsetHeight || 0) -
+    parseFloat(style.rowGap || "0");
+  const ratio = settingStore.playerType === "record" ? 1.45 : 1;
+  coverSize.value = Math.max(0, Math.min(usableWidth, usableHeight / ratio, 320));
+};
+useResizeObserver([leftRef, infoRef], measureCover);
+watch(() => settingStore.playerType, measureCover, { flush: "post" });
 const landscapeLyricPaddingX = computed(() => `${settingStore.landscapeLyricPaddingX}px`);
-
-const aliaText = computed(() => {
-  if (settingStore.hideBracketedContent) return "";
-  return musicStore.playSong.alia || "";
-});
-
-// 末尾统一兜底，避免 hideBracketedContent + 空 name 返回空串
-const songNameText = computed(() => {
-  const raw = musicStore.playSong.name;
-  const text = settingStore.hideBracketedContent ? removeBrackets(raw) : raw;
-  return text || "未知曲目";
-});
-
-const artistText = computed(() => {
-  const song = musicStore.playSong;
-  if (song.type === "radio") return song.dj?.creator || "未知艺术家";
-  const ar = song.artists;
-  if (Array.isArray(ar)) {
-    // 空数组 / 全空 → 未知艺术家
-    const joined = ar
-      .map((a) => (settingStore.hideBracketedContent ? removeBrackets(a.name) : a.name))
-      .filter(Boolean)
-      .join(" / ");
-    return joined || "未知艺术家";
-  }
-  if (typeof ar === "string") {
-    return (settingStore.hideBracketedContent ? removeBrackets(ar) : ar) || "未知艺术家";
-  }
-  return "未知艺术家";
-});
-
-const albumText = computed(() => {
-  const album = musicStore.playSong.album;
-  if (!album) return "";
-  if (typeof album === "string") {
-    return settingStore.hideBracketedContent ? removeBrackets(album) : album;
-  }
-  if (typeof album === "object") {
-    return settingStore.hideBracketedContent ? removeBrackets(album.name) : album.name || "";
-  }
-  return "";
-});
 </script>
 
 <style lang="scss" scoped>
 .full-player-mobile-landscape {
   position: relative;
   width: 100%;
-  // 顶/底栏 56+60=116；dvh 在旧 WebView 不解析，前一条 vh fallback
-  height: calc(var(--page-zoom-100vh, 100vh) - 116px);
-  height: calc(var(--page-zoom-100dvh, 100dvh) - 116px);
+  height: 100%;
+  min-height: 0;
+  container: landscape-player / inline-size;
+  box-sizing: border-box;
+  padding: var(--safe-area-top, 0px) var(--safe-area-right, 0px) var(--safe-area-bottom, 0px)
+    var(--safe-area-left, 0px);
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   color: rgb(var(--main-cover-color));
 
+  .landscape-content {
+    display: grid;
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    container-type: size;
+  }
+  :deep(.player-menu) {
+    position: relative;
+    flex: 0 0 auto;
+    min-height: 48px;
+    .drag-dom {
+      height: 48px;
+      margin: 0;
+    }
+    .menu-icon {
+      width: 48px;
+      height: 48px;
+    }
+  }
+  :deep(.player-control) {
+    position: relative;
+    flex: 0 0 auto;
+    height: auto;
+    --play-control-touch-size: 48px;
+    --play-control-gap: 0px;
+    overflow: visible;
+    .control-content {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: auto auto;
+      gap: 4px;
+    }
+    .center {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      min-width: 0;
+      max-height: none;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+    }
+    .left,
+    .right {
+      min-width: 0;
+      grid-row: 2;
+      height: auto;
+      padding: 0;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      gap: 0;
+    }
+    .right-menu {
+      flex-wrap: nowrap;
+      gap: 0;
+      width: max-content;
+    }
+    .menu-icon {
+      width: 48px;
+      height: 48px;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .left > * {
+      flex-shrink: 0;
+    }
+    .btn {
+      gap: 0;
+      width: 100%;
+      justify-content: center;
+    }
+    .btn-icon {
+      margin: 0;
+      width: 48px;
+      height: 48px;
+      flex: 1 1 0;
+    }
+    .slider {
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+  }
+
+  @container landscape-player (max-width: 560px) {
+    :deep(.player-control .center) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   .left-section {
-    width: 38%;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -154,7 +230,6 @@ const albumText = computed(() => {
     justify-content: center;
     padding: 8px 16px;
     gap: 12px;
-    transform: translateX(var(--landscape-cover-offset-x, 16px));
 
     &.show-comment {
       align-items: stretch;
@@ -206,12 +281,11 @@ const albumText = computed(() => {
       }
     }
 
-    .cover {
+    .landscape-cover {
       // 参照原封面逻辑，横屏限制上限
-      width: 70%;
-      max-width: 220px;
+      width: var(--landscape-cover-size);
       height: auto;
-      aspect-ratio: 1 / 1;
+      aspect-ratio: v-bind('settingStore.playerType === "record" ? 1 / 1.45 : 1');
       flex-shrink: 0;
       border-radius: 16px;
       overflow: hidden;
@@ -237,51 +311,25 @@ const albumText = computed(() => {
 
     .info {
       width: 100%;
-      max-width: 260px;
+      min-height: 0;
+      max-height: 60%;
+      overflow: auto;
+      flex-shrink: 0;
       text-align: center;
+      :deep(.player-data) {
+        width: 100%;
+        max-width: none;
+        margin-top: 0;
+        padding: 0;
+      }
+      :deep(.name-text) {
+        font-size: clamp(16px, 3cqh, 24px);
+      }
+
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 3px;
-
-      .name {
-        font-size: 18px;
-        font-weight: 600;
-        line-height: 1.25;
-        max-width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .alia {
-        font-size: 13px;
-        opacity: 0.55;
-        max-width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .ar-line,
-      .album-line {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 14px;
-        opacity: 0.75;
-        max-width: 100%;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        .ar,
-        .album {
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      }
-      .album-line {
-        font-size: 13px;
-        opacity: 0.6;
-      }
     }
   }
 
@@ -309,19 +357,33 @@ const albumText = computed(() => {
     // === 修复 DefaultLyric 横屏被 300px placeholder 顶下 ===
     :deep(.default-lyric),
     :deep(.lyric-scroll-container) {
-      // 隐藏 .lyric-menu 后回收右侧 80px；padding 由用户调
-      padding-right: var(--landscape-lyric-padding-x, 20px) !important;
+      // 歌词区保留菜单宽度，避免文字被菜单覆盖
+      padding-right: max(52px, var(--landscape-lyric-padding-x, 20px)) !important;
       padding-left: var(--landscape-lyric-padding-x, 20px) !important;
     }
     :deep(.lyric-scroll-container) {
       .placeholder:first-child {
         // 原 300px 顶占位会把横屏歌词挤出
-        height: 80px !important;
+        height: 35cqh !important;
       }
     }
-    // 隐藏歌词右侧浮动菜单（设置/偏移/复制），横屏空间紧凑
+    // 菜单保留且可滚动，不以隐藏功能换取空间
     :deep(.lyric-menu) {
-      display: none !important;
+      width: 48px;
+      padding: 0;
+      opacity: 0.8;
+      pointer-events: auto;
+      overflow-y: auto;
+      justify-content: flex-start;
+      gap: 4px;
+      .menu-icon {
+        min-height: 48px;
+        flex-shrink: 0;
+      }
+      .time {
+        min-height: 36px;
+        flex-shrink: 0;
+      }
     }
 
     // === AMLL：字号独立 ===
@@ -332,7 +394,7 @@ const albumText = computed(() => {
     }
     :deep(.am-lyric) {
       // 收紧 AMLL 左右 padding（原硬编 80px），改为滑块控制
-      padding-right: var(--landscape-lyric-padding-x, 20px) !important;
+      padding-right: max(52px, var(--landscape-lyric-padding-x, 20px)) !important;
       padding-left: var(--landscape-lyric-padding-x, 20px) !important;
     }
 

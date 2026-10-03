@@ -1,5 +1,13 @@
 # 🎵 SPlayer for Android
 
+### 桌面歌词与手机横屏（开发分支）
+
+桌面歌词首次使用自动字号与 `#6BB2FF`；手动修改字号后会保存，旋转不覆盖用户值，可在歌词设置中恢复自动字号。旧版已有字号和颜色保守保留。长句保持字号并横向滚动，暂停冻结、seek 和切歌重新从起点显示。
+
+触摸歌词显示控制，闲置自动淡出；锁定后主窗口触摸穿透并快速消除控制背景，独立锁按钮负责解锁。窗口按系统安全区保存相对位置，旋转后重新约束边界。手机横屏保留完整播放控件与歌词菜单；长歌曲信息和极窄空间中的次要操作支持局部滚动。
+
+专项实现、测试边界与历史 Android Lint 问题记录在 [重构方案](DESKTOP_LYRICS_REFACTOR_PLAN.md) 和 [执行检查点](AGENT_CHECKPOINT.md)。
+
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.0.10-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform">

@@ -1,0 +1,178 @@
+package top.imsyy.splayer.android.playback;
+
+import static org.junit.Assert.*;
+import android.app.Instrumentation;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
+import android.os.SystemClock;
+import android.os.ParcelFileDescriptor;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import java.lang.reflect.Field;
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
+import org.json.JSONObject;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+/** 只允许独立验证包运行，避免改动已有应用的设置 */
+@RunWith(AndroidJUnit4.class)
+public class FloatingLyricOverlayTest {
+  private final Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+  private Context context;
+  private FloatingLyricService service;
+
+  private String shell(String command) throws Exception {
+    try (ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand(command);
+        FileInputStream stream = new FileInputStream(fd.getFileDescriptor())) {
+      return new String(stream.readAllBytes(), StandardCharsets.UTF_8).trim();
+    }
+  }
+
+  private Object field(Object object, String name) throws Exception {
+    Field field = object.getClass().getDeclaredField(name);
+    field.setAccessible(true);
+    return field.get(object);
+  }
+
+  private void main(Runnable action) { instrumentation.runOnMainSync(action); }
+
+  private void tap(View view, float x, float y) {
+    main(() -> {
+      long now = SystemClock.uptimeMillis();
+      MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
+      MotionEvent up = MotionEvent.obtain(now, now + 30, MotionEvent.ACTION_UP, x, y, 0);
+      view.dispatchTouchEvent(down); view.dispatchTouchEvent(up);
+      down.recycle(); up.recycle();
+    });
+  }
+
+  private Bitmap capture(View view) {
+    Bitmap[] result = new Bitmap[1];
+    main(() -> {
+      result[0] = Bitmap.createBitmap(view.getWidth(), view.getHeight(), Bitmap.Config.ARGB_8888);
+      view.draw(new Canvas(result[0]));
+    });
+    return result[0];
+  }
+  private void draw(View view) { capture(view).recycle(); }
+
+  @Test public void overlayKeepsFontLocksCleanlyAndRestoresPreferences() throws Exception {
+    context = instrumentation.getTargetContext();
+    assertTrue("必须使用 -PverificationSuffix=.lyricsverify", context.getPackageName().endsWith(".lyricsverify"));
+    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    SystemClock.sleep(2000);
+    main(() -> context.getSharedPreferences("floating_lyric_prefs", Context.MODE_PRIVATE).edit().clear().commit());
+    PlaybackManager manager = PlaybackManager.getInstance(context);
+    try {
+      main(manager::showFloatingLyric);
+      for (int i = 0; i < 40; i++) {
+        service = (FloatingLyricService) field(manager, "floatingLyricService");
+        if (service != null) break;
+        SystemClock.sleep(100);
+      }
+      assertNotNull(service);
+      assertTrue((boolean) field(service, "attached"));
+      assertEquals(FloatingLyricPolicy.DEFAULT_COLOR, service.colorPlayed);
+      View view = (View) field(service, "view");
+      JSONObject auto = new JSONObject().put("fontSizeMode", "AUTO_DEFAULT").put("isDoubleLine", true);
+      main(() -> service.applyConfig(auto));
+      String[] samples = {"光", "光に溢れて　陰に居場所がない",
+          "这是一条非常非常非常非常非常非常非常非常非常长的歌词，用于测试桌面歌词横向滚动是否可以稳定完整显示",
+          "This is an intentionally very long lyric line used for verifying smooth marquee scrolling without dynamically shrinking the font size.",
+          "光に溢れて世界はまだ続いている何度も何度も同じ空の下で歌い続ける長い長い歌詞の表示を確認します",
+          "🎵 光に溢れて 世界はまだ続いている ✨", "مرحبا بالعالم هذه كلمات طويلة لاختبار الاتجاه"};
+      float size = (float) field(service, "fontPx");
+      for (String sample : samples) {
+        String json = new org.json.JSONArray().put(new JSONObject().put("startTime", 0).put("endTime", 20000)
+            .put("translatedLyric", sample).put("words", new org.json.JSONArray().put(
+                new JSONObject().put("word", sample).put("startTime", 0).put("endTime", 20000)))).toString();
+        main(() -> { service.pushLyrics(json, json); service.pushProgress(0, false); });
+        draw(view);
+        assertEquals(size, (float) field(service, "fontPx"), 0.001f);
+        main(() -> service.pushProgress(8000, false));
+        draw(view);
+      }
+      String scrollingJson = new org.json.JSONArray().put(new JSONObject().put("startTime", 0)
+          .put("endTime", 20000).put("words", new org.json.JSONArray().put(
+              new JSONObject().put("word", samples[3]).put("startTime", 0).put("endTime", 20000)))).toString();
+      main(() -> { service.pushLyrics(scrollingJson, "[]"); service.pushProgress(0, true); });
+      Bitmap initial = capture(view);
+      SystemClock.sleep(2200);
+      Bitmap scrolled = capture(view);
+      assertFalse("长句应保持字号并改变内容偏移", initial.sameAs(scrolled));
+      main(() -> service.pushProgress(service.seekMs() - 300, false));
+      Bitmap paused = capture(view);
+      SystemClock.sleep(300);
+      Bitmap pausedAgain = capture(view);
+      assertTrue("暂停后滚动应冻结", paused.sameAs(pausedAgain));
+      main(() -> service.pushProgress(0, false));
+      Bitmap reset = capture(view);
+      assertTrue("seek 后从起点重置", initial.sameAs(reset));
+      initial.recycle(); scrolled.recycle(); paused.recycle(); pausedAgain.recycle(); reset.recycle();
+      tap(view, view.getWidth() / 2f, view.getHeight() / 2f);
+      SystemClock.sleep(350);
+      assertEquals(1f, (float) field(service, "controlsAlpha"), 0.001f);
+      draw(view);
+      android.graphics.RectF lock = (android.graphics.RectF) field(service, "rLock");
+      tap(view, lock.centerX(), lock.centerY());
+      SystemClock.sleep(250);
+      assertEquals(0f, (float) field(service, "controlsAlpha"), 0.001f);
+      FloatingLyricInteraction interaction = (FloatingLyricInteraction) field(service, "interaction");
+      assertTrue(interaction.locked());
+      assertTrue((boolean) field(service, "unlockAttached"));
+      main(() -> service.setLocked(false));
+      SystemClock.sleep(350);
+      assertFalse(interaction.locked());
+      assertFalse((boolean) field(service, "unlockAttached"));
+      SystemClock.sleep(4400);
+      assertEquals(0f, (float) field(service, "controlsAlpha"), 0.001f);
+      assertFalse(interaction.controls());
+      JSONObject user = new JSONObject().put("fontSizeMode", "USER_DEFINED").put("fontSize", 30)
+          .put("playedColor", "#123456");
+      main(() -> service.applyConfig(user));
+      String oldRotation = shell("settings get system user_rotation");
+      String oldAutoRotation = shell("settings get system accelerometer_rotation");
+      try {
+        shell("settings put system accelerometer_rotation 0");
+        for (int rotation : new int[] {1, 0, 1, 0}) {
+          shell("settings put system user_rotation " + rotation);
+          SystemClock.sleep(900);
+          WindowManager.LayoutParams rotated = (WindowManager.LayoutParams) field(service, "lp");
+          Rect rotatedSafe = (Rect) field(service, "safeArea");
+          assertTrue(rotated.x >= rotatedSafe.left && rotated.x + rotated.width <= rotatedSafe.right);
+          assertTrue(rotated.y >= rotatedSafe.top && rotated.y + rotated.height <= rotatedSafe.bottom);
+          assertEquals("USER_DEFINED", service.fontSizeMode);
+          assertEquals(30f, service.fontSizeSp, 0);
+          assertSame(service, field(manager, "floatingLyricService"));
+        }
+      } finally {
+        shell("settings put system user_rotation " + oldRotation);
+        shell("settings put system accelerometer_rotation " + oldAutoRotation);
+      }
+      main(manager::showFloatingLyric);
+      assertSame(service, field(manager, "floatingLyricService"));
+      WindowManager.LayoutParams lp = (WindowManager.LayoutParams) field(service, "lp");
+      Rect safe = (Rect) field(service, "safeArea");
+      assertTrue(lp.x >= safe.left && lp.x + lp.width <= safe.right);
+      assertTrue(lp.y >= safe.top && lp.y + lp.height <= safe.bottom);
+      main(manager::hideFloatingLyric);
+      SystemClock.sleep(350);
+      assertFalse((boolean) field(service, "attached"));
+      main(manager::showFloatingLyric);
+      SystemClock.sleep(350);
+      service = (FloatingLyricService) field(manager, "floatingLyricService");
+      assertNotNull(service);
+      assertEquals("USER_DEFINED", service.fontSizeMode);
+      assertEquals(30f, service.fontSizeSp, 0);
+      assertEquals(0xFF123456, service.colorPlayed);
+    } finally { main(manager::hideFloatingLyric); }
+  }
+}

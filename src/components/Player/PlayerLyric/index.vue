@@ -8,7 +8,11 @@
     />
     <DefaultLyric v-else :currentTime="playSeek" @lyric-line-long-press="openCopyLyrics" />
     <!-- 歌词菜单 -->
-    <n-flex :class="['lyric-menu', { show: statusStore.playerMetaShow }]" justify="center" vertical>
+    <n-flex
+      :class="['lyric-menu', { show: persistent || statusStore.playerMetaShow }]"
+      justify="center"
+      vertical
+    >
       <div
         v-if="settingStore.fullscreenPlayerElements.copyLyric"
         class="menu-icon"
@@ -97,6 +101,8 @@
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { openSetting, openCopyLyrics } from "@/utils/modal";
+
+defineProps<{ persistent?: boolean }>();
 
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();

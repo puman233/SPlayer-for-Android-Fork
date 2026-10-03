@@ -1,3 +1,4 @@
+import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
 import { toRaw } from "vue";
 import { App as CapacitorApp } from "@capacitor/app";
 import { AudioErrorCode } from "@/core/audio-player/BaseAudioPlayer";
@@ -2226,26 +2227,12 @@ class PlayerController {
   public syncFloatingLyricConfig() {
     if (!isCapacitorAndroid) return;
     try {
-      const raw = localStorage.getItem("android-desktop-lyric-config");
-      const config = raw ? JSON.parse(raw) : null;
-      if (!config) return;
-      AndroidNativePlayback.updateFloatingLyricConfig({
-        playedColor: config.playedColor,
-        unplayedColor: config.unplayedColor,
-        shadowColor: config.shadowColor,
-        backgroundMaskColor: config.backgroundMaskColor,
-        textBackgroundMask: config.textBackgroundMask,
-        showTran: config.showTran,
-        showWordLyrics: config.showWordLyrics,
-        isDoubleLine: config.isDoubleLine,
-        animation: config.animation,
-        fontSize: config.fontSize,
-        fontWeight: config.fontWeight,
-        position: config.position,
-        // 宽度/高度：手机竖屏默认 84%（左右各 8% 边距），确保不超过屏幕
-        windowWidthPercent: config.windowWidthPercent,
-        windowHeightDp: config.windowHeightDp,
-      }).catch(() => {});
+      const config = loadFloatingLyricSettings();
+      AndroidNativePlayback.updateFloatingLyricConfig(floatingLyricPayload(config)).catch(
+        (error) => {
+          console.warn("[FloatingLyric] 桌面歌词配置同步失败", error);
+        },
+      );
     } catch (e) {
       console.warn("[PlayerController] syncFloatingLyricConfig failed", e);
     }

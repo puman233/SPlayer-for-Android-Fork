@@ -14,7 +14,11 @@ import { toRef } from "vue";
 import LocalLyricDirectories from "../components/LocalLyricDirectories.vue";
 import LyricPreview from "../components/LyricPreview.vue";
 
-const ANDROID_LYRIC_CONFIG_KEY = "android-desktop-lyric-config";
+import {
+  loadFloatingLyricSettings,
+  saveFloatingLyricSettings,
+  floatingLyricPayload,
+} from "@/core/player/floatingLyricSettings";
 
 export const useLyricSettings = (): SettingConfig => {
   const player = usePlayerController();
@@ -29,15 +33,7 @@ export const useLyricSettings = (): SettingConfig => {
 
   const getDesktopLyricConfig = async () => {
     if (isCapacitorAndroid) {
-      try {
-        const raw = localStorage.getItem(ANDROID_LYRIC_CONFIG_KEY);
-        if (raw) {
-          const saved = JSON.parse(raw) as Partial<LyricConfig>;
-          Object.assign(desktopLyricConfig, saved);
-        }
-      } catch (e) {
-        console.warn("[lyric] Failed to load Android desktop lyric config", e);
-      }
+      Object.assign(desktopLyricConfig, loadFloatingLyricSettings());
       // 首次或每次读取都推送一次，确保 Service 与 JS 状态一致
       pushAndroidLyricConfig();
       return;
@@ -57,30 +53,17 @@ export const useLyricSettings = (): SettingConfig => {
   /** Android：把当前桌面歌词配置推送给原生 FloatingLyricService */
   const pushAndroidLyricConfig = () => {
     if (!isCapacitorAndroid) return;
-    AndroidNativePlayback.updateFloatingLyricConfig({
-      playedColor: desktopLyricConfig.playedColor,
-      unplayedColor: desktopLyricConfig.unplayedColor,
-      shadowColor: desktopLyricConfig.shadowColor,
-      backgroundMaskColor: desktopLyricConfig.backgroundMaskColor,
-      textBackgroundMask: desktopLyricConfig.textBackgroundMask,
-      showTran: desktopLyricConfig.showTran,
-      showWordLyrics: desktopLyricConfig.showWordLyrics,
-      isDoubleLine: desktopLyricConfig.isDoubleLine,
-      animation: desktopLyricConfig.animation,
-      fontSize: desktopLyricConfig.fontSize,
-      fontWeight: desktopLyricConfig.fontWeight,
-      position: desktopLyricConfig.position as "left" | "center" | "right" | "both",
-      windowWidthPercent: desktopLyricConfig.windowWidthPercent,
-      windowHeightDp: desktopLyricConfig.windowHeightDp,
-    }).catch((e) => {
-      console.warn("[lyric] updateFloatingLyricConfig failed", e);
-    });
+    AndroidNativePlayback.updateFloatingLyricConfig(floatingLyricPayload(desktopLyricConfig)).catch(
+      (e) => {
+        console.warn("[lyric] updateFloatingLyricConfig failed", e);
+      },
+    );
   };
 
   const saveDesktopLyricConfig = () => {
     try {
       if (isCapacitorAndroid) {
-        localStorage.setItem(ANDROID_LYRIC_CONFIG_KEY, JSON.stringify(desktopLyricConfig));
+        saveFloatingLyricSettings(desktopLyricConfig);
         pushAndroidLyricConfig();
         return;
       }
@@ -108,10 +91,7 @@ export const useLyricSettings = (): SettingConfig => {
           negativeText: "取消",
           onPositiveClick: () => {
             Object.assign(desktopLyricConfig, defaultDesktopLyricConfig);
-            localStorage.setItem(
-              ANDROID_LYRIC_CONFIG_KEY,
-              JSON.stringify(defaultDesktopLyricConfig),
-            );
+            saveFloatingLyricSettings(desktopLyricConfig);
             pushAndroidLyricConfig();
             window.$message.success("桌面歌词配置已恢复默认");
           },
@@ -896,18 +876,33 @@ export const useLyricSettings = (): SettingConfig => {
             }),
           },
           {
+            key: "desktopLyricFontMode",
+            label: "自动字号",
+            type: "switch",
+            show: isCapacitorAndroid,
+            description: "根据可用窗口自动计算，关闭后使用手动字号",
+            value: computed({
+              get: () => desktopLyricConfig.fontSizeMode === "AUTO_DEFAULT",
+              set: (v) => {
+                desktopLyricConfig.fontSizeMode = v ? "AUTO_DEFAULT" : "USER_DEFINED";
+                saveDesktopLyricConfig();
+              },
+            }),
+          },
+          {
             key: "desktopLyricFontSize",
             label: "文字大小",
             type: "select",
             description: "翻译或其他文字将会跟随变化",
             options: Array.from({ length: 96 - 10 + 1 }, (_, i) => ({
-              label: `${10 + i} px`,
+              label: `${10 + i} ${isCapacitorAndroid ? "sp" : "px"}`,
               value: 10 + i,
             })),
             value: computed({
               get: () => desktopLyricConfig.fontSize,
               set: (v) => {
                 desktopLyricConfig.fontSize = v;
+                desktopLyricConfig.fontSizeMode = "USER_DEFINED";
                 saveDesktopLyricConfig();
               },
             }),
@@ -921,10 +916,10 @@ export const useLyricSettings = (): SettingConfig => {
             min: 30,
             max: 100,
             step: 1,
-            marks: { 92: "默认" },
+            marks: { 84: "默认" },
             formatTooltip: (v) => `${v}%`,
             value: computed({
-              get: () => desktopLyricConfig.windowWidthPercent ?? 92,
+              get: () => desktopLyricConfig.windowWidthPercent ?? 84,
               set: (v) => {
                 desktopLyricConfig.windowWidthPercent = v;
               },

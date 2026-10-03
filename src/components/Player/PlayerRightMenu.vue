@@ -1,5 +1,11 @@
 <template>
-  <n-flex :size="8" align="center" class="right-menu">
+  <n-flex
+    :size="persistent ? 0 : 8"
+    :wrap="!persistent"
+    align="center"
+    class="right-menu"
+    :class="{ persistent }"
+  >
     <!-- 音质 -->
     <template v-if="settingStore.showPlayerQuality">
       <n-popselect
@@ -109,6 +115,8 @@ import { useAudioManager } from "@/core/player/AudioManager";
 import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
+
+defineProps<{ persistent?: boolean }>();
 
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
@@ -252,7 +260,7 @@ watch([() => dataStore.userData.vipType, () => settingStore.disableAiAudio], () 
     cursor: pointer;
   }
   @media (max-width: 810px) {
-    .hidden {
+    &:not(.persistent) .hidden {
       display: none;
     }
   }

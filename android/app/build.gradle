@@ -45,7 +45,7 @@ android {
     buildTypes {
         debug {
             // 调试包与正式签名版本并存，避免自动化测试覆盖用户数据
-            applicationIdSuffix ".debug"
+            applicationIdSuffix providers.gradleProperty('verificationSuffix').getOrElse('.debug')
             versionNameSuffix "-debug"
         }
         release {

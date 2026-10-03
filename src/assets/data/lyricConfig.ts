@@ -2,11 +2,13 @@ import type { LyricConfig } from "../../types/desktop-lyric";
 
 const config: LyricConfig = {
   isLock: false,
-  playedColor: "#fe7971",
+  playedColor: "#6BB2FF",
   unplayedColor: "#ccc",
   shadowColor: "rgba(0, 0, 0, 0.5)",
   fontFamily: "system-ui",
   fontSize: 24,
+  fontSizeMode: "AUTO_DEFAULT",
+  configVersion: 1,
   fontWeight: 400,
   showTran: true,
   showWordLyrics: true,

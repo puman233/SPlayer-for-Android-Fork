@@ -203,6 +203,7 @@ export interface AndroidNativeFloatingLyricConfigPayload {
   isDoubleLine?: boolean;
   animation?: boolean;
   fontSize?: number;
+  fontSizeMode?: "AUTO_DEFAULT" | "USER_DEFINED";
   fontWeight?: number;
   position?: "left" | "center" | "right" | "both";
   windowWidthPercent?: number;

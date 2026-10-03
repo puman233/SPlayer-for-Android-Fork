@@ -91,3 +91,21 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - ARM64 文件 SHA-256：291cbe52a888a725993ca4abd484311080d5a2fe06f4431125c3df902f0517ab，与 GitHub 附件摘要一致；签名证书 SHA-256：d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea，与上一正式版本一致。
 - 下载验收产物：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10006-c2d5-7883-814d-cb84b0841a46/app-arm64-v8a-release.apk。
 - 剩余验证边界：Android 验收使用模拟器；真实硬件 cutout 注入、歌词长按的全场景回归仍未验证。评论内容使用固定响应，未声称真实评论接口验收成功。
+
+## 桌面歌词与手机横屏专项（2026-10-03）
+
+状态：IMPLEMENTED；下列实际执行的检查为 VERIFIED。目标分支 dev；用户已批准专项方案。本专项完成后停止，不自动发布。
+
+- 桌面歌词拆分交互状态、布局/滚动策略和完整文本塑形缓存；唯一状态为 IDLE、CONTROLS_VISIBLE、DRAGGING、LOCKED。锁定立即移除控制背景，独立解锁按钮保持可用；4 秒无操作渐隐，销毁取消计时与动画。
+- 默认自动字号综合安全区域、窗口宽高与系统 fontScale，范围 16–32sp；手动字号保持设置数值，不因歌词长短缩放。首次默认颜色 #6BB2FF；历史字号和颜色保守保留，统一配置入口与原生恢复快照，未改变数据库。
+- 长句完整 StaticLayout 塑形后裁剪平移，650ms 起始停留；滚动结合溢出宽度和行时间，速度上限 90dp/s。短句不滚动，pause 冻结，seek/切歌重置；缓存测量与渐变矩阵，支持中文、英文、日文、emoji、RTL。
+- 位置保存为安全可移动区域中的归一化锚点，重新测量 metrics/insets 后投影及钳制；旧像素坐标按当前屏幕迁移。旧坐标缺少历史屏幕尺寸，不能精确恢复旧比例。
+- 手机横屏使用独立流式布局，顶栏/底栏常驻，左右内容使用 minmax(0, …)，封面按真实剩余高度测量，元信息可滚动。复用队列、音量、更多、歌词设置与播放按钮；窄窗口换行/局部滚动。修复封面类名误命中歌曲信息组件的问题。
+- pnpm format、pnpm lint、pnpm typecheck:web、pnpm build:android 已执行成功。相关 JavaScript 22 项与 Android JVM 18 项测试通过；隔离包原生仪器测试 OK (1 test)，覆盖语言样本、固定字号、实际绘制滚动/暂停/seek、锁定/解锁/超时及设置重开恢复、旋转调用后的边界与实例检查。
+- Android assembleDebug、testDebugUnitTest、lintDebug 任务执行成功；Lint 实际 XML 报告仍为 187 errors / 27 warnings（历史原生代码），专项 FloatingLyric 文件无报告问题。不能视为全项目 Lint 零错误通过。
+- 浏览器九种视口覆盖横屏、竖屏和强制手机模式，并注入组件安全区；封面/元信息/底栏无重叠。扩展检查验证普通/唱片封面、元信息可滚动到专辑、队列、更多菜单、Default/AMLL 与平板共享控件。
+- 实际 APK 隔离包 top.imsyy.splayer.android.lyricsverify 在 MuMu display 7 上实测五种 WebView CSS 视口：640×360、960×540、800×360、1067×480、640×400；封面/信息/控制栏边界检查与队列 WebView 触摸注入通过。后台静音 WAV 播放进度从 1122ms 增至 4815ms，playing=true；暂停/继续检查通过。只清理隔离包与测试音频，不清除现有用户应用数据。
+- 验证失败与修正：早期 wm 命令修改 display 0，而应用在 display 7，五次实际上都是同一视口，不能计入矩阵；两次改脚本后因全局旋转干扰落入竖屏失败。针对 display 7 并统一旋转后矩阵通过。密度应用有模拟器延迟，因此验收按实际 CSS 尺寸记录，未声称精确覆盖指定 DPR。浏览器复测曾因 Vite 被构建资源热更新干扰而导航超时；重启独立服务后复测。
+- 验证截图/JSON：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a100b3-4db1-74d0-aef6-d68615bc299e。测试后恢复显示 size/density、旋转/字体设置；临时脚本与音频清理。
+- 交付 debug APK：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk（64,258,167 字节）；另含 armeabi-v7a、x86、x86_64。包名 top.imsyy.splayer.android.debug，versionName 3.0.10-debug / code 30016；四个包 ZIP 完整且 WebView debugging=false。ARM64 SHA-256：f3a270fde8f1655ce3a98cf22e08aca401bc3f04839eefca38e8d2100173aa83。未签发正式版本、推送或打 Tag。
+- 剩余验证：真实硬件 cutout/手势及三键导航矩阵、Android 10 inset 兼容路径、极端系统字号与逐字 RTL 高亮视觉质量未完成实际验收；超长且持续时间很短的歌词受可读速度上限约束，无法保证离行前展示完整尾部。远端 CI 未运行。完整真机矩阵标记 BLOCKED（当前只有模拟器环境）。

@@ -1,0 +1,34 @@
+name: 配置 Android 构建环境
+description: 配置项目工具链并生成 Capacitor 和嵌入式 API 资源
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10.28.1
+    - uses: actions/setup-node@v6
+      with:
+        node-version: "24"
+        cache: pnpm
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "21"
+    - uses: gradle/actions/setup-gradle@v4
+      with:
+        cache-read-only: ${{ github.ref != 'refs/heads/dev' }}
+    - uses: android-actions/setup-android@v3
+    - name: 安装 Android 工具链
+      shell: bash
+      run: |
+        sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+        echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+        printf 'sdk.dir=%s\n' "$ANDROID_HOME" > android/local.properties
+        chmod +x android/gradlew
+    - name: 安装依赖并生成 Android 资源
+      shell: bash
+      run: |
+        if [[ ! -f .env && -f .env.example ]]; then cp .env.example .env; fi
+        pnpm install --frozen-lockfile
+        pnpm build:android

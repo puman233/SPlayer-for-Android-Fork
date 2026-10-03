@@ -202,7 +202,11 @@ npx cap open android            # Android Studio 打开
 
 ## 🤖 CI / 发布
 
-手动触发 [`Android Release`](./.github/workflows/android-release.yml) 工作流即可分架构构建 & 发布 APK。
+推送到 `dev` 或向 `dev` 提交 PR 时，[Android CI](./.github/workflows/android-ci.yml) 自动构建 Web/嵌入资源，并执行 `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug`，不会创建 Release。
+
+推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如当前版本使用 `v3.0.8`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
+
+附件命名为 `SFA-3.0.8-release-abi-arm64-v8a.apk` 等。已发布的 Tag 自动跳过；失败留下的草稿可安全重跑，不会重复上传相同附件。
 
 签名所需 Secrets：
 

@@ -5,6 +5,14 @@ def keystorePropertiesFile = rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+// CI 优先使用环境变量，避免密码写入文件或 Gradle 命令行
+def signingEnv = [storeFile: 'ANDROID_KEYSTORE_PATH', storePassword: 'ANDROID_KEYSTORE_PASSWORD', keyAlias: 'ANDROID_KEY_ALIAS', keyPassword: 'ANDROID_KEY_PASSWORD']
+signingEnv.each { property, variable ->
+    if (System.getenv(variable)) {
+        keystoreProperties[property] = System.getenv(variable)
+    }
+}
+def hasReleaseSigning = signingEnv.keySet().every { keystoreProperties[it] }
 
 android {
     namespace = "top.imsyy.splayer.android"
@@ -13,7 +21,7 @@ android {
     ndkVersion = "28.2.13676358"
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists()) {
+            if (hasReleaseSigning) {
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
@@ -42,7 +50,7 @@ android {
         }
         release {
             minifyEnabled false
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            signingConfig hasReleaseSigning ? signingConfigs.release : null
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
@@ -81,6 +89,27 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// 正式发布读取 Gradle 已解析的变体，签名前检查版本与配置
+tasks.register('verifyReleaseConfiguration') {
+    doLast {
+        def tag = System.getenv('RELEASE_TAG')
+        if (!tag || !(tag ==~ /v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?/)) {
+            throw new GradleException('RELEASE_TAG 必须为 v<versionName>，例如 v3.0.8 或 v3.0.9-rc.1')
+        }
+        if (!hasReleaseSigning || !android.signingConfigs.release.storeFile.isFile()) {
+            throw new GradleException('缺少正式签名：请配置 ANDROID_KEYSTORE_BASE64、ANDROID_KEYSTORE_PASSWORD、ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD')
+        }
+        android.applicationVariants.findAll { it.buildType.name == 'release' }.each { variant ->
+            if (variant.versionName != tag.substring(1)) {
+                throw new GradleException("版本不一致：Tag=${tag}，${variant.name}.versionName=${variant.versionName}；请先修改 android/app/build.gradle")
+            }
+            if (!variant.signingConfig || variant.signingConfig.storeFile != android.signingConfigs.release.storeFile || variant.signingConfig.keyAlias != android.signingConfigs.release.keyAlias) {
+                throw new GradleException("${variant.name} 未使用正式签名配置")
+            }
+        }
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

@@ -4,6 +4,11 @@
 
 ---
 
+## 未发布
+
+- 增加 `dev` Android CI 与 `v*` Tag 自动发布，检查真实 APK 版本、正式签名及全部 ABI 产物；失败恢复使用草稿且禁止覆盖已有附件。
+- 正式签名复用 GitHub Secrets 和本地 `key.properties`；无签名材料时 release 不再回退到 debug 签名。
+
 ## v3.0.8
 
 ### 🖥 桌面歌词控件全面重构（复刻桌面端 SPlayer）

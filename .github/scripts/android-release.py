@@ -1,0 +1,170 @@
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+def run(*args):
+    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT)
+
+
+def tag():
+    value = os.environ["RELEASE_TAG"]
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", value):
+        raise ValueError("Tag 必须为 v<versionName>，例如 v3.0.8 或 v3.0.9-rc.1")
+    return value
+
+
+def release():
+    url = (os.environ.get("GITHUB_API_URL", "https://api.github.com")
+           + "/repos/" + os.environ["GH_REPO"] + "/releases/tags/"
+           + urllib.parse.quote(tag(), safe=""))
+    request = urllib.request.Request(url, headers={
+        "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+
+
+def probe():
+    current = release()
+    exists = current is not None and not current["draft"]
+    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+        output.write(f"exists={str(exists).lower()}\n")
+    if exists:
+        print(f"{tag()} 已发布，跳过构建和上传。")
+
+
+def signing():
+    for name in ("ANDROID_KEYSTORE_BASE64", "ANDROID_KEYSTORE_PASSWORD",
+                 "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD"):
+        if not os.environ.get(name):
+            raise ValueError(f"缺少 GitHub Actions Secret: {name}")
+    content = base64.b64decode("".join(os.environ["ANDROID_KEYSTORE_BASE64"].split()), validate=True)
+    if not content:
+        raise ValueError("ANDROID_KEYSTORE_BASE64 为空")
+    destination = Path(os.environ["ANDROID_KEYSTORE_PATH"])
+    destination.write_bytes(content)
+    destination.chmod(0o600)
+
+
+def collect():
+    version = tag()[1:]
+    if json.loads(Path("package.json").read_text(encoding="utf-8"))["version"] != version:
+        raise ValueError("package.json.version 与 Tag 不一致，请同步前端和 Android 版本")
+    tools = Path(os.environ["ANDROID_HOME"]) / "build-tools" / "36.0.0"
+    certificate = Path(os.environ["RUNNER_TEMP"]) / "splayer-release-cert.der"
+    run("keytool", "-exportcert", "-keystore", os.environ["ANDROID_KEYSTORE_PATH"],
+        "-storepass:env", "ANDROID_KEYSTORE_PASSWORD", "-alias", os.environ["ANDROID_KEY_ALIAS"],
+        "-file", str(certificate))
+    fingerprint = hashlib.sha256(certificate.read_bytes()).hexdigest()
+    # 拒绝 Android 标准调试证书，即使误将其配置为正式 Secrets
+    details = run("keytool", "-printcert", "-file", str(certificate))
+    if re.search(r"CN\s*=\s*Android Debug", details, re.IGNORECASE):
+        raise ValueError("Secrets 中的证书是 Android Debug，禁止正式发布")
+    root = Path("android/app/build/outputs/apk").resolve()
+    destination = Path("release")
+    destination.mkdir(exist_ok=False)
+    count = 0
+    for metadata in sorted(root.rglob("output-metadata.json")):
+        data = json.loads(metadata.read_text(encoding="utf-8"))
+        variant = data["variantName"]
+        if not variant.lower().endswith("release"):
+            continue
+        if data["artifactType"]["type"] != "APK" or not data["elements"]:
+            raise ValueError(f"无效的 APK 元数据: {metadata}")
+        for element in data["elements"]:
+            source = (metadata.parent / element["outputFile"]).resolve()
+            if root not in source.parents or source.suffix != ".apk" or not source.is_file():
+                raise ValueError(f"无效的最终 APK 路径: {source}")
+            if "unsigned" in source.name.lower() or "debug" in source.name.lower():
+                raise ValueError(f"拒绝 debug/unsigned APK: {source.name}")
+            if element["versionName"] != version:
+                raise ValueError(f"APK 版本不一致: {source.name}: {element['versionName']} != {version}")
+            signature = run(str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(source))
+            digests = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]+)", signature)
+            if [item.lower() for item in digests] != [fingerprint]:
+                raise ValueError(f"APK 签名与正式 keystore 不一致: {source.name}")
+            manifest = run(str(tools / "aapt"), "dump", "badging", str(source))
+            if (f"name='{data['applicationId']}'" not in manifest
+                    or f"versionName='{version}'" not in manifest
+                    or f"versionCode='{element['versionCode']}'" not in manifest
+                    or "application-debuggable" in manifest):
+                raise ValueError(f"APK 清单版本、包名或 debuggable 检查失败: {source.name}")
+            filters = "-".join(f"{item['filterType'].lower()}-{item['value']}"
+                               for item in sorted(element.get("filters", []), key=lambda item: item["filterType"])) or "universal"
+            name = f"SFA-{version}-{variant}-{filters}.apk"
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+\.apk", name) or (destination / name).exists():
+                raise ValueError(f"APK 名称不安全或重复: {name}")
+            shutil.copyfile(source, destination / name)
+            count += 1
+    if not count:
+        raise ValueError("android/app/build/outputs/apk 下没有正式 APK")
+    print(f"已验证并收集 {count} 个正式 APK。")
+
+
+def publish():
+    value = tag()
+    current = release()
+    if current and not current["draft"]:
+        print("Release 已发布，跳过上传。")
+        return
+    prerelease = bool(re.search(r"alpha|beta|rc", value, re.IGNORECASE))
+    if current is None:
+        args = ["gh", "release", "create", value, "--verify-tag", "--title", value,
+                "--generate-notes", "--draft", "--target", os.environ["GITHUB_SHA"]]
+        if prerelease:
+            args.append("--prerelease")
+        run(*args)
+        current = release()
+    if current["target_commitish"] != os.environ["GITHUB_SHA"]:
+        raise ValueError("已有草稿不是本工作流当前提交创建的，请人工检查，禁止覆盖")
+    assets = {item["name"] for item in current["assets"]}
+    files = sorted(Path("release").glob("*.apk"))
+    if not files or assets - {item.name for item in files}:
+        raise ValueError("草稿包含不属于本次构建的附件，或未找到 APK，停止发布")
+    for apk in files:
+        if apk.name in assets:
+            # 中断重试时验证已上传附件，禁止静默覆盖或重复上传
+            with tempfile.TemporaryDirectory() as directory:
+                run("gh", "release", "download", value, "--pattern", apk.name, "--dir", directory)
+                existing = Path(directory) / apk.name
+                if hashlib.sha256(existing.read_bytes()).digest() != hashlib.sha256(apk.read_bytes()).digest():
+                    raise ValueError(f"已有附件与本次构建不同，请人工检查草稿: {apk.name}")
+        else:
+            run("gh", "release", "upload", value, str(apk))
+    run("gh", "release", "edit", value, "--draft=false", f"--prerelease={str(prerelease).lower()}")
+    print(f"已发布 {value}，APK 数量: {len(files)}")
+
+
+if __name__ == "__main__":
+    try:
+        {"probe": probe, "signing": signing, "collect": collect, "publish": publish}[sys.argv[1]]()
+    except Exception as error:
+        # 外部命令的完整输出可能包含敏感信息，仅显示异常类型
+        if isinstance(error, ValueError):
+            message = str(error)
+        elif isinstance(error, subprocess.CalledProcessError):
+            message = f"{Path(error.cmd[0]).name} 执行失败，退出码 {error.returncode}；为保护签名信息，未输出完整命令参数"
+        elif isinstance(error, urllib.error.HTTPError):
+            message = f"GitHub Release API 请求失败，HTTP {error.code}，请检查 Actions 权限或 GitHub 服务状态"
+        else:
+            message = type(error).__name__
+        print(f"::error::{message}", file=sys.stderr)
+        sys.exit(1)

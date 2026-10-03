@@ -1,0 +1,67 @@
+name: Android Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+      - name: 检查已存在的 Release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/android-release.py probe
+      - uses: ./.github/actions/setup-android
+        if: steps.existing.outputs.exists == 'false'
+      - name: 注入签名并验证版本
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
+        run: |
+          python3 .github/scripts/android-release.py signing
+          cd android
+          ./gradlew --no-daemon :app:verifyReleaseConfiguration
+      - name: 构建正式 APK
+        if: steps.existing.outputs.exists == 'false'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: 检查签名、版本并收集最终 APK
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
+        run: python3 .github/scripts/android-release.py collect
+      - name: 创建或恢复 Release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/android-release.py publish
+      - name: 清理签名材料
+        if: always()
+        run: rm -f "$RUNNER_TEMP/splayer-release.keystore" "$RUNNER_TEMP/splayer-release-cert.der"

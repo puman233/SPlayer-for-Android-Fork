@@ -1,0 +1,114 @@
+name: Android Same-Version Patch
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已公开的正式版本 Tag，保持不变
+        required: true
+        default: v3.0.11
+        type: string
+      source_commit:
+        description: Android CI 已成功的完整 40 位修补源码提交
+        required: true
+        type: string
+      mode:
+        description: 先准备并验收产物，再替换附件
+        required: true
+        default: prepare
+        type: choice
+        options: [prepare, apply]
+      prepared_run_id:
+        description: apply 必填，已成功 prepare 的工作流运行 ID
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: android-release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      PREPARED_RUN_ID: ${{ inputs.prepared_run_id }}
+    steps:
+      - name: 检查显式输入
+        env:
+          PATCH_MODE: ${{ inputs.mode }}
+        run: |
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$PATCH_MODE" == apply ]]; then [[ "$PREPARED_RUN_ID" =~ ^[0-9]+$ ]]; fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 检出当前工作流的修补工具
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: .github
+          persist-credentials: false
+      - name: 检查源码 CI 与既有版本
+        if: inputs.mode == 'prepare'
+        run: python3 .release-tools/.github/scripts/android-patch.py check
+      - uses: ./.release-tools/.github/actions/setup-android
+        if: inputs.mode == 'prepare'
+      - name: 注入正式签名并构建候选 APK
+        if: inputs.mode == 'prepare'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
+        run: |
+          python3 .release-tools/.github/scripts/android-release.py signing
+          cd android
+          ./gradlew --no-daemon :app:verifyReleaseConfiguration :app:assembleRelease
+          cd ..
+          python3 .release-tools/.github/scripts/android-release.py collect
+          python3 .release-tools/.github/scripts/android-patch.py prepare
+      - name: 保存候选包、旧包和来源清单
+        if: inputs.mode == 'prepare'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-patch-bundle
+          path: patch-bundle/
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/setup-java@v4
+        if: inputs.mode == 'apply'
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+        if: inputs.mode == 'apply'
+        with:
+          packages: build-tools;36.0.0
+      - name: 下载已验收的准备产物并替换既有附件
+        if: inputs.mode == 'apply'
+        run: |
+          gh run download "$PREPARED_RUN_ID" --name android-patch-bundle --dir patch-bundle
+          python3 .release-tools/.github/scripts/android-patch.py apply
+      - name: 保存替换后元数据
+        if: inputs.mode == 'apply' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-patch-publication
+          path: patch-bundle/published.json
+          if-no-files-found: warn
+      - name: 清理签名材料
+        if: always()
+        run: rm -f "$RUNNER_TEMP/splayer-release.keystore" "$RUNNER_TEMP/splayer-release-cert.der"

@@ -1,5 +1,14 @@
 # Android 自动发布工作流检查点
 
+## v3.0.11 最终修补发布阶段（2026-10-03）
+
+状态：IMPLEMENTED；同版本修补工作流及本地保护测试已实现，尚未更新公开附件。用户已授权更新现有 v3.0.11 APK，不创建新版本，并同步仓库。
+
+- 新增 Android Same-Version Patch 的 prepare/apply 两步流程。准备阶段依赖源码完整提交及成功 Android CI，验证现有正式 Release 四 ABI，签名构建候选包；对比新旧包名、versionName、versionCode、证书、ABI，并验证 ZIP、非 debuggable、WebView debugging=false。
+- 不可变 artifact 保存旧包、候选包、原正文和身份快照，保留 90 天。实际双端候选升级后 apply 重新验证 artifact 来源、Tag 引用、Release ID、正文及附件 digest；四个暂存包全部上传校验后才切换标准名称。失败恢复旧附件/本次正文；完成后清理旧附件备份，清理失败可重跑。未知附件与外部正文保守保留。
+- 11 项新增修补保护、15 项既有发布保护测试通过；共享组件源码 1a65f64b 的 Android CI 37133555718 已确认 success。本地 pnpm build:android 成功；格式化及最终 ESLint 检查随后记录。版本保持 3.0.11 / 30017；原 Tag 对象 b34c36013e063ce280334a261ed2c877609741e1 未改变。
+- 后续：提交并推送工作流，等待当前源码 CI，执行 prepare、下载验证正式候选包、MuMu 手机和平板同版本覆盖升级验收，再执行 apply、检查公开附件/哈希/Tag、更新最终文档和检查点。已有真实系统分屏、API 29、物理 cutout、AMLL 全矩阵及全页面大字限制继续保留，不声称完整真机验收。
+
 ## v3.0.11 共享控件与歌曲列表修补（2026-10-03）
 
 本轮阶段：共享控件、迷你播放栏、歌曲列表与播放队列。状态：VERIFIED（仅下述范围）；完整自适应任务仍为 IMPLEMENTED。正式版本保持 3.0.11 / 30017，未创建版本、Tag、Release，也未替换公开 APK。

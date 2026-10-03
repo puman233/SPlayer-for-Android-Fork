@@ -18,7 +18,9 @@ jobs:
         with:
           persist-credentials: false
       - name: 检查发布保护逻辑
-        run: python3 -B .github/scripts/test_android_release.py
+        run: |
+          python3 -B .github/scripts/test_android_release.py
+          python3 -B .github/scripts/test_android_patch.py
       - uses: ./.github/actions/setup-android
       - name: 检查代码
         run: pnpm lint

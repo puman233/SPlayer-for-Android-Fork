@@ -1,6 +1,7 @@
 package top.imsyy.splayer.android;
 
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -71,6 +72,13 @@ public class MainActivity extends BridgeActivity {
   public void onResume() {
     super.onResume();
     applyImmersiveMode();
+    applyWebViewTextZoom();
+  }
+
+  @Override
+  public void onConfigurationChanged(Configuration configuration) {
+    super.onConfigurationChanged(configuration);
+    applyWebViewTextZoom();
   }
 
   @Override
@@ -156,6 +164,7 @@ public class MainActivity extends BridgeActivity {
     WebView webView = getBridge().getWebView();
     if (webView == null) return;
     WebSettings settings = webView.getSettings();
-    settings.setTextZoom(100);
+    // 系统字体只在 WebView 层缩放，网页语义字号保持基准值
+    settings.setTextZoom(Math.round(getResources().getConfiguration().fontScale * 100));
   }
 }

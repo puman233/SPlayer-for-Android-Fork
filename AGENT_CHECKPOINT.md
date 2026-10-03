@@ -1,5 +1,34 @@
 # Android 自动发布工作流检查点
 
+## v3.0.11 自适应基础层修补（2026-10-03）
+
+本轮阶段：自适应基础层。状态：VERIFIED（仅下述已实际检查的范围）；完整自适应任务仍为 IMPLEMENTED。方案 ADAPTIVE_UI_PLAN.md 已获用户批准。用户要求最终更新现有 v3.0.11 APK 并同步仓库，不创建新版本；本阶段没有修改版本、Tag 或 Release 附件。
+
+### 实现
+
+- 新增 src/core/layout/adaptive.ts：宽度等级 600/840、高度等级 480/900、双栏内容预算和有限语义 token。新增 useAdaptiveLayout 容器 ResizeObserver 接口，复用 useDevice 的窗口与字号单例，没有新增逐帧窗口计算。
+- useDevice 的硬件身份继续供方向控制使用；UI 双栏依据可用窗口决定，自动模式需至少 840×480 CSS px。强制手机保留单栏；强制平板也要求至少 600×480，窄窗口不再硬塞双栏。
+- App 将语义间距、字号和触控下限写入 document 根节点，让 Teleport 播放器和弹层可继承；窗口等级与系统字号作为内部 data 属性可用于诊断。
+- MainActivity 不再固定 WebView textZoom=100，统一按系统 fontScale 设置；字体配置变更保留 Activity，启动/恢复/配置变化刷新。AndroidNativePlayback 提供配置查询与变化事件，前端初始化先订阅再查询，卸载移除监听。网页 token 保持基准字号，避免双重放大。
+- 未修改音频服务、数据库、歌词引擎与用户设置 schema。useMobile 的历史断点、播放器/列表具体内容布局与页面缩放安全区兜底留待后续阶段迁移。
+
+### 验证
+
+- pnpm build:android、pnpm format、pnpm lint、pnpm typecheck:web 均通过；清理构建生成与全库格式化带来的无关差异。28 项 TS 回归、15 项 Python 发布保护、18 项 JVM 测试通过。
+- Gradle assembleDebug、assembleDebugAndroidTest、testDebugUnitTest、lintDebug 执行完成。Lint XML 仍是历史 187 errors / 27 warnings，不能称全项目零错误。
+- MuMu 手机 emulator-5554、平板 emulator-5556 的最终完整仪器套件分别 OK (4 tests)：根节点 token 继承、真实字体、真实窄窗口、播放器旋转边界和桌面歌词回归。使用 .lyricsverify 隔离包，未清除正式应用数据。
+- 系统字号 1.0/1.15/1.3/1.5/2.0 实测：20px 基准文字的 computed font-size 分别为 20/23/26/30/40px，两端均一致；实际文字高度随之增大，WebView textZoom 分别为 100/115/130/150/200。
+- 最终实际窗口：手机 640×360 缩至 400×360，保持 phone 单栏；平板 1098×618 缩至 400×618，从 pad 双栏回退 phone 单栏。Activity 窗口缩小不等同于系统分屏生命周期完整验收。
+- 首次原生命令因 PowerShell 将未引用的 -PverificationSuffix=.lyricsverify 拆成任务而失败；完整引用参数后成功。首轮完整套件通过，但早期字体 logcat 被环形缓冲覆盖，因此加强测试将测量直接写入仪器输出，并补充“实际宽度必须缩小”断言；最终套件已双端重跑通过。
+- 最终隔离包与测试包已移除；两端 font_scale=1.0、user_rotation=0、accelerometer_rotation=1，显示仍为 1080×1920、手机 480dpi/平板 280dpi，正式包保留。
+
+### 产物与后续
+
+- 最终普通 debug APK：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk，64,275,419 字节；另含其余三 ABI。ARM64 SHA-256：664b6fb6890f1dfb976c29b78cb9b098965e3b06f4d8b329ef443dd65889fb99。普通 debug 为测试用途，不属于正式修补 Release。
+- 日志、最终隔离验收包、常规 debug 包、仪器输出、恢复状态与原生报告：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10146-a8d1-7132-a8a7-785cf718820d/phase1。
+- 完整大字内容排版、中英日按钮文案、导航/cutout 新改动完整矩阵、真实系统分屏、API 29 与物理硬件仍待后续阶段验收；本次字体探针测量不能替代这些验收。
+- 本阶段完成后提交并同步 dev；不自动执行下一阶段或发布。下一阶段：播放器按容器预算迁移、共享控件与独立桌面歌词按钮；最后再实施现有 v3.0.11 的显式修补工作流。
+
 日期：2026-10-03；分支：dev。
 
 ## 工作流（VERIFIED）

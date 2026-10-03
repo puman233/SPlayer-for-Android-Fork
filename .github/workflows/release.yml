@@ -32,9 +32,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-tools
-          sparse-checkout: |
-            .github/scripts
-            .github/actions
+          sparse-checkout: .github
           persist-credentials: false
       - name: 确认 Tag 提交
         run: echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"

@@ -206,7 +206,7 @@ npx cap open android            # Android Studio 打开
 
 推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如当前版本使用 `v3.0.9`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
 
-附件命名为 `SFA-3.0.9-release-abi-arm64-v8a.apk` 等。已发布的 Tag 自动跳过；失败留下的草稿可安全重跑，不会重复上传相同附件。
+附件沿用 `app-arm64-v8a-release.apk` 等 Gradle 最终文件名。发布正文使用下载与安装表格、当前版本的分类更新日志和 Full Changelog 链接，另保留 GitHub 自动生成记录。已发布的 Tag 自动跳过；失败留下的草稿可安全重跑，不会重复上传相同附件。
 
 签名所需 Secrets：
 

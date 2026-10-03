@@ -29,6 +29,8 @@ class ReleaseTests(unittest.TestCase):
         self.environment.start()
         self.addCleanup(self.environment.stop)
         Path("package.json").write_text('{"version":"1.3.0"}', encoding="utf-8")
+        Path("CHANGELOG.md").write_text('## v1.3.0\n\n### 更新\n\n- 测试更新\n\n## v1.2.0\n\n- 旧版内容\n', encoding="utf-8")
+        os.environ["GH_REPO"] = "owner/repo"
 
     def fixture(self, variant="release", version="1.3.0", filename="app-arm64-v8a-release.apk"):
         root = Path("android/app/build/outputs/apk") / variant
@@ -55,7 +57,7 @@ class ReleaseTests(unittest.TestCase):
         with patch.object(module, "run", side_effect=self.tool):
             module.collect()
         self.assertEqual([item.name for item in Path("release").iterdir()],
-                         ["SFA-1.3.0-release-abi-arm64-v8a.apk"])
+                         ["app-arm64-v8a-release.apk"])
 
     def test_mismatch_unsigned_and_debug_only_fail(self):
         for variant, version, filename in [("release", "1.2.0", "app-release.apk"),
@@ -111,6 +113,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_prerelease_created_as_draft_and_published_after_upload(self):
         os.environ["RELEASE_TAG"] = "v1.3.0-rc.1"
+        Path("CHANGELOG.md").write_text('## v1.3.0-rc.1\n\n- 预发布更新\n', encoding="utf-8")
         Path("release").mkdir()
         Path("release/app.apk").write_bytes(b"apk")
         current = {"draft": True, "target_commitish": "abc", "assets": []}
@@ -120,6 +123,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("--draft", commands[0])
             self.assertIn("--generate-notes", commands[0])
             self.assertIn("--verify-tag", commands[0])
+            self.assertIn("--notes-file", commands[0])
             self.assertIn("--prerelease", commands[0])
             self.assertIn("upload", commands[1])
             self.assertIn("--prerelease=true", commands[2])
@@ -168,6 +172,27 @@ class ReleaseTests(unittest.TestCase):
                 patch.object(module, "run", return_value="") as command:
             module.publish()
             self.assertIn("--draft=false", command.call_args.args)
+
+    def test_notes_follow_previous_format_and_only_current_version(self):
+        notes = module.release_notes()
+        self.assertIn("## 📦 下载与安装", notes)
+        self.assertIn("# 更新日志", notes)
+        self.assertIn("### 更新", notes)
+        self.assertIn("测试更新", notes)
+        self.assertNotIn("旧版内容", notes)
+        self.assertIn("https://github.com/owner/repo/blob/dev/CHANGELOG.md", notes)
+        self.assertNotIn("{{", notes)
+
+    def test_missing_changelog_stops_publishing(self):
+        Path("CHANGELOG.md").write_text('## v1.2.0\n\n- 旧版内容\n', encoding="utf-8")
+        with self.assertRaises(ValueError):
+            module.release_notes()
+
+    def test_flavor_preserves_gradle_output_name(self):
+        self.fixture("demoRelease", filename="app-demo-arm64-v8a-release.apk")
+        with patch.object(module, "run", side_effect=self.tool):
+            module.collect()
+        self.assertTrue(Path("release/app-demo-arm64-v8a-release.apk").is_file())
 
 
 if __name__ == "__main__":

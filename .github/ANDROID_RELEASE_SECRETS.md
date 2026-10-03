@@ -40,7 +40,9 @@ CI 在 dev push/PR 运行，无需 Secrets，不创建 Release。Gradle 缓存�
 
 Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改版本。预发布示例为 v3.0.10-rc.1，两处版本必须精确为 3.0.10-rc.1。非版本形式的 v\* Tag 明确报错。
 
-从 `android/app/build/outputs/apk/**/output-metadata.json` 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 `release/` 目录仅包含已验证 APK，附件 glob 为 `release/*.apk`。名称包含版本、变体与 ABI/filter，例如 `SFA-3.0.9-release-abi-arm64-v8a.apk`。
+从 `android/app/build/outputs/apk/**/output-metadata.json` 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 `release/` 目录仅包含已验证 APK，附件 glob 为 `release/*.apk`。保留 Gradle 最终文件名，例如 `app-arm64-v8a-release.apk`；flavor 的名称也保留在原文件名中，发生重名时停止发布。
+
+发布正文沿用历史版本格式，模板位于 `.github/RELEASE_TEMPLATE.md`：下载与安装表格、当前版本的分类更新日志、Full Changelog 链接。脚本从 Tag 源码的 `CHANGELOG.md` 提取该版本内容，缺少日志时停止创建 Release；GitHub 自动生成记录继续追加在正文后。
 
 Release 标题为 Tag，自动生成 GitHub Release Notes；包含 alpha/beta/rc（忽略大小写）时为 prerelease，否则正式版本。使用 --verify-tag，不创建或移动 Tag。
 

@@ -119,9 +119,8 @@ def collect():
                     or f"versionCode='{element['versionCode']}'" not in manifest
                     or "application-debuggable" in manifest):
                 raise ValueError(f"APK 清单版本、包名或 debuggable 检查失败: {source.name}")
-            filters = "-".join(f"{item['filterType'].lower()}-{item['value']}"
-                               for item in sorted(element.get("filters", []), key=lambda item: item["filterType"])) or "universal"
-            name = f"SFA-{version}-{variant}-{filters}.apk"
+            # 沿用 AGP 最终文件名，与已有 app-ABI-release.apk 附件保持一致
+            name = source.name
             if not re.fullmatch(r"[A-Za-z0-9_.-]+\.apk", name) or (destination / name).exists():
                 raise ValueError(f"APK 名称不安全或重复: {name}")
             shutil.copyfile(source, destination / name)
@@ -129,6 +128,19 @@ def collect():
     if not count:
         raise ValueError("android/app/build/outputs/apk 下没有正式 APK")
     print(f"已验证并收集 {count} 个正式 APK。")
+
+
+def release_notes():
+    value = tag()
+    changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+    match = re.search(r"^## " + re.escape(value) + r"\s*\n(.*?)(?=^## |\Z)", changelog, re.MULTILINE | re.DOTALL)
+    if not match or not match.group(1).strip():
+        raise ValueError(f"CHANGELOG.md 缺少 {value} 的更新日志，停止发布")
+    changes = re.sub(r"\n---\s*$", "", match.group(1).strip()).strip()
+    template = Path(__file__).resolve().parent.parent / "RELEASE_TEMPLATE.md"
+    return (template.read_text(encoding="utf-8")
+            .replace("{{CHANGELOG}}", changes)
+            .replace("{{FULL_CHANGELOG_URL}}", f"https://github.com/{os.environ['GH_REPO']}/blob/dev/CHANGELOG.md"))
 
 
 def publish():
@@ -140,11 +152,14 @@ def publish():
     prerelease = bool(re.search(r"alpha|beta|rc", value, re.IGNORECASE))
     commit = os.environ.get("RELEASE_COMMIT", os.environ["GITHUB_SHA"])
     if current is None:
-        args = ["gh", "release", "create", value, "--verify-tag", "--title", value,
-                "--generate-notes", "--draft", "--target", commit]
-        if prerelease:
-            args.append("--prerelease")
-        run(*args)
+        with tempfile.TemporaryDirectory() as directory:
+            notes_file = Path(directory) / "release-notes.md"
+            notes_file.write_text(release_notes(), encoding="utf-8")
+            args = ["gh", "release", "create", value, "--verify-tag", "--title", value,
+                    "--generate-notes", "--notes-file", str(notes_file), "--draft", "--target", commit]
+            if prerelease:
+                args.append("--prerelease")
+            run(*args)
         current = release()
     if current is None:
         raise ValueError("创建后仍无法读取 Release 草稿，请检查 GitHub API 状态及 contents: write 权限")

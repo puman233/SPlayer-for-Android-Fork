@@ -40,3 +40,12 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 ## 下一步
 
 本轮发布完成。下次修改 Android 与前端版本并递增 versionCode，推送 dev 等待 CI，通过后推送新 Tag。若旧 Tag 发布工具需要修复，使用 dev 的 Android Release 手动恢复入口，保留旧 Tag 源码。
+
+## 发布格式修正（2026-10-03，VERIFIED）
+
+- 已读取 v3.0.8、v3.0.7 的真实发布正文及附件名称；v3.0.9 现在沿用下载与安装表格、分类更新日志、Full Changelog 链接，并保留自动生成的版本对比链接。
+- v3.0.9 四个附件已原地改名为 app-arm64-v8a-release.apk、app-armeabi-v7a-release.apk、app-x86-release.apk、app-x86_64-release.apk；Release ID、附件 ID、字节大小、SHA-256、正式状态及 Tag 提交均保持不变，没有重建或重新上传 APK。
+- 后续工作流保留 AGP 最终 APK 文件名；发布模板为 .github/RELEASE_TEMPLATE.md，从 CHANGELOG.md 读取当前版本分类日志，并继续调用 GitHub 自动生成发布记录。缺少该版本日志或 APK 名称重复时停止发布。
+- Python 15 项保护测试通过，新增历史文案格式、当前版本日志提取、缺失日志拒绝以及 flavor 文件名保留检查。
+- YAML 语法检查通过；HEAD 加本次发布改动的隔离副本执行 pnpm lint、pnpm build:android、pnpm format 均通过。主工作区 lint 被另一路临时 .verify-player.cjs 的 require 规则错误影响，因此没有删除或修改该脚本。
+- 并行播放器改动及临时验证脚本保留；本次提交仅包含发布脚本、模板、对应测试和文档。

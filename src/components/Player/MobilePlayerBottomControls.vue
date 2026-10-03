@@ -106,11 +106,10 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   z-index: 9;
   flex: 0 0 auto;
   width: 100%;
-  container: bottom-controls / inline-size;
   padding: 4px clamp(16px, 5vw, 24px) calc(10px + var(--mobile-safe-bottom));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
+  grid-template-rows: minmax(24px, auto) 60px 16px;
   row-gap: clamp(6px, 1.5vh, 14px);
   background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
 
@@ -120,9 +119,8 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
     align-items: center;
 
     .time {
-      min-width: 4ch;
-      flex: 0 0 auto;
-      white-space: nowrap;
+      width: 40px;
+      flex: 0 0 40px;
       font-size: 12px;
       text-align: center;
       color: rgb(var(--main-cover-color));
@@ -141,17 +139,15 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(48px, 1fr));
-    justify-items: center;
+    display: flex;
     align-items: center;
     justify-content: space-between;
 
     .placeholder,
     .mode-btn {
-      width: 48px;
-      height: 48px;
-      flex: 0 0 48px;
+      width: 40px;
+      height: 40px;
+      flex: 0 0 40px;
     }
 
     .mode-btn,
@@ -203,19 +199,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
     .ctrl-btn,
     .play-btn {
       min-width: 0;
-      flex-shrink: 0;
-    }
-    :deep(.n-icon) {
-      width: 24px;
-      height: 24px;
-    }
-    .ctrl-btn :deep(.n-icon) {
-      width: 36px;
-      height: 36px;
-    }
-    .play-btn :deep(.n-icon) {
-      width: 40px;
-      height: 40px;
+      flex-shrink: 1;
     }
   }
 
@@ -251,12 +235,12 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   &.large {
     padding-right: clamp(32px, 6vw, 56px);
     padding-left: clamp(32px, 6vw, 56px);
-    grid-template-rows: auto auto auto;
+    grid-template-rows: minmax(28px, auto) 76px 18px;
 
     .progress-section {
       .time {
-        width: auto;
-        flex-basis: auto;
+        width: 52px;
+        flex-basis: 52px;
         font-size: 14px;
       }
 
@@ -299,32 +283,6 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
           width: 22px;
         }
       }
-    }
-  }
-}
-
-@container bottom-controls (max-width: 280px) {
-  .control-section {
-    grid-template-columns: repeat(3, minmax(48px, 1fr));
-    .ctrl-btn:nth-child(2) {
-      grid-row: 1;
-      grid-column: 1;
-    }
-    .play-btn {
-      grid-row: 1;
-      grid-column: 2;
-    }
-    .ctrl-btn:nth-child(4) {
-      grid-row: 1;
-      grid-column: 3;
-    }
-    .mode-btn,
-    .placeholder {
-      grid-row: 2;
-    }
-    .mode-btn:last-child,
-    .placeholder:last-child {
-      grid-column: 3;
     }
   }
 }

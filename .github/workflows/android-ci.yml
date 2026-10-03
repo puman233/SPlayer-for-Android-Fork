@@ -18,16 +18,14 @@ jobs:
         with:
           persist-credentials: false
       - name: 检查发布保护逻辑
-        run: |
-          python3 -B .github/scripts/test_android_release.py
-          python3 -B .github/scripts/test_android_patch.py
+        run: python3 -B .github/scripts/test_android_release.py
       - uses: ./.github/actions/setup-android
       - name: 检查代码
         run: pnpm lint
       - name: 检查播放页类型与交互状态
         run: |
           pnpm typecheck:web
-          pnpm exec tsx --test src/composables/useMobilePlayerControls.test.ts src/core/layout/viewport.test.ts src/core/layout/adaptive.test.ts src/core/layout/virtualRows.test.ts src/core/player/androidLyricScheduler.test.ts src/core/player/floatingLyricSettings.test.ts
+          pnpm exec tsx --test src/composables/useMobilePlayerControls.test.ts src/core/layout/viewport.test.ts src/core/player/androidLyricScheduler.test.ts src/core/player/floatingLyricSettings.test.ts
       - name: 编译 APK、单元测试及 Android Lint
         working-directory: android
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

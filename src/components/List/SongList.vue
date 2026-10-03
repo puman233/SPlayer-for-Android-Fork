@@ -81,10 +81,10 @@
           <!-- 虚拟列表 -->
           <VirtualScroll
             ref="listRef"
-            :item-height="estimatedRowHeight"
-            :item-fixed="false"
+            :item-height="90"
+            :item-fixed="true"
             :items="virtualListItems"
-            height="100%"
+            :height="`calc(100% - 40px)`"
             :padding-bottom="80"
             :class="{ 'is-dragging-global': isDragging && draggable }"
             @scroll="onScroll"
@@ -265,8 +265,7 @@ const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const player = usePlayerController();
-const { isPhone, fontScale } = useDevice();
-const estimatedRowHeight = computed(() => 104 * fontScale.value);
+const { isPhone } = useDevice();
 
 // 列表元素
 const listRef = ref<InstanceType<typeof VirtualScroll> | null>(null);
@@ -454,7 +453,7 @@ const onScroll = (e: Event) => {
   const target = e.target as HTMLElement;
   const top = target.scrollTop;
   scrollTop.value = top;
-  scrollIndex.value = listRef.value?.getDropInfoByOffset(top).index ?? 0;
+  scrollIndex.value = Math.floor(top / 90);
 
   // 触底检测
   const scrollHeight = target.scrollHeight;
@@ -572,9 +571,7 @@ onBeforeUnmount(() => {
   // 悬浮顶栏
   .list-header {
     width: 100%;
-    min-height: 40px;
-    height: auto;
-    flex: 0 0 auto;
+    height: 40px;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -591,8 +588,8 @@ onBeforeUnmount(() => {
       display: flex;
       justify-content: center;
       align-items: center;
-      width: 48px;
-      min-width: 48px;
+      width: 40px;
+      min-width: 40px;
       font-weight: bold;
       margin-right: 12px;
     }
@@ -640,7 +637,7 @@ onBeforeUnmount(() => {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 48px;
+      width: 40px;
     }
     .meta {
       width: 50px;
@@ -655,14 +652,7 @@ onBeforeUnmount(() => {
   }
   .virtual-list-wrapper {
     height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
     position: relative;
-    :deep(.virtual-scroll-wrapper) {
-      flex: 1 1 0;
-      min-height: 0;
-    }
     transition:
       height 0.3s,
       transform 0.3s,

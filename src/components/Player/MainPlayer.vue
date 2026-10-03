@@ -7,9 +7,8 @@
         show: musicStore.isHasPlayer && statusStore.showPlayBar,
         player: statusStore.showFullPlayer,
         'phone-floating': isPhone,
-        // 紧凑排布由当前容器空间与系统字号决定。
-        'compact-bar': compactBar,
-        'short-bar': adaptiveWindow.heightClass === 'compact' && barLayout.width >= 600,
+        // 硬件层标记：用于 CSS 区分「手机窩屏」与「平板窩屏」（后者横向空间充足，保留上下首）
+        'pad-device': isPadDevice,
       },
     ]"
   >
@@ -72,37 +71,28 @@
                 "
               />
               <!-- 倍速 -->
-              <AdaptiveTag
+              <n-tag
                 v-if="statusStore.playRate !== 1"
-                interactive
                 type="primary"
                 size="small"
                 round
                 @click="openChangeRate"
               >
                 {{ statusStore.playRate }}x
-              </AdaptiveTag>
+              </n-tag>
               <!-- 喜欢 -->
-              <AdaptiveButton
+              <SvgIcon
                 v-if="musicStore.playSong.type !== 'radio'"
-                icon-only
-                quaternary
+                :name="dataStore.isLikeSong(musicStore.playSong.id) ? 'Favorite' : 'FavoriteBorder'"
+                :size="20"
                 class="like"
-                aria-label="收藏歌曲"
-                @click.stop="
+                @click="
                   toLikeSong(musicStore.playSong, !dataStore.isLikeSong(musicStore.playSong.id))
                 "
-                ><SvgIcon
-                  :name="
-                    dataStore.isLikeSong(musicStore.playSong.id) ? 'Favorite' : 'FavoriteBorder'
-                  "
-                  :size="20"
-              /></AdaptiveButton>
+              />
               <!-- 更多操作 -->
               <n-dropdown :options="songMoreOptions" trigger="click" placement="top-start">
-                <AdaptiveButton icon-only quaternary class="more" aria-label="歌曲更多操作"
-                  ><SvgIcon name="FormatList" :size="20" :depth="2"
-                /></AdaptiveButton>
+                <SvgIcon name="FormatList" :size="20" :depth="2" class="more" />
               </n-dropdown>
             </div>
             <div class="lyric-container">
@@ -162,26 +152,17 @@
       <!-- 控制 -->
       <n-flex :size="8" align="center" justify="center" class="play-control">
         <!-- 随机按钮 -->
-        <template
-          v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode && !compactBar"
-        >
-          <AdaptiveButton
-            icon-only
-            quaternary
-            class="play-icon"
-            @click.stop="player.toggleShuffle()"
-          >
+        <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
+          <div class="play-icon" @click.stop="player.toggleShuffle()">
             <SvgIcon
               :name="statusStore.shuffleIcon"
               :size="20"
               :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
             />
-          </AdaptiveButton>
+          </div>
         </template>
         <!-- 不喜欢 -->
-        <AdaptiveButton
-          icon-only
-          quaternary
+        <div
           v-if="statusStore.personalFmMode"
           class="play-icon"
           v-debounce="
@@ -192,21 +173,13 @@
           "
         >
           <SvgIcon class="icon" :size="18" name="ThumbDown" />
-        </AdaptiveButton>
+        </div>
         <!-- 上一曲 -->
-        <AdaptiveButton
-          v-else
-          icon-only
-          quaternary
-          class="play-icon"
-          v-debounce="() => player.nextOrPrev('prev')"
-        >
+        <div v-else class="play-icon" v-debounce="() => player.nextOrPrev('prev')">
           <SvgIcon :size="26" name="SkipPrev" />
-        </AdaptiveButton>
+        </div>
         <!-- 播放暂停 -->
-        <AdaptiveButton
-          icon-only
-          :aria-label="statusStore.playStatus ? '暂停' : '播放'"
+        <n-button
           :loading="statusStore.playLoading"
           :focusable="false"
           :keyboard="false"
@@ -226,32 +199,20 @@
               />
             </Transition>
           </template>
-        </AdaptiveButton>
+        </n-button>
         <!-- 下一曲 -->
-        <AdaptiveButton
-          icon-only
-          quaternary
-          class="play-icon"
-          v-debounce="() => player.nextOrPrev('next')"
-        >
+        <div class="play-icon" v-debounce="() => player.nextOrPrev('next')">
           <SvgIcon :size="26" name="SkipNext" />
-        </AdaptiveButton>
+        </div>
         <!-- 循环按钮 -->
-        <template
-          v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode && !compactBar"
-        >
-          <AdaptiveButton
-            icon-only
-            quaternary
-            class="play-icon"
-            @click.stop="player.toggleRepeat()"
-          >
+        <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
+          <div class="play-icon" @click.stop="player.toggleRepeat()">
             <SvgIcon
               :name="statusStore.repeatIcon"
               :size="20"
               :depth="statusStore.repeatMode === 'off' ? 3 : 1"
             />
-          </AdaptiveButton>
+          </div>
         </template>
       </n-flex>
       <!-- 功能 -->
@@ -276,7 +237,7 @@
                 <n-text depth="2">{{ timeDisplay[1] }}</n-text>
               </div>
               <!-- 定时关闭 -->
-              <AdaptiveTag
+              <n-tag
                 v-if="statusStore.autoClose.enable"
                 size="small"
                 type="primary"
@@ -287,11 +248,11 @@
                 <template #icon>
                   <SvgIcon name="TimeAuto" />
                 </template>
-              </AdaptiveTag>
+              </n-tag>
             </n-flex>
           </Transition>
           <!-- 功能区 -->
-          <PlayerRightMenu plain-count />
+          <PlayerRightMenu />
         </n-flex>
       </Transition>
     </div>
@@ -304,7 +265,6 @@ import { useSongManager } from "@/core/player/SongManager";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { toLikeSong } from "@/utils/auth";
 import { useTimeFormat } from "@/composables/useTimeFormat";
-import { useAdaptiveLayout } from "@/composables/useAdaptiveLayout";
 import { useDevice } from "@/composables/useDevice";
 import { copyData, coverLoaded, renderIcon, getShareUrl } from "@/utils/helper";
 import {
@@ -328,20 +288,12 @@ const settingStore = useSettingStore();
 const player = usePlayerController();
 const songManager = useSongManager();
 
-const { isPhone, adaptiveWindow } = useDevice();
+const { isPhone, isPadDevice } = useDevice();
 
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
 const playerRef = ref<HTMLElement | null>(null);
 const playerBodyRef = ref<HTMLElement | null>(null);
-const { layout: barLayout, fontScale } = useAdaptiveLayout(playerRef);
-const compactBar = computed(() => barLayout.value.width < 840 || fontScale.value > 1.3);
-useResizeObserver(playerRef, () => {
-  document.documentElement.style.setProperty(
-    "--mini-player-height",
-    `${playerRef.value?.offsetHeight ?? 80}px`,
-  );
-});
 
 // 触摸滑动切换歌曲 / 上滑跟手开启全屏播放器（自实现 Pointer 事件，配合 setPointerCapture）
 let dragOpenActive = false;
@@ -696,7 +648,6 @@ const onPointerMove = (e: PointerEvent) => {
 
 // 卸载时清理 timer / rAF / 残留内联样式，避免组件销毁后 setTimeout 触达陈旧 DOM 引用
 onBeforeUnmount(() => {
-  document.documentElement.style.removeProperty("--mini-player-height");
   isPlayerMounted = false;
   cancelDragOpenTimers(true);
   if (dragOpenRaf) {
@@ -732,20 +683,6 @@ const songMoreOptions = computed<DropdownOption[]>(() => {
   const isSong = song.type === "song";
   const isLocal = !!song?.path;
   return [
-    {
-      key: "shuffle",
-      label: "切换随机播放",
-      show: compactBar.value && isSong,
-      icon: renderIcon(statusStore.shuffleIcon),
-      props: { onClick: () => player.toggleShuffle() },
-    },
-    {
-      key: "repeat",
-      label: "切换循环播放",
-      show: compactBar.value && isSong,
-      icon: renderIcon(statusStore.repeatIcon),
-      props: { onClick: () => player.toggleRepeat() },
-    },
     {
       key: "more",
       label: "更多操作",
@@ -1309,117 +1246,12 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
     }
   }
 
-  &.main-player {
-    height: auto;
-    min-height: 64px;
-    &:not(.show) {
-      transform: translateY(calc(100% + var(--phone-nav-total-height, 0px) + 24px));
-    }
-    padding-top: 8px;
-    padding-bottom: calc(8px + var(--safe-area-bottom));
-    .main-player-body {
-      min-height: 48px;
-      height: auto;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      gap: 8px;
-    }
-    .play-data {
-      min-width: 0;
-      height: auto;
-      .info .lyric-container {
-        height: auto;
-        min-height: 1.4em;
-        .lyric,
-        .artists {
-          position: relative;
-          height: auto;
-          line-height: 1.4;
-        }
-      }
-    }
+  // 平板竖屏（phone-floating + pad-device）：横向空间充足，恢复上下首/随机/循环
+  &.phone-floating.pad-device {
     .play-control {
-      margin: 0;
-      flex-wrap: nowrap;
-      .play-pause {
-        --n-width: 48px;
-        --n-height: 48px;
-      }
-      .play-icon {
-        width: 48px;
-        height: 48px;
-        min-width: 48px;
-        margin: 0;
-        display: flex;
-      }
-    }
-    .play-menu {
-      min-width: 0;
-      overflow-x: auto;
-      flex-wrap: nowrap;
-      :deep(.n-badge) {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-      }
-      // 数量参与流式排布，避免被滚动容器裁掉。
-      :deep(.n-badge-sup) {
-        position: static;
-        inset: auto;
-        transform: none;
-        height: auto;
-        line-height: 1.4;
-      }
-      :deep(.menu-icon) {
-        min-width: 48px;
-        min-height: 48px;
-        flex-shrink: 0;
-      }
-    }
-    :deep(.n-icon) {
-      width: 24px;
-      height: 24px;
-      flex-shrink: 0;
-    }
-    :deep(svg) {
-      max-width: 100%;
-      max-height: 100%;
-    }
-    &.phone-floating {
-      padding-bottom: 8px;
-    }
-    &.compact-bar {
-      .main-player-body {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-      .play-data {
-        grid-column: 1 / -1;
-        width: 100%;
-        max-width: none;
-      }
-      .play-control {
-        grid-column: 1;
-        grid-row: 2;
-        justify-content: start !important;
-      }
-      .play-menu {
-        grid-column: 2;
-        grid-row: 2;
-      }
-      &.short-bar {
-        .main-player-body {
-          grid-template-columns: minmax(0, 1fr) auto auto;
-        }
-        .play-data {
-          grid-column: 1;
-          grid-row: 1;
-        }
-        .play-control {
-          grid-column: 2;
-          grid-row: 1;
-        }
-        .play-menu {
-          grid-column: 3;
-          grid-row: 1;
+      @media (orientation: portrait) {
+        .play-icon {
+          display: flex;
         }
       }
     }

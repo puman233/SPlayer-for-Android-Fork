@@ -48,7 +48,7 @@
         <!-- 桌面歌词 -->
         <div v-if="canUseDesktopLyric" class="qa-item">
           <div class="qa-item-label">
-            <SvgIcon name="DesktopLyric2" :size="18" />
+            <SvgIcon name="DesktopLyric" :size="18" />
             <span class="qa-item-text">桌面歌词</span>
           </div>
           <n-switch

@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.Configuration;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -34,38 +33,6 @@ import top.imsyy.splayer.android.cache.AudioCacheProvider;
       @Permission(alias = "notifications", strings = {Manifest.permission.POST_NOTIFICATIONS})
     })
 public class AndroidNativePlaybackPlugin extends Plugin {
-  private JSObject uiConfiguration() {
-    JSObject data = new JSObject();
-    float fontScale = getContext().getResources().getConfiguration().fontScale;
-    data.put("fontScale", fontScale);
-    data.put("textZoom", Math.round(fontScale * 100));
-    return data;
-  }
-
-  @PluginMethod
-  public void getUiConfiguration(PluginCall call) {
-    call.resolve(uiConfiguration());
-  }
-
-  @PluginMethod
-  @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
-  public void getFloatingLyricState(PluginCall call) {
-    JSObject data = new JSObject();
-    data.put("granted", Settings.canDrawOverlays(getContext()));
-    data.put("enabled", PlaybackManager.getInstance(getContext()).isFloatingLyricRunning());
-    call.resolve(data);
-  }
-
-  @Override
-  protected void handleOnConfigurationChanged(Configuration configuration) {
-    notifyListeners("uiConfigurationChanged", uiConfiguration());
-  }
-
-  @Override
-  protected void handleOnResume() {
-    notifyListeners("uiConfigurationChanged", uiConfiguration());
-  }
-
   @Override
   public void load() {
     PlaybackManager.getInstance(getContext()).attachPlugin(this);

@@ -56,7 +56,7 @@
           :style="{
             height:
               musicStore.isHasPlayer && statusStore.showPlayBar
-                ? 'calc(var(--page-zoom-100dvh, 100dvh) - var(--mini-player-height, 80px))'
+                ? 'calc(var(--page-zoom-100dvh, 100dvh) - 80px)'
                 : 'var(--page-zoom-100dvh, 100dvh)',
             ...padSiderBg,
           }"
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
   --app-header-height: calc(72px + var(--safe-area-top));
   --phone-nav-height: 56px;
   --phone-nav-total-height: calc(var(--phone-nav-height) + var(--safe-area-bottom));
-  --phone-player-height: var(--mini-player-height, 64px);
+  --phone-player-height: 64px;
   --phone-player-gap: 8px;
   --phone-content-gap: 12px;
   width: 100%;
@@ -573,7 +573,7 @@ onBeforeUnmount(() => {
   #pad-main {
     #main-content {
       // 同步纳入底部安全区，避免内容被加高后的播放栏挡住
-      bottom: var(--mini-player-height, calc(80px + var(--safe-area-bottom)));
+      bottom: calc(80px + var(--safe-area-bottom));
     }
   }
 }

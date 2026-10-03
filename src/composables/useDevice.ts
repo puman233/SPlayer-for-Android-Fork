@@ -1,12 +1,7 @@
 import { computed, ref } from "vue";
 import { resolveAvailableViewport } from "@/core/layout/viewport";
-import {
-  normalizeFontScale,
-  resolveAdaptiveLayout,
-  resolveAdaptiveTokens,
-} from "@/core/layout/adaptive";
 
-// 硬件识别兼容阈值；UI 宽度等级由共享空间策略决定
+// Material Design 3 expanded 断点（dp/CSS px），覆盖多数 7~10 寸 Android 平板
 export const ANDROID_PAD_BREAKPOINT = 600;
 
 // 模块级单例：所有 useDevice() 共用同一份 viewport 状态与监听器，避免重复注册造成内存泄漏
@@ -15,10 +10,6 @@ const rawWidth = ref(hasWindow ? window.innerWidth : 0);
 const rawHeight = ref(hasWindow ? window.innerHeight : 0);
 const visualWidth = ref(hasWindow ? window.visualViewport?.width || 0 : 0);
 const visualHeight = ref(hasWindow ? window.visualViewport?.height || 0 : 0);
-const fontScale = ref(1);
-export const updateSystemFontScale = (value: number) => {
-  fontScale.value = normalizeFontScale(value);
-};
 
 /**
  * 基于 UA 的平板硬件识别（一次性计算，UA 不会变）：
@@ -101,12 +92,10 @@ const isPadDevice = computed(() => {
 });
 const isPhoneDevice = computed(() => !isPadDevice.value);
 
-// 布局只依据当前可用窗口；硬件身份继续用于方向锁等平台行为
-const adaptiveWindow = computed(() =>
-  resolveAdaptiveLayout(availableWidth.value, availableHeight.value, deviceModeOverride.value),
-);
-const dimensions = computed(() => resolveAdaptiveTokens(adaptiveWindow.value.widthClass));
-const isPad = computed(() => adaptiveWindow.value.canUseTwoColumns);
+// === UI 布局模式（随旋转切换）===
+// 仅平板横屏走平板 UI；平板竖屏 / 任意朝向手机 都走手机 UI
+// 平板竖屏单列窄宽不适合双栏侧导航，统一回退手机布局，体验一致
+const isPad = computed(() => isPadDevice.value && isLandscape.value);
 const isPhone = computed(() => !isPad.value);
 
 // 细化语义（基于布局模式，保持与 isPad/isPhone 一致）
@@ -123,9 +112,6 @@ export const useDevice = () => {
     effectiveHeight,
     availableWidth,
     availableHeight,
-    adaptiveWindow,
-    dimensions,
-    fontScale,
     shortestSide,
     isLandscape,
     isPad,

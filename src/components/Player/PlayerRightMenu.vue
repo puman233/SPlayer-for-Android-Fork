@@ -44,6 +44,19 @@
         <span>当前歌曲不支持切换音质</span>
       </n-popover>
     </template>
+    <!-- 桌面歌词 -->
+    <n-badge
+      v-if="
+        (isElectron || isCapacitorAndroid) && settingStore.fullscreenPlayerElements.desktopLyric
+      "
+      value="ON"
+      :show="statusStore.showDesktopLyric"
+      class="hidden"
+    >
+      <div class="menu-icon hidden" @click.stop="player.toggleDesktopLyric()">
+        <SvgIcon name="DesktopLyric2" :depth="statusStore.showDesktopLyric ? 1 : 3" />
+      </div>
+    </n-badge>
     <!-- 其他控制 -->
     <n-dropdown
       v-if="settingStore.fullscreenPlayerElements.moreSettings"
@@ -85,11 +98,6 @@
         marginRight: settingStore.showPlaylistCount ? '12px' : null,
       }"
     >
-      <template v-if="plainCount" #value>
-        <span class="playlist-count">{{
-          (dataStore.playList?.length ?? 0) > 9999 ? "9999+" : (dataStore.playList?.length ?? 0)
-        }}</span>
-      </template>
       <div class="menu-icon" @click.stop="statusStore.playListShow = !statusStore.playListShow">
         <SvgIcon name="PlayList" />
       </div>
@@ -100,6 +108,7 @@
 <script setup lang="ts">
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useDataStore, useSettingStore, useStatusStore, useMusicStore } from "@/stores";
+import { isElectron, isCapacitorAndroid } from "@/utils/env";
 import { renderIcon } from "@/utils/helper";
 import { openAutoClose, openChangeRate, openEqualizer, openABLoop } from "@/utils/modal";
 import { useAudioManager } from "@/core/player/AudioManager";
@@ -107,7 +116,7 @@ import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 
-defineProps<{ persistent?: boolean; plainCount?: boolean }>();
+defineProps<{ persistent?: boolean }>();
 
 const dataStore = useDataStore();
 const statusStore = useStatusStore();

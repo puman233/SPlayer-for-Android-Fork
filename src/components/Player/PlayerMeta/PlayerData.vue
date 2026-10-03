@@ -384,6 +384,7 @@ const jumpToRadio = debounce(
 
 <style lang="scss" scoped>
 .player-data {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   width: 70%;
@@ -421,12 +422,15 @@ const jumpToRadio = debounce(
     font-size: 18px;
   }
   .artists {
+    min-width: 0;
     display: flex;
     align-items: center;
     .n-icon {
       margin-right: 4px;
     }
     .ar-list {
+      min-width: 0;
+      flex: 1;
       display: -webkit-box;
       line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -457,6 +461,7 @@ const jumpToRadio = debounce(
   }
   .album,
   .dj {
+    min-width: 0;
     font-size: 16px;
     display: flex;
     align-items: center;
@@ -464,6 +469,8 @@ const jumpToRadio = debounce(
       margin-right: 4px;
     }
     .name-text {
+      min-width: 0;
+      flex: 1;
       opacity: 0.7;
       transition: opacity 0.3s;
       line-clamp: 1;
@@ -480,7 +487,7 @@ const jumpToRadio = debounce(
     justify-content: space-between;
     width: 100%;
     // 防止标签与右侧操作按钮（心/加/歌单/更多）挤压重叠（图2）
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .play-meta {

@@ -211,6 +211,7 @@ export interface AndroidNativeFloatingLyricConfigPayload {
 }
 
 export interface AndroidNativePlaybackPlugin {
+  getFloatingLyricState(): Promise<{ granted: boolean; enabled: boolean }>;
   getUiConfiguration(): Promise<{ fontScale: number; textZoom: number }>;
   addListener(
     eventName: "uiConfigurationChanged",

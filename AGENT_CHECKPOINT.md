@@ -1,5 +1,23 @@
 # Android 自动发布工作流检查点
 
+## v3.0.11 播放器与独立歌词入口修补（2026-10-03）
+
+本轮阶段：播放器布局与独立桌面歌词入口。状态：VERIFIED（仅下述范围）；完整自适应任务仍为 IMPLEMENTED。版本仍为 3.0.11 / 30017，未创建版本、Tag、Release，也未替换公开 APK。
+
+- 宽屏播放器改为实际顶栏、内容、底栏流式预算；封面测量剩余容器，长歌曲信息局部滚动。控制栏按内容增高，窄窗口或大字号时重排次要操作；核心触控下限为 48 CSS px，SVG 尺寸独立约束。手机竖屏的控件规格依据当前容器宽度。
+- 手机和平板全屏播放页共享独立 Naive UI 桌面歌词按钮与 DesktopLyric2 图标，紧凑布局保留图标，宽裕布局显示标签。按原生权限及实际窗口确定 OFF/ON/PERMISSION_REQUIRED，初始化与操作期间禁用；窗口附着后才提示开启，服务停止和前台恢复校准状态。
+- 权限流程先注册前台恢复监听再打开设置，返回后重新检查并继续开启；开关串行保护。不修改音频引擎、用户数据库或版本配置。
+- pnpm build:android、pnpm format、pnpm lint、pnpm typecheck:web 通过；28 项 TS、15 项 Python、18 项 JVM 回归通过。Gradle 隔离包、仪器包与普通四 ABI debug 构建通过。
+- MuMu 手机 emulator-5554、平板 emulator-5556 最终完整仪器套件各 OK (6 tests)。新增测试涵盖 1.0/1.15/1.3/1.5/2.0 五档真实系统字号、纵横屏、cover/record/fullscreen 共 60 组布局几何，使用长标题、长歌手/专辑及中英日/emoji 文本；检查封面与信息、核心控件、窗口边界和图标盒。手机紧凑页沿用自身封面呈现策略，三种设置不能视为三种独立渲染实现。
+- 实际悬浮窗口开启/关闭、外部停止服务后 OFF、缺权限状态、点击确认进入 com.android.settings、返回后自动 ON 均通过。测试用 shell 改变隔离包 appops 授权，再实际返回应用；不是人工操作系统授权开关，也不是物理触摸测试。
+- 首次启动测试因包名漏写 .android 而失败，检查 APK 与注册信息后纠正。首轮几何与权限通过；补强实际授权页断言后完整套件通过。最终新增 PixelCopy 从被测 Activity 窗口取双端四张 2.0 字号截图，避免 MuMu 默认 display 截图抓到桌面；最终完整套件再次通过。
+- 新状态查询最初增加两项 Media3 opt-in Lint 错误，已在该方法明确 opt-in；最终 Lint XML 恢复历史 187 errors / 27 warnings，不宣称全项目零错误。此前基础层 dev CI 37117629027 已实际成功。
+- 隔离验收与普通 debug APK、最终 Lint 报告和实际窗口截图保存于 C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10146-a8d1-7132-a8a7-785cf718820d/player-stage；本轮仪器、构建和格式日志位于其父目录 player-\*.log。
+- 普通 ARM64 debug：android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk，64,277,827 字节，top.imsyy.splayer.android.debug / 3.0.11-debug / 30017；SHA-256 fd9edecbbf2bf8400dfeb3b2cde593bb609d59f15c549daf80004a7f9d8b029e。这是测试安装包，不是正式修补 Release。
+- 双端字号恢复 1.0、user_rotation=0、accelerometer_rotation=1。本阶段结束清理自己创建的 .lyricsverify 与仪器包，保留正式应用及其数据。
+- 本轮不代表播放真实音源、进度拖动、评论所有模式、AMLL、快速开关/拒绝返回、完整导航/cutout、系统分屏、API 29 与物理设备已验收。共享 Button/Chip、MiniPlayer、SongItem 和其余页面迁移仍待后续阶段；最终按已授权工作流更新现有 v3.0.11 四 ABI APK，保持 Tag、不创建新版本。
+- 本阶段完成后提交并同步 dev，再停止；下一阶段为共享组件迁移及相关双端回归。
+
 ## v3.0.11 自适应基础层修补（2026-10-03）
 
 本轮阶段：自适应基础层。状态：VERIFIED（仅下述已实际检查的范围）；完整自适应任务仍为 IMPLEMENTED。方案 ADAPTIVE_UI_PLAN.md 已获用户批准。用户要求最终更新现有 v3.0.11 APK 并同步仓库，不创建新版本；本阶段没有修改版本、Tag 或 Release 附件。

@@ -18,7 +18,11 @@
         }"
         :class="[
           'full-player',
-          { 'fullscreen-comment': isFullscreenComment, landscape: isMobileLandscape },
+          {
+            'fullscreen-comment': isFullscreenComment,
+            landscape: isMobileLandscape,
+            'adaptive-wide': !isCompactMobilePlayer && !isMobileLandscape,
+          },
         ]"
         :data-orientation-phase="orientationPhase"
         @mouseleave="playerLeave"
@@ -61,8 +65,14 @@
             >
               <!-- 左侧封面和数据：内部组件自己负责歌曲信息切换的过渡，外层不再用 :key=playSong.id 的 zoom 动画 -->
               <div v-if="showLeftContent" class="content-left" :style="layoutStyles.left">
-                <PlayerCover />
-                <PlayerData :center="playerDataCenter" />
+                <div
+                  ref="wideCoverRef"
+                  class="wide-cover-space"
+                  :style="{ '--wide-cover-size': `${wideCoverSize}px` }"
+                >
+                  <PlayerCover />
+                </div>
+                <div class="wide-metadata"><PlayerData :center="playerDataCenter" /></div>
               </div>
               <!-- 半屏评论（左或右） -->
               <PlayerComment
@@ -115,6 +125,7 @@ import { useStatusStore, useMusicStore, useSettingStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import { PLAYER_META_HOLD_KEY, type PlayerMetaHold } from "@/composables/usePlayerMetaHold";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
+import { useResizeObserver } from "@vueuse/core";
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
@@ -124,6 +135,19 @@ const settingStore = useSettingStore();
 const { phase: orientationPhase } = useOrientationTransition();
 
 const { isPhone, isPhonePortrait, isPad } = useDevice();
+const wideCoverRef = ref<HTMLElement | null>(null);
+const wideCoverSize = ref(0);
+const measureWideCover = () => {
+  const element = wideCoverRef.value;
+  if (!element) return;
+  const ratio = settingStore.playerType === "record" ? 1.45 : 1;
+  wideCoverSize.value = Math.max(
+    0,
+    Math.min(element.clientWidth, element.clientHeight / ratio, 480),
+  );
+};
+useResizeObserver(wideCoverRef, measureWideCover);
+watch(() => settingStore.playerType, measureWideCover, { flush: "post" });
 // tap-restore 仅沉浸式 / 平板生效；其他场景保留 autohide
 const tapRestoreEnabled = computed(
   () =>
@@ -473,6 +497,10 @@ onBeforeUnmount(() => {
   justify-content: center;
   color: rgb(var(--main-cover-color));
   background-color: #00000060;
+  :deep(.n-icon svg) {
+    max-width: 100%;
+    max-height: 100%;
+  }
   backdrop-filter: blur(80px);
   overflow: hidden;
   z-index: 1000;
@@ -584,6 +612,84 @@ onBeforeUnmount(() => {
             transform: translateY(calc(var(--page-zoom-100vh, 100vh) * 0.3));
           }
         }
+      }
+    }
+  }
+  &.adaptive-wide {
+    padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+      var(--safe-area-left);
+    justify-content: flex-start;
+    :deep(.player-menu),
+    :deep(.player-control) {
+      position: relative;
+      flex: 0 0 auto;
+      height: auto;
+      min-height: 0;
+      overflow: visible;
+    }
+    :deep(.player-menu .drag-dom) {
+      min-width: 0;
+      height: var(--adaptive-touch-target, 48px);
+      margin: 0;
+    }
+    .player-content {
+      position: relative;
+      flex: 1 1 0;
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
+      .content-left,
+      .content-right {
+        min-width: 0;
+        min-height: 0;
+        padding: var(--adaptive-space-sm, 8px) var(--adaptive-horizontal-padding, 24px);
+      }
+      .content-left {
+        gap: var(--adaptive-space-md, 12px);
+      }
+      .content-right > .player-data {
+        flex: 0 1 auto;
+        max-height: 45%;
+        overflow-y: auto;
+        margin-bottom: var(--adaptive-space-sm, 8px);
+      }
+      &.full-screen.no-lrc .content-right .player-data {
+        transform: none;
+      }
+    }
+    .wide-cover-space {
+      width: 100%;
+      flex: 1 1 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      :deep(.player-cover) {
+        width: var(--wide-cover-size);
+        max-width: 100%;
+        margin: 0;
+        &.record {
+          height: calc(var(--wide-cover-size) * 1.45);
+        }
+        .cover-img {
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+        }
+      }
+    }
+    .wide-metadata {
+      width: 100%;
+      flex: 0 1 auto;
+      min-height: 0;
+      max-height: 60%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      :deep(.player-data) {
+        margin: 0;
+        width: 100%;
+        max-width: none;
+        padding: 0;
       }
     }
   }

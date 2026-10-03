@@ -63,3 +63,11 @@ MainActivity 根据系统 fontScale 设置 WebView textZoom，配置变更保留
 已执行：28 项 TS 回归、15 项 Python 发布保护、18 项 JVM 测试、Vue 类型检查、pnpm build:android、pnpm format、ESLint、原生 APK 与仪器包编译。MuMu 双端完整仪器套件各 4 项通过，包含五档字体的真实文字测量、可变 Activity 窗口、播放页真实旋转与悬浮歌词回归。Android Lint 任务完成，但 XML 仍有历史 187 errors / 27 warnings。最终测量证据与提交详情记录在 AGENT_CHECKPOINT.md。
 
 本阶段不代表播放器/列表所有大字排版已通过验收，也不代表完整 split-screen 生命周期已验证；可变 Activity 窗口验证不等同于系统分屏操作验收。版本、Tag 与 Release 附件未改变。最终发布范围已获得用户明确授权：更新 3.0.11 APK，不创建新版本，并同步仓库。
+
+## 播放器与独立入口阶段
+
+播放器顶栏、内容区、底栏按实际高度排布；宽屏封面从剩余容器测量尺寸，信息区允许局部滚动。手机竖屏按容器宽度选择常规或较大控件，底栏不再用固定高度裁切文字。控制栏在窄空间或大字号下重排；核心触控下限为 48 CSS px，SVG 图标尺寸独立约束。
+
+共享 DesktopLyricsButton 使用 Naive UI 与现有 DesktopLyric2 图标，手机和平板播放页均有独立入口。Android 以实际悬浮窗口与权限确定 OFF/ON/PERMISSION_REQUIRED，窗口尚未就绪或切换中禁用按钮；先注册前台恢复事件再跳转设置，返回后继续开启。原生服务附着、停止与页面恢复均校准状态，不改音频引擎生命周期。
+
+双端已执行五档真实系统字号 × 两个方向 × cover/record/fullscreen 共 60 组长标题、中英日、emoji 内容几何检查，以及原生开关、外部服务停止、缺权限、实际系统授权页返回自动继续。详细最终产物与测试范围见 checkpoint。完整导航/cutout、新共享列表与 MiniPlayer、AMLL 内容矩阵、真实系统分屏和最终 v3.0.11 APK 替换仍待后续阶段完成。

@@ -47,6 +47,15 @@ public class AndroidNativePlaybackPlugin extends Plugin {
     call.resolve(uiConfiguration());
   }
 
+  @PluginMethod
+  @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
+  public void getFloatingLyricState(PluginCall call) {
+    JSObject data = new JSObject();
+    data.put("granted", Settings.canDrawOverlays(getContext()));
+    data.put("enabled", PlaybackManager.getInstance(getContext()).isFloatingLyricRunning());
+    call.resolve(data);
+  }
+
   @Override
   protected void handleOnConfigurationChanged(Configuration configuration) {
     notifyListeners("uiConfigurationChanged", uiConfiguration());

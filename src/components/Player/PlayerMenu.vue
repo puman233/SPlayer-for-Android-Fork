@@ -3,6 +3,7 @@
     <Transition name="fade" mode="out-in">
       <div v-show="persistent || statusStore.playerMetaShow" class="menu-content">
         <n-flex class="left">
+          <DesktopLyricsButton :compact="isCompact" />
           <div
             v-if="musicStore.isHasLrc && musicStore.playSong.type !== 'radio'"
             :class="['menu-icon', { open: statusStore.effectivePureLyricMode }]"
@@ -29,11 +30,16 @@
 import { useStatusStore, useMusicStore } from "@/stores";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
 import { isCapacitorAndroid } from "@/utils/env";
+import { useDevice } from "@/composables/useDevice";
 
 defineProps<{ persistent?: boolean }>();
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
+const { adaptiveWindow, fontScale } = useDevice();
+const isCompact = computed(
+  () => adaptiveWindow.value.widthClass !== "expanded" || fontScale.value > 1.3,
+);
 
 // 桌面 / Electron 浏览器全屏 API
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
@@ -110,6 +116,8 @@ const onCloseFullPlayer = async () => {
       justify-content: center;
       width: 40px;
       height: 40px;
+      min-width: var(--adaptive-touch-target, 48px);
+      min-height: var(--adaptive-touch-target, 48px);
       border-radius: 8px;
       transition:
         opacity 0.3s,

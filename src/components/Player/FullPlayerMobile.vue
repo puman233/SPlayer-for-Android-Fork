@@ -9,7 +9,7 @@ let savedPageType: MobilePageType = "info";
     :class="[
       'full-player-mobile',
       {
-        'pad-portrait': isPadDevice,
+        'pad-portrait': mobileLayout.widthClass !== 'compact',
         'controls-hidden': !controlsVisible,
         'comment-active': currentPageType === 'comment',
       },
@@ -43,6 +43,7 @@ let savedPageType: MobilePageType = "info";
           <SvgIcon name="Fullscreen" :size="24" />
         </div>
         <div v-else class="btn-placeholder" aria-hidden="true" />
+        <DesktopLyricsButton compact />
         <!-- 右：下拉关闭 -->
         <div class="btn" @click.stop="statusStore.showFullPlayer = false">
           <SvgIcon name="Down" :size="26" />
@@ -187,7 +188,7 @@ let savedPageType: MobilePageType = "info";
         v-show="controlsVisible"
         :page-count="totalPages"
         :page-index="pageIndex"
-        :large="isPadDevice"
+        :large="mobileLayout.widthClass !== 'compact'"
         @update:page-index="pageIndex = $event"
       />
     </Transition>
@@ -215,6 +216,7 @@ import { toLikeSong } from "@/utils/auth";
 import { openPlaylistAdd } from "@/utils/modal";
 import { removeBrackets } from "@/utils/format";
 import { getFontSize } from "@/utils/style";
+import { useAdaptiveLayout } from "@/composables/useAdaptiveLayout";
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
@@ -225,7 +227,7 @@ const LYRIC_HEADER_MAX_PADDING = 60;
 
 // 沉浸式横屏入口：方向锁交给 native SENSOR_LANDSCAPE
 // 走硬件层 isPhoneDevice，防止平板竖屏（布局是手机 UI）误冒出沉浸式入口
-const { isPadDevice, isPhoneDevice, isPhonePortrait } = useDevice();
+const { isPhoneDevice, isPhonePortrait } = useDevice();
 const canEnterImmersive = computed(() => isCapacitorAndroid && isPhoneDevice.value);
 // 纯净模式按钮：手机竖屏 / 平板竖屏 + 有歌词 + 非电台
 const showPureLyricButton = computed(
@@ -249,6 +251,7 @@ watch(coverSectionRef, (el) => orientationTransition.setCoverEl(el, "portrait"))
 onBeforeUnmount(() => orientationTransition.setCoverEl(null, "portrait"));
 
 const mobileStart = ref<HTMLElement | null>(null);
+const { layout: mobileLayout } = useAdaptiveLayout(mobileStart);
 const topBarRef = ref<HTMLElement | null>(null);
 const dragHandleRef = ref<HTMLElement | null>(null);
 const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
@@ -939,6 +942,29 @@ const contentTransform = computed(() => {
     }
   }
 
+  .top-bar .btn,
+  .top-bar .btn-placeholder,
+  .info-page .action-btn,
+  .lyric-header .action-btn {
+    min-width: var(--adaptive-touch-target, 48px);
+    min-height: var(--adaptive-touch-target, 48px);
+    flex-shrink: 0;
+  }
+  .info-page :deep(.mobile-data .info-actions) {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--adaptive-space-xs, 4px);
+    width: 100%;
+    .qa-trigger--mobile {
+      min-width: 48px;
+      min-height: 48px;
+    }
+  }
+  :deep(.n-icon) {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
   &.comment-active,
   &.controls-hidden {
     padding-bottom: var(--mobile-safe-bottom);

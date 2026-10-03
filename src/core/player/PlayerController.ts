@@ -1,4 +1,5 @@
 import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
+import { desktopLyricsBusy, refreshDesktopLyricsState } from "./desktopLyricsState";
 import { toRaw } from "vue";
 import { App as CapacitorApp } from "@capacitor/app";
 import { AudioErrorCode } from "@/core/audio-player/BaseAudioPlayer";
@@ -2048,7 +2049,7 @@ class PlayerController {
    */
   public toggleDesktopLyric() {
     const statusStore = useStatusStore();
-    this.setDesktopLyricShow(!statusStore.showDesktopLyric);
+    return this.setDesktopLyricShow(!statusStore.showDesktopLyric);
   }
 
   /**
@@ -2057,31 +2058,29 @@ class PlayerController {
    */
   public async setDesktopLyricShow(show: boolean) {
     const statusStore = useStatusStore();
-    if (statusStore.showDesktopLyric === show) return;
-
     // Android 端使用悬浮歌词（需要悬浮窗权限，按需动态申请）
     if (isCapacitorAndroid) {
-      if (!show) {
-        try {
+      if (desktopLyricsBusy.value) return;
+      desktopLyricsBusy.value = true;
+      try {
+        await refreshDesktopLyricsState(true);
+        if (statusStore.showDesktopLyric === show) return;
+        if (!show) {
           await AndroidNativePlayback.hideFloatingLyric();
           statusStore.showDesktopLyric = false;
-        } catch (e) {
-          console.error("悬浮歌词操作失败:", e);
+          void this.syncAndroidPlaybackContext();
+          window.$message.success("已关闭桌面歌词");
+          return;
         }
-        void this.syncAndroidPlaybackContext();
-        window.$message.success("已关闭桌面歌词");
-        return;
-      }
-      // 开启：先检查悬浮窗权限，未授权则弹自定义确认框并引导授权
-      try {
+        // 先订阅前台恢复再跳转设置，避免返回过快遗漏事件
         const overlay = await AndroidNativePlayback.checkOverlayPermission();
         if (!overlay.granted) {
           const ok = await this.confirmOverlayPermission();
           if (!ok) return;
           // 跳转系统悬浮窗权限设置页
-          await AndroidNativePlayback.requestOverlayPermission();
-          // 从系统设置页返回后重新检查（最多等待 30s）
-          await this.waitForAppResume(30000);
+          await this.waitForAppResume(30000, () =>
+            AndroidNativePlayback.requestOverlayPermission(),
+          );
           const granted = (await AndroidNativePlayback.checkOverlayPermission()).granted;
           if (!granted) {
             window.$message.error("未授予悬浮窗权限，桌面歌词不可用");
@@ -2089,6 +2088,16 @@ class PlayerController {
           }
         }
         await AndroidNativePlayback.showFloatingLyric();
+        let attached = false;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const actual = await AndroidNativePlayback.getFloatingLyricState();
+          if (actual.enabled && actual.granted) {
+            attached = true;
+            break;
+          }
+          await sleep(50);
+        }
+        if (!attached) throw new Error("原生悬浮歌词窗口未就绪");
         statusStore.showDesktopLyric = true;
         void this.syncAndroidPlaybackContext();
         // 立即推送当前歌曲信息/歌词/进度/配置，避免悬浮窗短暂显示占位符
@@ -2098,12 +2107,18 @@ class PlayerController {
         this.syncFloatingLyricConfig();
         window.$message.success("已开启桌面歌词");
       } catch (e) {
-        console.error("开启悬浮歌词失败:", e);
-        window.$message.error("开启桌面歌词失败");
+        console.error("[DesktopLyrics] 切换窗口失败:", e);
+        window.$message.error(show ? "开启桌面歌词失败" : "关闭桌面歌词失败");
+      } finally {
+        desktopLyricsBusy.value = false;
+        await refreshDesktopLyricsState().catch((error) =>
+          console.error("[DesktopLyrics] 校准状态失败", error),
+        );
       }
       return;
     }
 
+    if (statusStore.showDesktopLyric === show) return;
     statusStore.showDesktopLyric = show;
     void this.syncAndroidPlaybackContext();
     playerIpc.toggleDesktopLyric(show);
@@ -2133,23 +2148,32 @@ class PlayerController {
   }
 
   /** 等待 App 从后台（系统设置页）返回前台 */
-  private waitForAppResume(timeoutMs: number): Promise<void> {
-    return new Promise((resolve) => {
-      let handle: { remove: () => void } | null = null;
+  private waitForAppResume(timeoutMs: number, openSettings: () => Promise<unknown>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let handle: { remove: () => Promise<void> } | null = null;
       let settled = false;
-      const finish = () => {
+      const finish = (error?: unknown) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (handle) handle.remove();
-        resolve();
+        if (handle)
+          void handle.remove().catch((e) => console.error("[DesktopLyrics] 移除恢复监听失败", e));
+        if (error) reject(error);
+        else resolve();
       };
-      const timer = setTimeout(finish, timeoutMs);
+      const timer = setTimeout(() => finish(), timeoutMs);
       void CapacitorApp.addListener("appStateChange", (state) => {
         if (state.isActive) finish();
-      }).then((h) => {
-        handle = h;
-      });
+      })
+        .then((h) => {
+          handle = h;
+          if (settled) {
+            void h.remove();
+            return;
+          }
+          void openSettings().catch(finish);
+        })
+        .catch(finish);
     });
   }
 

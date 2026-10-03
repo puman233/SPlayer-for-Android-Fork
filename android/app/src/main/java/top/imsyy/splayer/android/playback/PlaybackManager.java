@@ -2541,10 +2541,14 @@ public final class PlaybackManager {
       service.pushSongInfo(bufferedSongName, bufferedArtist);
     }
     service.pushProgress(bufferedTimeMs, bufferedPlaying);
+    emitCustomAction("desktopLyricReady", null, null, true, null, true, null);
   }
 
   public synchronized void detachFloatingLyricService(FloatingLyricService service) {
-    if (floatingLyricService == service) floatingLyricService = null;
+    if (floatingLyricService == service) {
+      floatingLyricService = null;
+      emitCustomAction("desktopLyricReady", null, null, false, null, true, null);
+    }
   }
 
   /** 推送歌词——有服务直推，没服务先缓冲 */

@@ -1,5 +1,9 @@
 <template>
-  <div class="player-control">
+  <div
+    ref="controlRef"
+    class="player-control"
+    :class="{ 'control-stacked': layout.width < 900 || fontScale > 1.3 }"
+  >
     <Transition name="fade" mode="out-in">
       <div v-show="persistent || statusStore.playerMetaShow" class="control-content" @click.stop>
         <n-flex class="left" align="center" :wrap="!persistent" :size="persistent ? 0 : 12">
@@ -96,6 +100,7 @@
               strong
               secondary
               circle
+              :aria-label="statusStore.playStatus ? '暂停' : '播放'"
               @click.stop="player.playOrPause()"
             >
               <template #icon>
@@ -159,6 +164,10 @@ import { openDownloadSong, openPlaylistAdd } from "@/utils/modal";
 import { getComment } from "@/api/comment";
 import { formatCommentCount } from "@/utils/format";
 import { useDevice } from "@/composables/useDevice";
+import { useAdaptiveLayout } from "@/composables/useAdaptiveLayout";
+
+const controlRef = ref<HTMLElement | null>(null);
+const { layout, fontScale } = useAdaptiveLayout(controlRef);
 
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
@@ -307,26 +316,34 @@ onBeforeUnmount(() => {
   position: absolute;
   bottom: 0;
   width: 100%;
-  height: 80px;
-  overflow: hidden;
+  min-height: var(--adaptive-touch-target, 48px);
+  height: auto;
+  overflow: visible;
+  padding: var(--adaptive-space-xs, 4px) var(--adaptive-space-sm, 8px);
   .control-content {
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(264px, 1.2fr) minmax(0, 1fr);
     align-items: center;
   }
   .left,
   .right {
     opacity: 1;
-    height: 100%;
-    padding: 0 30px;
+    min-width: 0;
+    height: auto;
+    padding: 0 var(--adaptive-space-sm, 8px);
+    overflow-x: auto;
+    flex-wrap: nowrap;
     transition: opacity 0.3s;
     :deep(.menu-icon) {
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 8px;
+      min-width: var(--adaptive-touch-target, 48px);
+      min-height: var(--adaptive-touch-target, 48px);
+      flex-shrink: 0;
       border-radius: 8px;
       transition:
         background-color 0.3s,
@@ -365,8 +382,8 @@ onBeforeUnmount(() => {
     }
   }
   .center {
-    height: 100%;
-    max-height: 80px;
+    height: auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -379,8 +396,9 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: var(--play-control-touch-size, 38px);
-        height: var(--play-control-touch-size, 38px);
+        width: var(--adaptive-touch-target, 48px);
+        height: var(--adaptive-touch-target, 48px);
+        flex-shrink: 0;
         border-radius: 50%;
         will-change: transform;
         transition:
@@ -400,8 +418,8 @@ onBeforeUnmount(() => {
         }
       }
       .play-pause {
-        --n-width: var(--play-control-touch-size, 44px);
-        --n-height: var(--play-control-touch-size, 44px);
+        --n-width: var(--adaptive-touch-target, 48px);
+        --n-height: var(--adaptive-touch-target, 48px);
         --n-color: rgba(var(--main-cover-color), 0.14);
         --n-color-hover: rgba(var(--main-cover-color), 0.2);
         --n-color-focus: rgba(var(--main-cover-color), 0.2);
@@ -434,6 +452,8 @@ onBeforeUnmount(() => {
       font-size: 12px;
       position: relative;
       .n-slider {
+        min-width: 0;
+        flex: 1;
         margin: 6px 8px;
         --n-handle-size: 12px;
         --n-rail-height: 4px;
@@ -441,14 +461,13 @@ onBeforeUnmount(() => {
       .time-container {
         position: relative;
         min-width: 40px;
-        height: 100%;
+        height: auto;
         display: flex;
         justify-content: flex-end;
         align-items: center;
 
         span {
-          position: absolute;
-          right: 0;
+          position: relative;
           white-space: nowrap;
           opacity: 0.6;
           cursor: pointer;
@@ -490,6 +509,36 @@ onBeforeUnmount(() => {
         animation: automix-scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         pointer-events: none;
       }
+    }
+  }
+  :deep(.n-icon) {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  &.control-stacked {
+    .control-content {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--adaptive-space-xs, 4px);
+    }
+    .center {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      width: 100%;
+      height: auto;
+      .btn {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
+    .left,
+    .right {
+      grid-row: 2;
+      gap: 0;
+    }
+    :deep(.right-menu) {
+      flex-wrap: nowrap;
+      width: max-content;
     }
   }
   &:hover {

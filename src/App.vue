@@ -19,6 +19,7 @@ import { useDevice, updateSystemFontScale } from "@/composables/useDevice";
 import { AndroidNativePlayback } from "@/plugins/androidNativePlayback";
 import { isCapacitorAndroid } from "@/utils/env";
 import type { PluginListenerHandle } from "@capacitor/core";
+import { refreshDesktopLyricsState } from "@/core/player/desktopLyricsState";
 import { useImmersive } from "@/composables/useImmersive";
 import { useAndroidBack } from "@/composables/useAndroidBack";
 import { usePageZoom } from "@/composables/usePageZoom";
@@ -52,18 +53,34 @@ watchEffect(() => {
 });
 
 let configurationListener: PluginListenerHandle | undefined;
+let desktopLyricsListener: PluginListenerHandle | undefined;
+const refreshDesktopLyrics = () =>
+  refreshDesktopLyricsState().catch((error) =>
+    console.error("[DesktopLyrics] 同步窗口状态失败", error),
+  );
 let disposed = false;
 onMounted(async () => {
   if (!isCapacitorAndroid) return;
   try {
     const listener = await AndroidNativePlayback.addListener("uiConfigurationChanged", (event) => {
       if (!disposed) updateSystemFontScale(event.fontScale);
+      if (!disposed) void refreshDesktopLyrics();
     });
     if (disposed) {
       await listener.remove();
       return;
     }
     configurationListener = listener;
+    const desktopListener = await AndroidNativePlayback.addListener("customAction", (event) => {
+      if (!disposed && (event.action === "desktopLyric" || event.action === "desktopLyricReady"))
+        void refreshDesktopLyrics();
+    });
+    if (disposed) {
+      await desktopListener.remove();
+      return;
+    }
+    desktopLyricsListener = desktopListener;
+    await refreshDesktopLyrics();
     const configuration = await AndroidNativePlayback.getUiConfiguration();
     if (!disposed) updateSystemFontScale(configuration.fontScale);
   } catch (error) {
@@ -73,6 +90,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   disposed = true;
   void configurationListener?.remove();
+  void desktopLyricsListener?.remove();
   for (const name of Object.keys(adaptiveStyle.value)) {
     document.documentElement.style.removeProperty(name);
   }

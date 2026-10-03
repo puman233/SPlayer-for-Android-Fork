@@ -145,3 +145,17 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 
 - 补充恢复平板歌曲信息后最终矩阵：12/12 场景通过，每场景完整仪器套件 OK (3 tests)，合计 36 次测试；覆盖两设备 × 两导航 × 三字体，并启用模拟 cutout。首次平板 2.0 字体因固定 350ms 等待得到 controlsAlpha=0.37059042，断言失败；改为主线程确认且最长 2 秒等待动画终态后重跑全矩阵通过，未修改产品动画时长。失败日志保留。
 - 最终补充修复的 pnpm build:android、pnpm format、ESLint、原生 assembleDebug/testDebugUnitTest/lintDebug 与仪器包编译均成功；Lint 仍 187 errors / 27 warnings。没有清除现有正式包数据。
+
+## v3.0.11 正式发布验收（2026-10-03）
+
+状态：VERIFIED；下列发布、产物及模拟器升级已实际完成。此前未验证的 API 29/物理 cutout/RTL 视觉边界继续保留。
+
+- 发布源码提交：3afeffb37fafc0115931d280d8d7310d3329df52；Tag v3.0.11 已推送，未移动或覆盖已有 Tag。dev 已同步专项实现、设备回归、版本准备及平板歌曲信息兼容修复。
+- 最终源码 Android CI 成功：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37113891150。发布前完整隔离仪器矩阵 12/12 场景，每场景 3 项测试通过；最终字体 2.0 与模拟 cutout/导航均通过。
+- 首次发布构建、签名和版本检查成功，但创建草稿后立即读取草稿失败，流程停止：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37114137760。人工核实草稿正确提交且无附件后使用既有 workflow_dispatch 恢复入口，恢复流程成功：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/37114387575。没有重复创建版本、改 Tag 或覆盖旧附件。
+- 正式 Release / Latest：https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.11；isDraft=false、isPrerelease=false，下载与安装 ABI 表格及分类 CHANGELOG 沿用原格式。
+- 四种正式 ABI 附件均下载验收：app-arm64-v8a-release.apk、app-armeabi-v7a-release.apk、app-x86-release.apk、app-x86_64-release.apk。每个文件 ZIP 完整、字节数及 SHA-256 与 GitHub asset digest 一致；包名 top.imsyy.splayer.android、versionName 3.0.11、versionCode 30017、非 debuggable、WebView debugging=false。
+- 正式签名证书 SHA-256：d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea，与上一版本相同。ARM64 SHA-256：dd828bfd606e1e53c4ccce19dfd6089b72c064df172860e2d38892d066ea1e3e（60,018,956 字节）。
+- 产物保存目录：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a100b3-4db1-74d0-aef6-d68615bc299e/v3.0.11，含四个正式 APK、release-metadata.json、artifact-verification.json 与 upgrade-verification.json。下载首轮因连接 EOF 中断，改为逐 ABI 顺序下载后全部校验通过。
+- 实际原位升级：emulator-5554 由 3.0.10 / 30016 升至 3.0.11 / 30017；emulator-5556 由 3.0.8 / 30014 升至新版本。使用 adb install -r，未清除正式包数据；两台首次安装时间分别保持 2026-10-03 15:20:07、2026-10-01 18:11:04，启动 Status=ok、进程存活、未发现 AndroidRuntime FATAL EXCEPTION。没有据此声称所有用户数据字段逐一验收。
+- 最终模拟器保留最新正式版本；隔离包与临时驱动脚本已移除，字体/导航/cutout/旋转设置恢复。历史 Android Lint 187 errors / 27 warnings 仍存在，不视为全项目零错误；原有功能通过相关回归与兼容检查，未声称绝对无风险。

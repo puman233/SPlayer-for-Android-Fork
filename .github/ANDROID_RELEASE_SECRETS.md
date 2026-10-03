@@ -34,9 +34,9 @@ CI 在 dev push/PR 运行，无需 Secrets，不创建 Release。Gradle 缓存�
 
 ## 发布步骤
 
-1. 修改 android/app/build.gradle 的 versionName 和递增 versionCode，并同步 package.json.version。当前值为 3.0.9 / 30015。
+1. 修改 android/app/build.gradle 的 versionName 和递增 versionCode，并同步 package.json.version。当前值为 3.0.10 / 30016。
 2. 提交推送 dev，等待 CI 通过。
-3. 对已验证提交创建、推送 Tag，例如 `git tag v3.0.9` 和 `git push origin v3.0.9`。若对应 Release 已存在，应使用新版本。
+3. 对已验证提交创建、推送 Tag，例如 `git tag v3.0.10` 和 `git push origin v3.0.10`。若对应 Release 已存在，应使用新版本。
 
 Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改版本。预发布示例为 v3.0.10-rc.1，两处版本必须精确为 3.0.10-rc.1。非版本形式的 v\* Tag 明确报错。
 

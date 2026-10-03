@@ -108,6 +108,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   width: 100%;
   padding: 4px clamp(16px, 5vw, 24px) calc(10px + var(--mobile-safe-bottom));
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(24px, auto) 60px 16px;
   row-gap: clamp(6px, 1.5vh, 14px);
   background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
@@ -134,6 +135,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   }
 
   .control-section {
+    min-width: 0;
     width: 100%;
     max-width: 420px;
     margin: 0 auto;
@@ -189,6 +191,15 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
       &:active {
         transform: scale(0.95);
       }
+    }
+
+    // 窄视口按可用宽度收缩按钮，避免默认最小内容宽度撑出安全区
+    .placeholder,
+    .mode-btn,
+    .ctrl-btn,
+    .play-btn {
+      min-width: 0;
+      flex-shrink: 1;
     }
   }
 

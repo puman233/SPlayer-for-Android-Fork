@@ -66,3 +66,17 @@ CI：https://github.com/puman233/SPlayer-for-Android-Fork/actions/runs/370960609
 - 普通按钮、图标、顶栏最小触摸尺寸和封面首选上限仍使用固定 CSS px；没有固定底部占位高度或针对单机型的遮挡补丁。
 
 - 最终 debug APK：`android/app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`（64,723,584 字节），另含 armeabi-v7a、x86、x86_64；仅用于测试，未执行正式发布或真机安装。
+
+## v3.0.10 发布验证（2026-10-03）
+
+状态：VERIFIED（以下本地验证）；版本 3.0.10 / versionCode 30016。GitHub 发布尚待 CI。
+
+- 追加修复：底栏 grid 使用 minmax(0, 1fr)，按钮根据剩余宽度收缩，240px 极窄 WebView 下分页区域仍位于屏幕内。
+- 独立验证包 top.imsyy.splayer.android.uiverify，与模拟器现有正式包和 debug 包并存，没有清除已有应用数据。仅验证包生成资源启用 CDP；正式配置保持 WebView debugging=false。
+- 实际 Android APK：720×1280、1080×1920、1080×2400、1440×3200；手势导航与三键导航各一轮，封面、Metadata、底栏均无重叠，分页横向边界正确。
+- 真实触摸：歌词初始显示，闲置淡出，点击恢复；纵向拖动超过 4 秒仍显示，松手后再次隐藏。Android 合成点击有延迟，验收在末次事件与动画完成后进行。
+- 评论用固定 API/健康检查响应隔离独立包内嵌服务环境：评论文字、时间、点赞计数持续显示，歌曲卡片可隐藏/恢复，完整底栏不挂载。
+- 真实原生播放：私有目录的静音 WAV 测试文件通过现有 Native Playback 插件播放；评论页和歌词 UI 隐藏时仍播放；返回桌面 6 秒后回到 APK，positionMs 从 20135 增至 27189，playing=true。
+- 测试后恢复模拟器物理分辨率、密度与原导航 overlay；停止测试音频；验证包、临时音频和验证脚本均已清理，截图与日志保存在仓库外的本轮验证目录。
+- 本地播放页状态测试 6 项、发布保护测试 15 项、Vue 类型检查与 ESLint 均通过；Android CI 增加播放页类型与状态测试。
+- Android Lint 的历史原生代码 205 errors / 33 warnings 仍保留，不修改播放服务来消除报告。

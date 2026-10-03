@@ -18,6 +18,8 @@ runs:
       with:
         cache-read-only: ${{ github.ref != 'refs/heads/dev' }}
     - uses: android-actions/setup-android@v3
+      with:
+        packages: platform-tools
     - name: 安装 Android 工具链
       shell: bash
       run: |

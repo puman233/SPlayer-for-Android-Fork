@@ -2,21 +2,25 @@
   <div class="song-card">
     <div :class="['song-content', { play: musicStore.playSong.id === song.id }]">
       <!-- 序号 -->
-      <div class="num" @dblclick.stop>
+      <AdaptiveButton
+        icon-only
+        quaternary
+        class="num"
+        :aria-label="`播放或暂停 ${song.name}`"
+        @dblclick.stop
+        @click.stop="
+          musicStore.playSong.id === song.id ? player.playOrPause() : player.addNextSong(song, true)
+        "
+      >
         <n-text v-if="musicStore.playSong.id !== song.id" depth="3">
           {{ index + 1 }}
         </n-text>
         <SvgIcon v-else :size="22" name="Music" />
         <!-- 播放暂停 -->
-        <SvgIcon
-          :size="28"
-          :name="statusStore.playStatus ? 'Pause' : 'Play'"
-          class="status"
-          @click="player.playOrPause()"
-        />
+        <SvgIcon :size="28" :name="statusStore.playStatus ? 'Pause' : 'Play'" class="status" />
         <!-- 播放 -->
-        <SvgIcon :size="28" name="Play" class="play" @click="player.addNextSong(song, true)" />
-      </div>
+        <SvgIcon :size="28" name="Play" class="play" />
+      </AdaptiveButton>
       <!-- 标题 -->
       <div class="title">
         <!-- 封面 -->
@@ -53,41 +57,46 @@
               </n-text>
             </n-ellipsis>
           </div>
-          <n-flex :size="4" :wrap="false" class="desc" align="center">
+          <n-flex :size="4" :wrap="true" class="desc" align="center">
             <!-- 音质 -->
-            <n-tag
+            <AdaptiveTag
               v-if="song?.quality && settingStore.showSongQuality"
               :type="qualityColor"
               class="quality"
               round
             >
               {{ song.quality }}
-            </n-tag>
+            </AdaptiveTag>
             <!-- 原唱翻唱 -->
             <template v-if="settingStore.showSongOriginalTag">
-              <n-tag v-if="song.originCoverType === 1" :bordered="false" type="primary" round>
+              <AdaptiveTag v-if="song.originCoverType === 1" :bordered="false" type="primary" round>
                 原
-              </n-tag>
-              <n-tag v-if="song.originCoverType === 2" :bordered="false" type="info" round>
+              </AdaptiveTag>
+              <AdaptiveTag v-if="song.originCoverType === 2" :bordered="false" type="info" round>
                 翻唱
-              </n-tag>
+              </AdaptiveTag>
             </template>
             <!-- 特权 -->
             <template v-if="settingStore.showSongPrivilegeTag">
-              <n-tag v-if="song.free === 1" :bordered="false" type="error" round> VIP </n-tag>
-              <n-tag v-if="song.free === 4" :bordered="false" type="error" round> EP </n-tag>
+              <AdaptiveTag v-if="song.free === 1" :bordered="false" type="error" round>
+                VIP
+              </AdaptiveTag>
+              <AdaptiveTag v-if="song.free === 4" :bordered="false" type="error" round>
+                EP
+              </AdaptiveTag>
               <!-- 云盘 -->
-              <n-tag v-if="song?.pc" :bordered="false" class="cloud" type="info" round>
+              <AdaptiveTag v-if="song?.pc" :bordered="false" class="cloud" type="info" round>
                 <template #icon>
                   <SvgIcon name="Cloud" />
                 </template>
-              </n-tag>
+              </AdaptiveTag>
             </template>
             <!-- MV -->
-            <n-tag
+            <AdaptiveTag
               v-if="song?.mv"
               :bordered="false"
               class="mv"
+              interactive
               type="warning"
               round
               @click.stop="
@@ -98,9 +107,9 @@
               "
             >
               MV
-            </n-tag>
+            </AdaptiveTag>
             <!-- 脏标 -->
-            <n-tag
+            <AdaptiveTag
               v-if="
                 settingStore.showSongExplicitTag && song.mark && song.mark & EXPLICIT_CONTENT_MARK
               "
@@ -111,7 +120,7 @@
               title="Explicit Content"
             >
               E
-            </n-tag>
+            </AdaptiveTag>
             <!-- 歌手 -->
             <template v-if="settingStore.showSongArtist">
               <div v-if="Array.isArray(song.artists)" class="artists">
@@ -169,15 +178,25 @@
         @dblclick.stop
       >
         <!-- 喜欢歌曲 -->
-        <SvgIcon
+        <AdaptiveButton
           v-if="!isPhone"
-          :name="dataStore.isLikeSong(song.id) ? 'Favorite' : 'FavoriteBorder'"
-          :size="20"
+          icon-only
+          quaternary
+          aria-label="收藏歌曲"
           @click.stop="toLikeSong(song, !dataStore.isLikeSong(song.id))"
-          @delclick.stop
-        />
+          ><SvgIcon
+            :name="dataStore.isLikeSong(song.id) ? 'Favorite' : 'FavoriteBorder'"
+            :size="20"
+        /></AdaptiveButton>
         <!-- 移动端菜单 -->
-        <SvgIcon v-else name="More" :size="20" @click.stop="emit('show-menu', $event)" />
+        <AdaptiveButton
+          v-else
+          icon-only
+          quaternary
+          aria-label="歌曲更多操作"
+          @click.stop="emit('show-menu', $event)"
+          ><SvgIcon name="More" :size="20"
+        /></AdaptiveButton>
       </div>
       <!-- 更新日期 -->
       <n-text v-if="song.type === 'radio' && !isPhone" class="meta date" depth="3">
@@ -257,10 +276,12 @@ const albumName = computed(() => {
 
 <style lang="scss" scoped>
 .song-card {
-  height: 90px;
+  min-height: 90px;
+  height: auto;
+  padding-bottom: var(--adaptive-space-sm, 8px);
   cursor: pointer;
 
-  // 手机端紧凑：保持外层高度（虚拟滚动依赖固定 itemHeight=90），只压内边距 / cover / 字号
+  // 紧凑窗口减少留白，行高交由虚拟列表测量。
   @media (max-width: 768px) {
     .song-content {
       padding: 6px 10px;
@@ -336,8 +357,9 @@ const albumName = computed(() => {
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 40px;
-    min-width: 40px;
+    width: 48px;
+    min-width: 48px;
+    min-height: 48px;
     font-weight: bold;
     margin-right: 12px;
     .n-icon {
@@ -380,6 +402,7 @@ const albumName = computed(() => {
     }
     .info {
       min-width: 0;
+      flex: 1;
       .name {
         display: flex;
         flex-direction: row;
@@ -421,7 +444,7 @@ const albumName = computed(() => {
         }
       }
       .artists {
-        flex: 1;
+        flex: 1 1 100%;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -472,7 +495,8 @@ const albumName = computed(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
+    width: 48px;
+    flex: 0 0 48px;
     .n-icon {
       color: var(--primary-hex);
       transition: transform 0.3s;

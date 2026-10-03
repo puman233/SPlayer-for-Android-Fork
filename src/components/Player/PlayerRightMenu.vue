@@ -85,6 +85,11 @@
         marginRight: settingStore.showPlaylistCount ? '12px' : null,
       }"
     >
+      <template v-if="plainCount" #value>
+        <span class="playlist-count">{{
+          (dataStore.playList?.length ?? 0) > 9999 ? "9999+" : (dataStore.playList?.length ?? 0)
+        }}</span>
+      </template>
       <div class="menu-icon" @click.stop="statusStore.playListShow = !statusStore.playListShow">
         <SvgIcon name="PlayList" />
       </div>
@@ -102,7 +107,7 @@ import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 
-defineProps<{ persistent?: boolean }>();
+defineProps<{ persistent?: boolean; plainCount?: boolean }>();
 
 const dataStore = useDataStore();
 const statusStore = useStatusStore();

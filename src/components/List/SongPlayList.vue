@@ -26,7 +26,7 @@
           v-if="dataStore.playList.length"
           ref="playListRef"
           :item-height="playlistItemHeight"
-          :item-fixed="true"
+          :item-fixed="false"
           :items="playListData"
           :default-scroll-index="statusStore.playIndex"
           class="playlist-list"
@@ -116,7 +116,9 @@
                   </div>
                 </div>
                 <!-- 移除 -->
-                <div
+                <AdaptiveButton
+                  icon-only
+                  quaternary
                   class="remove"
                   role="button"
                   tabindex="0"
@@ -126,7 +128,7 @@
                   @keydown.space.prevent.stop="player.removeSongIndex(index)"
                 >
                   <SvgIcon :size="20" name="Delete" />
-                </div>
+                </AdaptiveButton>
               </div>
             </div>
           </template>
@@ -147,15 +149,15 @@
           :class="{ 'pad-portrait': isPadPortraitPlaylist }"
         >
           <n-gi>
-            <n-button :focusable="false" size="large" strong secondary @click="cleanPlayList">
+            <AdaptiveButton :focusable="false" size="large" strong secondary @click="cleanPlayList">
               <template #icon>
                 <SvgIcon name="DeleteSweep" />
               </template>
               清空列表
-            </n-button>
+            </AdaptiveButton>
           </n-gi>
           <n-gi>
-            <n-button
+            <AdaptiveButton
               :focusable="false"
               size="large"
               strong
@@ -167,7 +169,7 @@
                 <SvgIcon name="Location" />
               </template>
               当前播放
-            </n-button>
+            </AdaptiveButton>
           </n-gi>
         </n-grid>
       </template>
@@ -205,28 +207,35 @@ const dataStore = useDataStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const player = usePlayerController();
-const { isPadDevice, isPhonePortrait } = useDevice();
+const { isPhonePortrait, fontScale, adaptiveWindow } = useDevice();
 
 const playListRef = ref<InstanceType<typeof VirtualScroll> | null>(null);
 const playlistTeleportTarget = computed(() =>
   statusStore.showFullPlayer ? ".full-player" : "#app",
 );
-const isPadPortraitPlaylist = computed(() => isPadDevice.value && isPhonePortrait.value);
-const isPhoneBottomSheet = computed(() => !isPadDevice.value && isPhonePortrait.value);
+const isPadPortraitPlaylist = computed(
+  () => adaptiveWindow.value.widthClass !== "compact" && isPhonePortrait.value,
+);
+const isPhoneBottomSheet = computed(
+  () => adaptiveWindow.value.widthClass === "compact" && isPhonePortrait.value,
+);
 const drawerPlacement = computed(() => (isPhoneBottomSheet.value ? "bottom" : "right"));
 const drawerStyle = computed(() =>
   isPhoneBottomSheet.value
     ? { width: "100%", height: "min(72dvh, 620px)" }
-    : { width: isPadPortraitPlaylist.value ? "min(88vw, 560px)" : "min(400px, 100vw)" },
+    : {
+        width:
+          adaptiveWindow.value.heightClass === "compact"
+            ? "min(640px, 100vw)"
+            : isPadPortraitPlaylist.value
+              ? "min(88vw, 560px)"
+              : "min(400px, 100vw)",
+      },
 );
-const playlistItemHeight = computed(() => (isPadPortraitPlaylist.value ? 96 : 88));
-const playlistHeight = computed(() =>
-  isPhoneBottomSheet.value
-    ? "calc(min(72dvh, 620px) - 142px)"
-    : isPadPortraitPlaylist.value
-      ? "calc(var(--page-zoom-100dvh, 100dvh) - 170px)"
-      : "calc(var(--page-zoom-100dvh, 100dvh) - 142px)",
+const playlistItemHeight = computed(
+  () => (isPadPortraitPlaylist.value ? 96 : 88) * fontScale.value,
 );
+const playlistHeight = "100%";
 
 // 播放列表数据
 const playListData = computed(() => {
@@ -401,8 +410,10 @@ const {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 100%;
+      min-width: 48px;
+      width: 48px;
+      min-height: 48px;
+      height: 48px;
       cursor: grab;
       color: rgba(var(--text-color), 0.3);
       transition: color 0.3s;
@@ -430,6 +441,7 @@ const {
     }
     .data {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -462,8 +474,9 @@ const {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 44px;
+      min-width: 48px;
+      width: 48px;
+      height: 48px;
       padding: 0;
       border-radius: 8px;
       transition: background-color 0.3s;
@@ -482,17 +495,17 @@ const {
   }
 }
 .playlist-menu {
-  height: 40px;
+  height: auto;
   .n-button {
     width: 100%;
     border-radius: 8px;
   }
 
   &.pad-portrait {
-    height: 52px;
+    height: auto;
 
     .n-button {
-      height: 52px;
+      height: auto;
       border-radius: 12px;
       font-size: 15px;
     }
@@ -636,6 +649,58 @@ const {
           color: rgba(var(--main-cover-color), 0.52);
         }
       }
+    }
+  }
+}
+</style>
+
+<style lang="scss">
+#main-playlist,
+#main-playlist.phone-sheet,
+#main-playlist.pad-portrait {
+  .n-drawer-header,
+  .n-drawer-footer {
+    height: auto;
+    flex-shrink: 0;
+    min-height: 48px;
+  }
+  .n-drawer-header__main {
+    min-width: 0;
+    flex: 1;
+  }
+  .playlist-header {
+    min-width: 0;
+    flex-wrap: wrap;
+    .count {
+      white-space: normal;
+    }
+  }
+  .playlist-list .song-item {
+    height: auto;
+    .data {
+      height: auto;
+      min-width: 0;
+      .name {
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+    }
+  }
+  .playlist-menu {
+    .adaptive-button {
+      width: 100%;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+  }
+  .n-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    svg {
+      max-width: 100%;
+      max-height: 100%;
     }
   }
 }

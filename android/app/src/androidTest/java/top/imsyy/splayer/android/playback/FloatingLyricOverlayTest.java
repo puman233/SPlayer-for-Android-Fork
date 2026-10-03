@@ -79,8 +79,13 @@ public class FloatingLyricOverlayTest {
     context = instrumentation.getTargetContext();
     assertTrue("必须使用 -PverificationSuffix=.lyricsverify", context.getPackageName().endsWith(".lyricsverify"));
     Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    android.app.Activity launchActivity = instrumentation.startActivitySync(
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     SystemClock.sleep(2000);
+    // 原生绘制测试独占输入，避免网页恢复的暂停状态覆盖测试进度。
+    main(() -> ((top.imsyy.splayer.android.MainActivity) launchActivity)
+        .getBridge().getWebView().loadUrl("about:blank"));
+    SystemClock.sleep(500);
     main(() -> context.getSharedPreferences("floating_lyric_prefs", Context.MODE_PRIVATE).edit().clear().commit());
     PlaybackManager manager = PlaybackManager.getInstance(context);
     try {
@@ -119,11 +124,22 @@ public class FloatingLyricOverlayTest {
       }
       String scrollingJson = new org.json.JSONArray().put(new JSONObject().put("startTime", 0)
           .put("endTime", 20000).put("words", new org.json.JSONArray().put(
-              new JSONObject().put("word", samples[3]).put("startTime", 0).put("endTime", 20000)))).toString();
+              // 平板横屏也必须产生实际溢出，不能把短句不滚动误判为失败。
+              new JSONObject().put("word", samples[3] + " " + samples[3])
+                  .put("startTime", 0).put("endTime", 20000)))).toString();
       main(() -> { service.pushLyrics(scrollingJson, "[]"); service.pushProgress(0, true); });
       Bitmap initial = capture(view);
+      long initialProgress = service.seekMs();
       SystemClock.sleep(2200);
       Bitmap scrolled = capture(view);
+      android.os.Bundle scrollReport = new android.os.Bundle();
+      scrollReport.putString("overlayScroll", new JSONObject().put("width", view.getWidth())
+          .put("height", view.getHeight()).put("fontPx", field(service, "fontPx"))
+          .put("textWidth", new FloatingLyricTextLayout(samples[3] + " " + samples[3], (float) field(service, "fontPx"), service.fontWeight).width)
+          .put("initialProgress", initialProgress).put("progress", service.seekMs())
+          .put("playing", service.playing).put("activeLines", service.activeLines().size())
+          .put("index", field(view, "lastIndex")).put("scrollStart", field(view, "scrollStartMs")).toString());
+      instrumentation.sendStatus(0, scrollReport);
       assertFalse("长句应保持字号并改变内容偏移", initial.sameAs(scrolled));
       main(() -> service.pushProgress(service.seekMs() - 300, false));
       Bitmap paused = capture(view);
@@ -213,6 +229,6 @@ public class FloatingLyricOverlayTest {
       assertEquals("USER_DEFINED", service.fontSizeMode);
       assertEquals(30f, service.fontSizeSp, 0);
       assertEquals(0xFF123456, service.colorPlayed);
-    } finally { main(manager::hideFloatingLyric); }
+    } finally { main(manager::hideFloatingLyric); main(launchActivity::finish); }
   }
 }

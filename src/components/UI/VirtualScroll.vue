@@ -31,7 +31,9 @@
               left: 0,
               right: 0,
               transform: `translateY(${getItemTop(actualStartIndex + index)}px)`,
-              transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              transition: props.itemFixed
+                ? 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
+                : 'none',
             }"
           >
             <slot :item="item" :index="actualStartIndex + index" />
@@ -44,6 +46,7 @@
 
 <script setup lang="ts">
 import type { NScrollbar } from "naive-ui";
+import { findVisibleRowIndex } from "@/core/layout/virtualRows";
 
 interface Props {
   /** 列表项数据 */
@@ -141,6 +144,7 @@ const updateTops = (fromIndex = 0) => {
   }
 
   itemTops.value = tops;
+  triggerRef(itemTops);
 };
 
 // 列表总高度
@@ -177,25 +181,12 @@ const calculateVisibleRange = (currentScrollTop: number) => {
     const tops = itemTops.value;
     const heights = itemHeights.value;
     const len = tops.length;
-
-    // 二分查找起始索引
-    let lo = 0;
-    let hi = len - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >>> 1;
-      const bottom = tops[mid] + heights[mid];
-      if (bottom > currentScrollTop) {
-        startIndex = mid;
-        hi = mid - 1;
-      } else {
-        lo = mid + 1;
-      }
-    }
+    startIndex = findVisibleRowIndex(tops, heights, currentScrollTop);
 
     // 二分查找结束索引
     const viewportBottom = currentScrollTop + vHeight;
-    lo = startIndex;
-    hi = len - 1;
+    let lo = startIndex;
+    let hi = len - 1;
     endIndex = startIndex;
     while (lo <= hi) {
       const mid = (lo + hi) >>> 1;
@@ -279,10 +270,12 @@ const measureItemHeights = () => {
   if (!itemRefs.value.length || props.items.length === 0) return;
 
   let hasChanges = false;
-  itemRefs.value.forEach((el, index) => {
+  itemRefs.value.forEach((el) => {
     if (!el) return;
 
-    const actualIndex = actualStartIndex.value + index;
+    // keyed 行复用后 ref 数组顺序不保证与 DOM 顺序一致。
+    const actualIndex = Number(el.dataset.index);
+    if (!Number.isInteger(actualIndex)) return;
     if (actualIndex < 0 || actualIndex >= props.items.length) return;
 
     try {
@@ -301,6 +294,7 @@ const measureItemHeights = () => {
   if (hasChanges) {
     triggerRef(itemHeights);
     updateTops();
+    calculateVisibleRange(scrollTop.value);
   }
 };
 
@@ -392,6 +386,22 @@ defineExpose({
 
 // 防抖高度测量
 const debouncedMeasure = useDebounceFn(measureItemHeights, 50);
+// 只观察已渲染行，字体与容器变化后更新实际定位。
+useResizeObserver(itemRefs, debouncedMeasure);
+watch(
+  () => props.itemHeight,
+  () => {
+    if (!props.itemFixed) {
+      const anchor = getDropInfoByOffset(scrollTop.value).index;
+      itemHeights.value = props.items.map(() => props.itemHeight);
+      updateTops();
+      scrollTop.value = getItemTop(anchor);
+      scrollbarRef.value?.scrollTo({ top: scrollTop.value });
+      nextTick(debouncedMeasure);
+    }
+    calculateVisibleRange(scrollTop.value);
+  },
+);
 
 // 监听数据变化
 watch(

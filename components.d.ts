@@ -13,6 +13,8 @@ declare module 'vue' {
   export interface GlobalComponents {
     ABLoop: typeof import('./src/components/Modal/ABLoop.vue')['default']
     AboutSetting: typeof import('./src/components/Setting/AboutSetting.vue')['default']
+    AdaptiveButton: typeof import('./src/components/UI/AdaptiveButton.vue')['default']
+    AdaptiveTag: typeof import('./src/components/UI/AdaptiveTag.vue')['default']
     AMLLServer: typeof import('./src/components/Modal/Setting/AMLLServer.vue')['default']
     AMLyric: typeof import('./src/components/Player/PlayerLyric/AMLyric.vue')['default']
     AndroidUpdateApp: typeof import('./src/components/Modal/AndroidUpdateApp.vue')['default']

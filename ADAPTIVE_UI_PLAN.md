@@ -71,3 +71,15 @@ MainActivity 根据系统 fontScale 设置 WebView textZoom，配置变更保留
 共享 DesktopLyricsButton 使用 Naive UI 与现有 DesktopLyric2 图标，手机和平板播放页均有独立入口。Android 以实际悬浮窗口与权限确定 OFF/ON/PERMISSION_REQUIRED，窗口尚未就绪或切换中禁用按钮；先注册前台恢复事件再跳转设置，返回后继续开启。原生服务附着、停止与页面恢复均校准状态，不改音频引擎生命周期。
 
 双端已执行五档真实系统字号 × 两个方向 × cover/record/fullscreen 共 60 组长标题、中英日、emoji 内容几何检查，以及原生开关、外部服务停止、缺权限、实际系统授权页返回自动继续。详细最终产物与测试范围见 checkpoint。完整导航/cutout、新共享列表与 MiniPlayer、AMLL 内容矩阵、真实系统分屏和最终 v3.0.11 APK 替换仍待后续阶段完成。
+
+## 共享控件与列表阶段
+
+新增 AdaptiveButton、AdaptiveTag，沿用所接入组件的 Naive UI props、事件及默认/图标插槽，图标尺寸与文字缩放分开，交互触控下限为 48 CSS px。已接入 MainPlayer、SongCard 与播放队列；未替换所有页面的 Naive UI 调用。
+
+MainPlayer 按容器宽度与字号重排，紧凑布局保留前后曲和播放，随机/循环进入明确的更多菜单。歌词行自然增高，测量实际播放栏高度供 AppLayout 预留空间，不再根据硬件身份决定控制按钮。歌曲标签与歌手分行，表头、队列头尾和歌曲行允许自然增高，队列依据可用窗口分级选择布局。
+
+SongList 与 SongPlayList 使用现有 VirtualScroll 动态测量，只观察已渲染行；按 DOM 的真实 data-index 映射测量，避免 keyed ref 数组顺序变化导致错配。累积位置的 shallowRef 明确触发更新，字号改变重置未测量行估计并保持当前行锚点。滚动、跳转和拖拽仍复用同一实际位置表。
+
+动态行定位取消位置过渡动画，避免连续测量期间出现视觉重叠；旧滚动偏移超过新列表末尾时钳制到最后一行，不能回退首行并渲染整个列表。迷你播放栏在宽度足够的矮窗口改为单行；队列数量进入流式排布，通过 Naive UI 徽标值插槽显示完整数量，避免固定数字动画行盒的大字裁切和重叠。
+
+最终测试证据、产物和剩余验收范围记录于 checkpoint；正式发布阶段仍按用户授权替换 v3.0.11 APK，不创建新版本。

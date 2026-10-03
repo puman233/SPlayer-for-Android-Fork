@@ -1,5 +1,21 @@
 # Android 自动发布工作流检查点
 
+## v3.0.11 共享控件与歌曲列表修补（2026-10-03）
+
+本轮阶段：共享控件、迷你播放栏、歌曲列表与播放队列。状态：VERIFIED（仅下述范围）；完整自适应任务仍为 IMPLEMENTED。正式版本保持 3.0.11 / 30017，未创建版本、Tag、Release，也未替换公开 APK。
+
+- 新增 Naive UI AdaptiveButton/AdaptiveTag，按钮支持内容换行，图标尺寸独立约束；交互区域下限 48 CSS px。接入 MainPlayer、SongCard 和播放队列，其他页面未全面迁移。
+- 迷你播放栏按实际容器及字号重排，紧凑布局保留前后曲和播放，随机/循环进入明确的更多菜单；宽度足够的矮窗口使用单行。歌词行自然增高，AppLayout 使用实际栏高预留空间。队列数量进入流式布局，通过 Naive UI 徽标值插槽显示完整文字，避免固定数字动画尺寸的大字裁切与重叠；播放器其他既有数量徽标保留原行为。
+- 歌曲标签与歌手分行，行、表头、队列头尾按内容增高。歌曲标题保留原有单行省略及提示行为，不声称所有长标题完整铺开。队列根据窗口选择底部/侧边布局，短窗口增加文案横向空间。
+- VirtualScroll 按真实 data-index 测量，修复 keyed refs 顺序错配；shallowRef 累积位置显式触发更新，字体变化刷新估计并保留行锚点。动态定位取消动画，末尾旧偏移钳制到最后一行，避免回退第 0 行并渲染全部 200 首歌曲。相关 4 项边界测试进入 Android CI。
+- 已执行 pnpm format、pnpm build:android、pnpm lint（零错误/警告）、pnpm typecheck:web；32 项 TypeScript、15 项发布保护、18 项 JVM 测试通过。普通及隔离 debug APK、仪器包构建成功。原生 Lint 报告仍为历史 187 errors / 27 warnings，不能视为全项目零错误。
+- 前端构建仍包含已有 ffmpeg.wasm 运行时 URL 与大 chunk 提示，构建成功不代表没有打包提示。最终普通 ARM64 APK 为 64,279,899 字节，SHA-256：b3f0f29d500880d16d8793ae81496fe0de27874288dc0189658784c5722c7f2a；四 ABI ZIP/资源、包名 top.imsyy.splayer.android.debug、3.0.11-debug / 30017 均验收通过。隔离测试包使用 .lyricsverify。
+- 双端专项矩阵通过：MuMu 手机 SM-A5560 与平板 ALT-AL10，API 35；ADB 重连后使用 127.0.0.1:16384 / 16416。每端五档实际系统字号 1.0/1.15/1.3/1.5/2.0 × 横竖屏共 10 场景，覆盖长中英日/emoji、标签、48px 核心操作、200 首列表首部/中部/末尾、100 首队列长文案与移除。已检查实际 Activity PixelCopy 截图，未使用模拟器桌面截图冒充应用结果。
+- 失败与修正：测试 fixture 改用真实 history 数据入口；排除 display:none 节点后验证可见按钮。设备发现动态定位动画重叠、末尾范围回退、队列固定 footer 裁切和徽标行盒裁切，均修复并加入实际回归。旧桌面歌词测试失败现场 playing=false，确认网页恢复的暂停输入干扰原生绘制；仅在该隔离测试卸载网页并保留 Activity，诊断记录显示 progress 302→2503、playing=true，定点测试通过。较长英文样本保证平板宽窗口也溢出；曾直接关闭 Activity 导致旋转不变，改为保留原生窗口。失败日志保留，未计入通过。
+- 产物与证据目录：C:/Users/ihyj/.codex/visualizations/2026/10/03/01a10146-a8d1-7132-a8a7-785cf718820d/shared-stage。包括四 ABI 普通 debug APK、隔离 ARM64/仪器 APK、双端套件日志、截图、ZIP/包名/版本/哈希检查及 JVM/Lint 报告；正式包未清数据。
+- 最终交付 APK 双端完整仪器套件各 OK (7 tests)，日志 phone-shared-final.log / tablet-shared-final.log；每端 10 个共享场景、30 个播放器场景和 20 次中部/末尾滚动检查，数量文字本体边界及队列移除通过。实际截图确认完整数量 100。两端隔离包及仪器包已卸载；fontScale=1.0、user_rotation=0、accelerometer_rotation=1，正式包及原有平板 debug 包保留。应用 display 策略由测试 finally 恢复；Activity 结束后 display 7 不可查询，清理记录明确该限制。
+- 剩余：真实系统分屏、API 29、物理 cutout、AMLL 内容矩阵、触摸拖拽/重排及所有页面大字号仍未完成完整验收。极端字号下最近播放页仍依赖页面滚动访问内容，不声称整个页面无需滚动。最终阶段准备同版本修补工作流，替换现有 v3.0.11 四 ABI 正式 APK并记录源码/签名/哈希，不移动 Tag、不创建新版本。本阶段验证、提交并同步 dev 后停止。上一阶段 Android CI 37119748685 已确认成功；本轮推送后单独核对远端 CI。
+
 ## v3.0.11 播放器与独立歌词入口修补（2026-10-03）
 
 本轮阶段：播放器布局与独立桌面歌词入口。状态：VERIFIED（仅下述范围）；完整自适应任务仍为 IMPLEMENTED。版本仍为 3.0.11 / 30017，未创建版本、Tag、Release，也未替换公开 APK。

@@ -609,5 +609,102 @@ const handleTabChange = (value: "songs" | "comments") => {
       }
     }
   }
+  // 手机头部：封面与信息两列，操作独占完整的一行。
+  @media (max-width: 768px) {
+    .detail,
+    &.small .detail {
+      height: 168px;
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      grid-template-rows: auto minmax(24px, 1fr) 32px;
+      gap: 6px 12px;
+      padding: 10px 16px 16px 0;
+      box-sizing: border-box;
+      .cover {
+        grid-row: 1 / 3;
+        width: 96px;
+        height: 96px;
+        margin: 0;
+      }
+      .data {
+        display: contents;
+        .name {
+          grid-column: 2;
+          margin: 0;
+          font-size: 20px;
+          line-height: 1.4;
+        }
+        .collapse {
+          grid-column: 2;
+          margin: 0;
+          overflow: auto;
+          min-height: 24px;
+        }
+        .meta {
+          flex-wrap: nowrap !important;
+          gap: 4px 8px !important;
+          line-height: 24px;
+        }
+        .meta .item {
+          flex-shrink: 0;
+          min-width: 0;
+          max-width: 100%;
+        }
+        .meta .item:first-child {
+          flex: 1;
+        }
+        .meta .artists {
+          min-width: 0;
+          display: block;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          .ar {
+            display: inline;
+            white-space: nowrap;
+          }
+        }
+        .meta .n-icon {
+          flex-shrink: 0;
+        }
+        .meta .item > .n-text {
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .menu {
+          grid-column: 1 / -1;
+          margin: 0;
+          flex-wrap: nowrap !important;
+          .left {
+            width: 100%;
+            flex-wrap: nowrap !important;
+            gap: 6px !important;
+          }
+          :deep(.n-button) {
+            --n-padding: 0 10px;
+            --n-font-size: 12px;
+            flex-shrink: 0;
+          }
+          .more {
+            width: 32px;
+            margin-left: auto;
+          }
+        }
+      }
+    }
+    &:not(.small) .detail:has(.description) {
+      height: 192px;
+    }
+    &.small .detail {
+      height: 120px;
+      grid-template-columns: 56px minmax(0, 1fr);
+    }
+    &.small .detail .cover {
+      width: 56px;
+      height: 56px;
+    }
+  }
 }
 </style>

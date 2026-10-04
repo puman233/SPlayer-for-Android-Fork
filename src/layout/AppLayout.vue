@@ -173,6 +173,7 @@ import { defineAsyncComponent } from "vue";
 import { useMusicStore, useStatusStore, useSettingStore, useDataStore } from "@/stores";
 import { useBlobURLManager } from "@/core/resource/BlobURLManager";
 import { isElectron } from "@/utils/env";
+import { usePlayerClearance } from "@/composables/usePlayerClearance";
 import { useDevice } from "@/composables/useDevice";
 import { useInit } from "@/composables/useInit";
 import { triggerViewRefresh } from "@/composables/useViewRefresh";
@@ -328,15 +329,7 @@ const padSiderBg = computed(() => {
 });
 
 // 回到顶部偏移
-const phoneBackTopBottom = computed(() => {
-  const navHeight = 56;
-  const playerHeight = 64;
-  const playerGap = 8;
-  const hasPlayer = musicStore.isHasPlayer && statusStore.showPlayBar;
-  // 底栏上方
-  const base = navHeight + 16;
-  return hasPlayer ? base + playerHeight + playerGap : base;
-});
+const phoneBackTopBottom = usePlayerClearance();
 
 const loadBackgroundImage = async () => {
   if (statusStore.backgroundImageUrl) return;

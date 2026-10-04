@@ -74,7 +74,7 @@
         </div>
       </div>
     </div>
-    <!-- 控件保留原位置，淡出不改变封面与歌词尺寸。 -->
+    <!-- 隐藏控件时让歌词使用底部空间。 -->
     <section
       class="landscape-controls auto-controls"
       :inert="!controls.visible.value"
@@ -186,7 +186,14 @@ useResizeObserver([leftRef, infoRef], measureCover);
   padding: var(--safe-area-top, 0px) var(--safe-area-right, 0px) var(--safe-area-bottom, 0px)
     var(--safe-area-left, 0px);
   display: grid;
-  grid-template-rows: 24px minmax(0, 1fr) 84px;
+  grid-template-rows: 48px minmax(0, 1fr) 84px;
+  &[data-controls-visible="false"] {
+    grid-template-rows: 48px minmax(0, 1fr) 0px;
+    .landscape-controls {
+      padding: 0;
+      overflow: hidden;
+    }
+  }
   color: rgb(var(--main-cover-color));
   .landscape-header {
     display: flex;
@@ -265,6 +272,12 @@ useResizeObserver([leftRef, infoRef], measureCover);
       margin: 0;
       padding: 0;
     }
+    :deep(.alia) {
+      width: 100%;
+      text-align: center;
+      font-size: 13px;
+      margin: 4px 0;
+    }
     :deep(.name) {
       margin-bottom: 6px;
     }
@@ -318,9 +331,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
     }
   }
   &[data-controls-visible="false"] :deep(.meta-actions-row) {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+    display: none;
   }
   .landscape-comment {
     width: 100%;
@@ -373,7 +384,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
     .control-content {
       grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr);
       gap: 8px;
-      align-items: end;
+      align-items: center;
     }
     .center {
       height: 100%;
@@ -412,6 +423,8 @@ useResizeObserver([leftRef, infoRef], measureCover);
     }
     .left,
     .right {
+      align-self: start;
+      margin-top: 4px;
       padding: 0 4px;
       height: 40px;
       border: 1px solid rgba(var(--main-cover-color), 0.15);

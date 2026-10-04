@@ -8,6 +8,7 @@ import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Log;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -15,13 +16,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Locale;
@@ -32,8 +29,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @CapacitorPlugin(name = "AndroidAppUpdate")
 public class AndroidAppUpdatePlugin extends Plugin {
-  private static final int BUFFER_SIZE = 64 * 1024;
-  private static final long PROGRESS_INTERVAL_MS = 250L;
 
   private final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
@@ -57,6 +52,54 @@ public class AndroidAppUpdatePlugin extends Plugin {
   }
 
   @PluginMethod
+  public void canInstallApk(PluginCall call) {
+    JSObject result = new JSObject();
+    result.put("allowed", getContext().getPackageManager().canRequestPackageInstalls());
+    call.resolve(result);
+  }
+
+  @PluginMethod
+  public void getDownloadedApk(PluginCall call) {
+    String name = sanitizeFileName(call.getString("fileName", ""));
+    String checksum = normalizeSha256(call.getString("sha256", ""));
+    if (downloadInProgress.get()) {
+      call.resolve(new JSObject().put("available", false));
+      return;
+    }
+    try {
+      executor.execute(() -> {
+        boolean available = false;
+        File apk = new File(new File(getContext().getCacheDir(), "updates"), name);
+        android.content.SharedPreferences saved = getContext().getSharedPreferences("android-app-update", 0);
+        if (!checksum.isEmpty() && name.endsWith(".apk") && apk.isFile()
+            && name.equals(saved.getString("fileName", ""))
+            && checksum.equals(saved.getString("sha256", ""))) {
+          try {
+            // 权限页面可能导致进程重建；恢复时重新检查文件及安装兼容性。
+            validateInstallableApk(apk);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (FileInputStream input = new FileInputStream(apk)) {
+              byte[] buffer = new byte[64 * 1024];
+              int count;
+              while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+            }
+            available = checksum.equals(toHex(digest.digest()));
+            if (!available) deleteQuietly(apk);
+          } catch (Exception error) {
+            deleteQuietly(apk);
+          }
+        }
+        JSObject result = new JSObject();
+        result.put("available", available);
+        result.put("bytesRead", available ? apk.length() : 0);
+        call.resolve(result);
+      });
+    } catch (RuntimeException error) {
+      call.reject("Update downloader is unavailable", "UPDATE_DOWNLOAD_FAILED", error);
+    }
+  }
+
+  @PluginMethod
   public void cancelDownload(PluginCall call) {
     cancelRequested.set(true);
     disconnectActiveConnection();
@@ -76,6 +119,12 @@ public class AndroidAppUpdatePlugin extends Plugin {
       call.reject("A valid SHA-256 digest is required", "UPDATE_INVALID_CHECKSUM");
       return;
     }
+    try {
+      UpdateDownloadSources.resolve(url);
+    } catch (IllegalArgumentException error) {
+      call.reject("Invalid GitHub Release APK URL", "UPDATE_INVALID_ARGUMENT", error);
+      return;
+    }
     if (!downloadInProgress.compareAndSet(false, true)) {
       call.reject("Another update download is already running", "UPDATE_DOWNLOAD_BUSY");
       return;
@@ -83,7 +132,8 @@ public class AndroidAppUpdatePlugin extends Plugin {
 
     cancelRequested.set(false);
     try {
-      executor.execute(() -> runDownload(call, url, fileName, expectedSha256));
+      executor.execute(() -> runDownload(call, url, fileName, expectedSha256,
+          Math.max(0L, call.getLong("size", 0L))));
     } catch (RuntimeException error) {
       downloadInProgress.set(false);
       call.reject("Update downloader is unavailable", "UPDATE_DOWNLOAD_FAILED", error);
@@ -91,92 +141,41 @@ public class AndroidAppUpdatePlugin extends Plugin {
   }
 
   private void runDownload(
-      PluginCall call, String sourceUrl, String fileName, String expectedSha256) {
+      PluginCall call, String sourceUrl, String fileName, String expectedSha256, long expectedSize) {
     File updateDir = new File(getContext().getCacheDir(), "updates");
     File partial = new File(updateDir, fileName + ".part");
     File target = new File(updateDir, fileName);
-    HttpURLConnection connection = null;
-
     try {
       if (!updateDir.exists() && !updateDir.mkdirs()) {
         throw new IllegalStateException("Cannot create update cache directory");
       }
-      if (partial.exists() && !partial.delete()) {
-        throw new IllegalStateException("Cannot replace partial update");
-      }
-      if (target.exists() && !target.delete()) {
-        throw new IllegalStateException("Cannot replace downloaded update");
-      }
-
-      connection = (HttpURLConnection) new URL(sourceUrl).openConnection();
-      activeConnection = connection;
-      connection.setConnectTimeout(15_000);
-      connection.setReadTimeout(30_000);
-      connection.setInstanceFollowRedirects(true);
-      connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
-      connection.setRequestProperty("User-Agent", "SPlayer-Android-Updater");
+      if (target.exists() && !target.delete()) throw new IllegalStateException("Cannot replace update");
+      long bytesRead = ApkDownload.fetchSources(UpdateDownloadSources.resolve(sourceUrl), partial,
+          expectedSha256, expectedSize, cancelRequested, new ApkDownload.Observer() {
+            public void connection(HttpURLConnection connection) { activeConnection = connection; }
+            public void progress(long bytes, long total) { notifyProgress(bytes, total); }
+          }, this::validateInstallableApk,
+          error -> Log.d("SPlayerUpdater", "APK source failed: " + error.getClass().getSimpleName()
+              + ": " + error.getMessage()));
       if (cancelRequested.get()) throw new DownloadCancelledException();
-
-      int status = connection.getResponseCode();
-      if (status < 200 || status >= 300) {
-        throw new IllegalStateException("HTTP " + status);
-      }
-
-      long contentLength = connection.getContentLengthLong();
-      long bytesRead = 0L;
-      long lastProgressAt = 0L;
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] buffer = new byte[BUFFER_SIZE];
-
-      try (InputStream input = new BufferedInputStream(connection.getInputStream());
-          FileOutputStream output = new FileOutputStream(partial)) {
-        int count;
-        while ((count = input.read(buffer)) != -1) {
-          if (cancelRequested.get()) throw new DownloadCancelledException();
-          output.write(buffer, 0, count);
-          digest.update(buffer, 0, count);
-          bytesRead += count;
-
-          long now = System.currentTimeMillis();
-          if (now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
-            notifyProgress(bytesRead, contentLength);
-            lastProgressAt = now;
-          }
-        }
-        output.getFD().sync();
-      }
-
-      String actualSha256 = toHex(digest.digest());
-      if (!actualSha256.equals(expectedSha256)) {
-        throw new SecurityException("SHA-256 mismatch");
-      }
-      if (!partial.renameTo(target)) {
-        throw new IllegalStateException("Cannot finalize downloaded update");
-      }
-
-      notifyProgress(bytesRead, contentLength);
+      if (!partial.renameTo(target)) throw new IllegalStateException("Cannot finalize downloaded update");
+      getContext().getSharedPreferences("android-app-update", 0).edit()
+          .putString("fileName", fileName).putString("sha256", expectedSha256).apply();
       JSObject result = new JSObject();
       result.put("fileName", fileName);
       result.put("bytesRead", bytesRead);
-      result.put("sha256", actualSha256);
+      result.put("sha256", expectedSha256);
       call.resolve(result);
-    } catch (DownloadCancelledException error) {
-      deleteQuietly(partial);
-      call.reject("Download cancelled", "UPDATE_DOWNLOAD_CANCELLED");
-    } catch (SecurityException error) {
-      deleteQuietly(partial);
-      deleteQuietly(target);
-      call.reject(error.getMessage(), "UPDATE_CHECKSUM_MISMATCH", error);
     } catch (Exception error) {
       deleteQuietly(partial);
       deleteQuietly(target);
-      if (cancelRequested.get()) {
-        call.reject("Download cancelled", "UPDATE_DOWNLOAD_CANCELLED", error);
-      } else {
-        call.reject(error.getMessage(), "UPDATE_DOWNLOAD_FAILED", error);
-      }
+      String code = cancelRequested.get() || error instanceof DownloadCancelledException
+          ? "UPDATE_DOWNLOAD_CANCELLED"
+          : error instanceof ApkValidationException ? ((ApkValidationException) error).code
+          : error instanceof SecurityException ? "UPDATE_CHECKSUM_MISMATCH" : "UPDATE_DOWNLOAD_FAILED";
+      call.reject(error.getMessage(), code, error);
     } finally {
-      if (connection != null) connection.disconnect();
+      disconnectActiveConnection();
       activeConnection = null;
       cancelRequested.set(false);
       downloadInProgress.set(false);
@@ -265,10 +264,14 @@ public class AndroidAppUpdatePlugin extends Plugin {
 
   private static boolean hasCompatibleSigner(PackageInfo currentInfo, PackageInfo archiveInfo) {
     if (currentInfo.signingInfo == null || archiveInfo.signingInfo == null) return false;
-    Set<String> currentSigners = certificateDigests(currentInfo.signingInfo.getSigningCertificateHistory());
-    Set<String> archiveSigners = certificateDigests(archiveInfo.signingInfo.getSigningCertificateHistory());
-    currentSigners.retainAll(archiveSigners);
-    return !currentSigners.isEmpty();
+    Set<String> currentSigners = certificateDigests(currentInfo.signingInfo.getApkContentsSigners());
+    if (currentInfo.signingInfo.hasMultipleSigners() || archiveInfo.signingInfo.hasMultipleSigners()) {
+      return !currentSigners.isEmpty()
+          && currentSigners.equals(certificateDigests(archiveInfo.signingInfo.getApkContentsSigners()));
+    }
+    // 新 APK 的签名历史必须包含当前签名，不能用共同旧证书接受已撤销的签名。
+    Set<String> archiveHistory = certificateDigests(archiveInfo.signingInfo.getSigningCertificateHistory());
+    return !currentSigners.isEmpty() && archiveHistory.containsAll(currentSigners);
   }
 
   private static Set<String> certificateDigests(Signature[] signatures) {

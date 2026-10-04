@@ -79,4 +79,11 @@ describe("Android update asset selection", () => {
     const withoutDigest = { ...asset("app-arm64-v8a-release.apk"), sha256: "" };
     assert.equal(selectAndroidApkAsset([unsigned, withoutDigest], ["arm64-v8a"]), null);
   });
+  it("无匹配 ABI 时选择 universal，并排除 debug 包", () => {
+    assert.equal(
+      selectAndroidApkAsset([asset("app-universal-release.apk")], ["riscv64"])?.abi,
+      "universal",
+    );
+    assert.equal(selectAndroidApkAsset([asset("app-arm64-v8a-debug.apk")], ["arm64-v8a"]), null);
+  });
 });

@@ -11,7 +11,7 @@
     </n-alert>
     <n-alert v-if="errorMessage" type="error" :bordered="false">{{ errorMessage }}</n-alert>
     <n-alert v-else-if="asset" type="info" :bordered="false">
-      已选择 {{ asset.abi }} 安装包：{{ asset.name }}（{{ formatAssetSize(asset.size) }}）
+      已为此设备选择合适的安装包（{{ formatAssetSize(asset.size) }}）
     </n-alert>
     <n-spin v-else size="small" description="正在识别设备安装包" />
 
@@ -22,6 +22,10 @@
       :indicator-placement="'inside'"
       processing
     />
+
+    <n-text v-if="downloading || downloaded" depth="3">
+      {{ formatAssetSize(bytesRead) }} / {{ formatAssetSize(contentLength) }}
+    </n-text>
 
     <n-scrollbar style="max-height: 360px">
       <div class="markdown-body" v-html="data.changelog || '暂无更新日志'" />
@@ -36,8 +40,11 @@
       <n-button v-else-if="downloaded" type="success" @click="installUpdate">
         调用系统安装器
       </n-button>
+      <n-button v-else-if="!asset && errorMessage" type="primary" @click="resolveAsset"
+        >重试</n-button
+      >
       <n-button v-else type="primary" :disabled="!asset" @click="downloadUpdate">
-        下载并校验
+        立即更新
       </n-button>
     </n-flex>
   </div>
@@ -45,6 +52,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import { App } from "@capacitor/app";
 import type { PluginListenerHandle } from "@capacitor/core";
 import packageJson from "@/../package.json";
 import type { UpdateLogType } from "@/types/main";
@@ -67,9 +75,14 @@ const errorMessage = ref("");
 const downloading = ref(false);
 const downloaded = ref(false);
 const progress = ref(0);
+const bytesRead = ref(0);
+const contentLength = ref(0);
+const awaitingInstallPermission = ref(false);
+let appListener: PluginListenerHandle | null = null;
 let progressListener: PluginListenerHandle | null = null;
 
 const resolveAsset = async () => {
+  errorMessage.value = "";
   try {
     const [{ abis }, assets] = await Promise.all([
       AndroidAppUpdate.getSupportedAbis(),
@@ -77,6 +90,18 @@ const resolveAsset = async () => {
     ]);
     asset.value = selectAndroidApkAsset(assets, abis);
     if (!asset.value) errorMessage.value = "该版本没有适合本设备且带 SHA-256 摘要的 APK";
+    else {
+      const cached = await AndroidAppUpdate.getDownloadedApk({
+        fileName: asset.value.name,
+        sha256: asset.value.sha256,
+      });
+      if (cached.available) {
+        downloaded.value = true;
+        progress.value = 100;
+        bytesRead.value = cached.bytesRead;
+        contentLength.value = cached.bytesRead;
+      }
+    }
   } catch (error) {
     console.error("识别 Android 更新包失败", error);
     errorMessage.value = "无法读取版本附件，请检查网络后重试";
@@ -84,9 +109,11 @@ const resolveAsset = async () => {
 };
 
 const downloadUpdate = async () => {
-  if (!asset.value) return;
+  if (!asset.value || downloading.value) return;
   errorMessage.value = "";
   progress.value = 0;
+  bytesRead.value = 0;
+  contentLength.value = asset.value.size;
   downloaded.value = false;
   downloading.value = true;
   try {
@@ -94,6 +121,7 @@ const downloadUpdate = async () => {
       url: asset.value.url,
       fileName: asset.value.name,
       sha256: asset.value.sha256,
+      size: asset.value.size,
     });
     downloaded.value = true;
     progress.value = 100;
@@ -106,7 +134,7 @@ const downloadUpdate = async () => {
       errorMessage.value =
         code === "UPDATE_CHECKSUM_MISMATCH" || message.includes("SHA-256")
           ? "安装包校验失败，文件已删除，请重试"
-          : "安装包下载失败，请检查网络后重试";
+          : "更新下载失败，请检查网络后重试";
     }
   } finally {
     downloading.value = false;
@@ -121,8 +149,9 @@ const installUpdate = async () => {
   if (!asset.value) return;
   try {
     const result = await AndroidAppUpdate.installApk({ fileName: asset.value.name });
+    awaitingInstallPermission.value = result.needsPermission;
     if (result.needsPermission) {
-      window.$message.info("请允许此来源安装应用，然后返回并再次点击安装");
+      window.$message.info("请允许此来源安装应用，返回后将继续安装");
     }
   } catch (error) {
     console.error("调用 Android 系统安装器失败", error);
@@ -137,19 +166,44 @@ const installUpdate = async () => {
             : code === "UPDATE_APK_INVALID"
               ? "安装包无法解析，已阻止安装"
               : "无法打开系统安装器，请稍后重试";
-    window.$message.error(message);
+    if (
+      [
+        "UPDATE_PACKAGE_MISMATCH",
+        "UPDATE_VERSION_NOT_NEWER",
+        "UPDATE_SIGNATURE_MISMATCH",
+        "UPDATE_APK_INVALID",
+        "UPDATE_APK_NOT_FOUND",
+      ].includes(code)
+    )
+      downloaded.value = false;
+    errorMessage.value = message;
   }
 };
 
 onMounted(async () => {
   progressListener = await AndroidAppUpdate.addListener("downloadProgress", (event) => {
+    bytesRead.value = event.bytesRead;
+    contentLength.value = event.contentLength;
     if (event.percent >= 0) progress.value = Number(event.percent.toFixed(1));
+  });
+  appListener = await App.addListener("appStateChange", async ({ isActive }) => {
+    if (isActive && awaitingInstallPermission.value && downloaded.value) {
+      awaitingInstallPermission.value = false;
+      try {
+        const { allowed } = await AndroidAppUpdate.canInstallApk();
+        if (allowed) await installUpdate();
+      } catch (error) {
+        console.error("检查安装授权失败", error);
+        errorMessage.value = "无法检查安装授权，请再次点击安装更新";
+      }
+    }
   });
   await resolveAsset();
 });
 
 onBeforeUnmount(() => {
   progressListener?.remove();
+  appListener?.remove();
   if (downloading.value) AndroidAppUpdate.cancelDownload();
 });
 </script>

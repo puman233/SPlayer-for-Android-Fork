@@ -1,5 +1,9 @@
 # 🎵 SPlayer for Android
 
+### 更新下载与手机布局（v3.0.13）
+
+应用内 APK 更新默认通过 gh.llkk.cc 下载，失败后有限回退到 GitHub 原地址；版本和摘要仍来自 GitHub 官方接口。安装前检查完整性、包名、版本及签名。手机横屏隐藏控件后释放歌词空间，专辑操作保持横排，浮动定位按钮按实际播放栏位置避让。实现及验证边界见 [更新下载与布局验收](docs/validation/update-download-layout.md)。
+
 ### 手机播放器与桌面歌词（v3.0.12）
 
 [v3.0.12 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.12)已通过现有工作流发布，提供四种 ABI；正式签名与上一版一致。发布验证见 [v3.0.12 发布验收](docs/validation/release-v3.0.12.md)。

@@ -670,7 +670,7 @@ onMounted(() => getPlaylistDetail(playlistId.value));
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-top: 236px;
+  padding-top: 180px;
   padding-bottom: 12px;
 }
 </style>

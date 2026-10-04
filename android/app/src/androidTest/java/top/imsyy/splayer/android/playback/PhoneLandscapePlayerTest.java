@@ -274,7 +274,7 @@ public class PhoneLandscapePlayerTest {
       reveal();
       assertMainBounds();
       JSONObject after = bounds(".landscape-content");
-      assertEquals("控制层不改变内容高度", before.getDouble("height"), after.getDouble("height"), 0.1);
+      assertTrue("隐藏控制层应释放底部歌词空间", before.getDouble("height") >= after.getDouble("height") + 80);
       JSONObject overlay = bounds(".landscape-controls"), root = bounds(".full-player-mobile-landscape");
       save("debug-layout", json("(()=>{const r=document.querySelector('.full-player-mobile-landscape'),l=r.querySelector('.left-section'),i=l.querySelector('.info');return {root:" + root + ",left:" + bounds(".left-section") + ",cover:" + bounds(".landscape-cover") + ",info:" + bounds(".left-section .info") + ",play:" + bounds(".landscape-controls .play-pause") + ",padding:getComputedStyle(r).padding,infoScroll:i.scrollHeight,infoOffset:i.offsetHeight,leftHeight:l.clientHeight,coverSize:getComputedStyle(r).getPropertyValue('--landscape-cover-size'),zoom:getComputedStyle(document.body).zoom}})()"));
       capture("controls-1.0");

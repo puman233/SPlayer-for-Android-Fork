@@ -455,6 +455,7 @@ audio {
   }
   @media (max-width: 768px) {
     .song-list,
+    .mobile-playlist-song-list,
     .list-comment,
     .loading,
     .n-empty {
@@ -462,10 +463,20 @@ audio {
     }
     .list-detail.small {
       & ~ .song-list,
+      & ~ .mobile-playlist-song-list,
       & ~ .list-comment,
       & ~ .loading,
       & ~ .n-empty {
-        padding-top: 100px;
+        padding-top: 132px;
+      }
+    }
+    &:has(.list-detail:not(.small) .description) {
+      .song-list,
+      .mobile-playlist-song-list,
+      .list-comment,
+      .loading,
+      .n-empty {
+        padding-top: 204px;
       }
     }
   }

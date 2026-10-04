@@ -1,10 +1,11 @@
 import type { CoverType, SongType } from "@/types/main";
-import { useStatusStore } from "@/stores";
+import { useStatusStore, useSettingStore } from "@/stores";
 import { useDevice } from "@/composables/useDevice";
 import { prefetchListCovers } from "@/composables/useCoverCache";
 
 export const useListDetail = () => {
   const statusStore = useStatusStore();
+  const settingStore = useSettingStore();
   const { isPhone } = useDevice();
 
   const detailData = ref<CoverType | null>(null);
@@ -16,8 +17,11 @@ export const useListDetail = () => {
 
   const getSongListHeight = (listScrolling: boolean) => {
     if (isPhone.value) {
-      const phoneHeaderHeight = listScrolling ? 72 : 132;
-      return Math.max(statusStore.mainContentHeight - phoneHeaderHeight, 320);
+      const hasDescription =
+        !!detailData.value?.description && settingStore.playlistPageElements.description;
+      const phoneHeaderHeight = listScrolling ? 132 : hasDescription ? 204 : 180;
+      // 低高度横屏保留一行歌曲，外层主内容可继续滚动。
+      return Math.max(statusStore.mainContentHeight - phoneHeaderHeight, 120);
     }
 
     const normalHeight = 240;

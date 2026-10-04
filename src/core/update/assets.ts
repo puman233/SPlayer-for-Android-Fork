@@ -37,7 +37,8 @@ export const parseExpandedReleaseAssets = (html: string): AndroidReleaseAsset[] 
         name,
         url: new URL(anchor.getAttribute("href") || "", ANDROID_REPOSITORY_URL).toString(),
         sha256,
-        size: parseAssetSize(rowText),
+        // 网页显示大小经过四舍五入，不能用它严格校验字节长度。
+        size: 0,
       };
     })
     .filter((asset) => APK_NAME_RE.test(asset.name) && asset.sha256);
@@ -84,13 +85,17 @@ export const selectAndroidApkAsset = (
   supportedAbis: string[],
 ): AndroidReleaseAsset | null => {
   const signedApks = assets.filter(
-    (asset) => APK_NAME_RE.test(asset.name) && !/unsigned/i.test(asset.name) && asset.sha256,
+    (asset) =>
+      APK_NAME_RE.test(asset.name) && !/(?:unsigned|debug)/i.test(asset.name) && asset.sha256,
   );
   for (const abi of supportedAbis) {
     const asset = signedApks.find((candidate) => includesAbi(candidate.name, abi));
     if (asset) return { ...asset, abi };
   }
-  return null;
+  const universal = signedApks.find((candidate) =>
+    /(?:^|[-_.])universal(?:[-_.]|$)/i.test(candidate.name),
+  );
+  return universal ? { ...universal, abi: "universal" } : null;
 };
 
 export const fetchAndroidReleaseAssets = async (tag: string): Promise<AndroidReleaseAsset[]> => {

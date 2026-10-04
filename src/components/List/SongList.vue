@@ -155,7 +155,11 @@
       <!-- 列表操作 -->
       <Teleport to="body">
         <Transition name="fade" mode="out-in">
-          <div v-if="floatToolShow && !statusStore.showFullPlayer" class="list-menu">
+          <div
+            v-if="floatToolShow && !statusStore.showFullPlayer"
+            class="list-menu"
+            :style="{ bottom: playerClearance + 'px' }"
+          >
             <n-float-button-group position="relative">
               <n-float-button v-if="hasPlaySong >= 0" width="42" @click="scrollToCurrentSong">
                 <SvgIcon :size="22" name="Location" />
@@ -198,11 +202,14 @@ import { useMusicStore, useStatusStore, useSettingStore } from "@/stores";
 import { isEmpty } from "lodash-es";
 import { sortFieldOptions, sortOrderOptions } from "@/utils/meta";
 import { usePlayerController } from "@/core/player/PlayerController";
+import { usePlayerClearance } from "@/composables/usePlayerClearance";
 import { useDevice } from "@/composables/useDevice";
 import { useDragSort } from "@/composables/List/useDragSort";
 import SongListMenu from "@/components/Menu/SongListMenu.vue";
 import MobileSongMenu from "@/components/Menu/MobileSongMenu.vue";
 import VirtualScroll from "@/components/UI/VirtualScroll.vue";
+
+const playerClearance = usePlayerClearance();
 
 const props = withDefaults(
   defineProps<{
@@ -705,11 +712,6 @@ onBeforeUnmount(() => {
   bottom: 120px;
   z-index: 10;
   pointer-events: none;
-  // 手机竖屏：避开浮岛播放栏（底栏 ~82px 含安全区 + 间距 8px + 播放栏 64px + 冗余 16px）。
-  // 浮层 teleport 到 body，无法继承 #app 上的安全区变量，故用保守固定值。
-  @media (max-width: 767px) and (orientation: portrait) {
-    bottom: 170px;
-  }
   .n-float-button {
     height: 42px;
     border: 1px solid rgba(var(--primary), 0.28);

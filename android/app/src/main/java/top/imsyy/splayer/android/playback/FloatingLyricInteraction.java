@@ -9,6 +9,10 @@ final class FloatingLyricInteraction {
   boolean locked() { return state == State.LOCKED; }
   boolean controls() { return state == State.CONTROLS_VISIBLE || state == State.DRAGGING; }
   void show() { if (!locked()) state = State.CONTROLS_VISIBLE; }
+  void toggle() {
+    if (state == State.IDLE) show();
+    else if (state == State.CONTROLS_VISIBLE) hide();
+  }
   void hide() { if (state == State.CONTROLS_VISIBLE) state = State.IDLE; }
   void lock() { state = State.LOCKED; }
   void unlock() { state = State.CONTROLS_VISIBLE; }

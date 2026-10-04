@@ -595,6 +595,12 @@ const jumpSeek = (time: number) => {
 };
 
 // 监听歌词滚动
+useResizeObserver(lyricScrollContainer, () => {
+  // 手机控件显隐会改变歌词高度，重新定位当前行。
+  if (lyricScrollContainer.value?.closest(".phone-portrait")) {
+    lyricsScroll(firstActiveIndex.value);
+  }
+});
 watch(firstActiveIndex, (val, oldVal) => {
   lyricsScroll(val);
   if (typeof oldVal === "number" && oldVal >= 0 && oldVal !== val) {

@@ -221,13 +221,23 @@ public class PhoneLandscapePlayerTest {
         assertEquals("桌面歌词应可关闭", "false", js("t.showDesktopLyric"));
 
         JSONObject lyricDot = bounds(".pagination .dot:last-child");
+        js("m.songLyric={lrcData:Array.from({length:20},(_,i)=>({startTime:(i-8)*5000,endTime:(i-7)*5000,romanLyric:'',translatedLyric:'这是第 '+(i+1)+' 行翻译',words:[{word:'Lyric line '+(i+1)+' — keep the music playing',startTime:(i-8)*5000,endTime:(i-7)*5000}]})),yrcData:[]}");
         tap((float)(lyricDot.getDouble("x") + lyricDot.getDouble("width") / 2), (float)(lyricDot.getDouble("y") + lyricDot.getDouble("height") / 2));
         capture("portrait-lyric-controls");
+        JSONObject visibleLyric = bounds(".lyric-page .lyric-main");
         SystemClock.sleep(2100);
         assertEquals("手机歌词页两秒隐藏", "true", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
         assertEquals("隐藏控件禁用触摸", "true", js("document.querySelector('.mobile-player-bottom-controls').inert"));
         capture("portrait-lyric-idle");
-        tap(180, 40);
+        JSONObject hiddenLyric = bounds(".lyric-page .lyric-main");
+        assertTrue("隐藏后歌词向顶部扩展", hiddenLyric.getDouble("y") < visibleLyric.getDouble("y") - 40);
+        assertTrue("隐藏后歌词向底部扩展", hiddenLyric.getDouble("bottom") > visibleLyric.getDouble("bottom") + 80);
+        assertTrue("隐藏后歌词接近完整可用高度", hiddenLyric.getDouble("height") > json("({height:innerHeight})").getDouble("height") * 0.85);
+        js("s.useAMLyrics=true"); SystemClock.sleep(500);
+        assertEquals("扩展状态第二歌词引擎可达", "true", js("!!document.querySelector('.lyric-page .am-lyric')"));
+        capture("portrait-lyric-expanded-amll");
+        js("s.useAMLyrics=false"); SystemClock.sleep(500);
+        tap(5, 40);
         assertEquals("空白点击恢复歌词页控件", "false", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
         assertEquals("进度与播放按钮恢复后可见且可命中", "true", js("(()=>{const b=document.querySelector('.mobile-player-bottom-controls'),p=b.querySelector('.play-btn'),r=p.getBoundingClientRect();return !b.inert&&getComputedStyle(b).visibility==='visible'&&r.height>=48&&r.bottom<=innerHeight&&!!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('.play-btn')})()"));
         capture("portrait-lyric-restored");
@@ -236,9 +246,11 @@ public class PhoneLandscapePlayerTest {
         for(int i=0;i<40&&"null".equals(js("window.testGeneration"));i++) SystemClock.sleep(200);
         assertFalse("本地服务应就绪", "null".equals(js("window.testGeneration")));
         js("window.nodejs.channel.send('embedded-api-reload')");
-        SystemClock.sleep(700);
-        js("window.reloadGeneration=null;fetch('http://127.0.0.1:1145/api').then(r=>r.json()).then(x=>window.reloadGeneration=x.generation)");
-        for(int i=0;i<40&&"null".equals(js("window.reloadGeneration"));i++) SystemClock.sleep(200);
+        js("window.reloadGeneration=null");
+        for(int i=0;i<40&&!"true".equals(js("window.reloadGeneration>window.testGeneration"));i++) {
+          js("fetch('http://127.0.0.1:1145/api',{cache:'no-store'}).then(r=>r.json()).then(x=>window.reloadGeneration=x.generation).catch(()=>{})");
+          SystemClock.sleep(200);
+        }
         assertEquals("真实桥接热重载必须创建新的HTTP服务", "true", js("window.reloadGeneration>window.testGeneration"));
         save("api-reload", json("({before:window.testGeneration,after:window.reloadGeneration,songId:m.playSong.id,playStatus:t.playStatus})"));
         tap(180, 40);

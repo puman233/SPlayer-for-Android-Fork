@@ -117,7 +117,8 @@ public class FloatingLyricOverlayTest {
 
   @Test public void overlayKeepsFontLocksCleanlyAndRestoresPreferences() throws Exception {
     context = instrumentation.getTargetContext();
-    assertTrue("必须使用 -PverificationSuffix=.lyricsverify", context.getPackageName().endsWith(".lyricsverify"));
+    assertTrue("必须使用隔离验证包", context.getPackageName().endsWith(".lyricsverify")
+        || context.getPackageName().endsWith(".phase1verify"));
     Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
     context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     SystemClock.sleep(2000);
@@ -136,7 +137,7 @@ public class FloatingLyricOverlayTest {
       View view = (View) field(service, "view");
       JSONObject auto = new JSONObject().put("fontSizeMode", "AUTO_DEFAULT").put("isDoubleLine", true)
           .put("textBackgroundMask", true);
-      main(() -> service.applyConfig(auto));
+      main(() -> manager.updateFloatingLyricConfig(auto));
       String sampleJson = new org.json.JSONArray().put(new JSONObject().put("startTime", 0).put("endTime", 20000)
           .put("translatedLyric", "如此 永不改变").put("words", new org.json.JSONArray().put(
               new JSONObject().put("word", "変わらない このままだよ").put("startTime", 0).put("endTime", 20000)))).toString();
@@ -147,6 +148,17 @@ public class FloatingLyricOverlayTest {
       awaitControlsAlpha(1f);
       assertBackground(view, true);
       saveScreen("controls", view);
+      tap(view, view.getWidth() / 2f, view.getHeight() - 10);
+      awaitControlsAlpha(0f);
+      assertBackground(view, false);
+      saveScreen("touch-hidden", view);
+      tap(view, view.getWidth() / 2f, view.getHeight() / 2f);
+      awaitControlsAlpha(1f);
+      assertBackground(view, true);
+      draw(view);
+      android.graphics.RectF play = (android.graphics.RectF) field(service, "rPlay");
+      tap(view, play.centerX(), play.centerY());
+      assertTrue("播放按钮不能被普通触碰切换误隐藏", ((FloatingLyricInteraction) field(service, "interaction")).controls());
       SystemClock.sleep(4400);
       awaitControlsAlpha(0f);
       assertBackground(view, false);
@@ -229,7 +241,7 @@ public class FloatingLyricOverlayTest {
       assertBackground(view, false);
       JSONObject user = new JSONObject().put("fontSizeMode", "USER_DEFINED").put("fontSize", 30)
           .put("playedColor", "#123456");
-      main(() -> service.applyConfig(user));
+      main(() -> manager.updateFloatingLyricConfig(user));
       String oldRotation = shell("settings get system user_rotation");
       String oldAutoRotation = shell("settings get system accelerometer_rotation");
       try {

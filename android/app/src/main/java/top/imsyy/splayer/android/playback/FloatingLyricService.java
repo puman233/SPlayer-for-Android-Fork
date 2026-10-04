@@ -487,15 +487,17 @@ public class FloatingLyricService extends Service {
     return result;
   }
 
-  private void onBtnTap(float x, float y) {
-    if (interaction.locked()) return;
+  private boolean onBtnTap(float x, float y) {
+    if (interaction.locked()) return false;
     PlaybackManager manager = PlaybackManager.getInstance(this);
-    if (rLock.contains(x, y)) { setLocked(true); return; }
-    if (rClose.contains(x, y)) { manager.hideFloatingLyric(); manager.emitDesktopLyricClosed(); return; }
-    if (rFavorite.contains(x, y)) { manager.handleNotificationAction(PlaybackConstants.ACTION_FAVORITE); return; }
+    if (rLock.contains(x, y)) { setLocked(true); return true; }
+    if (rClose.contains(x, y)) { manager.hideFloatingLyric(); manager.emitDesktopLyricClosed(); return true; }
+    if (rFavorite.contains(x, y)) { manager.handleNotificationAction(PlaybackConstants.ACTION_FAVORITE); return true; }
     if (rPrev.contains(x, y)) manager.handleNotificationAction(PlaybackConstants.ACTION_PREVIOUS);
     else if (rPlay.contains(x, y)) manager.handleNotificationAction(PlaybackConstants.ACTION_TOGGLE_PLAYBACK);
     else if (rNext.contains(x, y)) manager.handleNotificationAction(PlaybackConstants.ACTION_NEXT);
+    else return false;
+    return true;
   }
 
   private static List<Line> parseLines(String json) {
@@ -547,7 +549,14 @@ public class FloatingLyricService extends Service {
     }
     void resetScroll() { lastIndex = -2; lineSwitchNano = 0; }
     void resetLayout() { runs.clear(); resetScroll(); }
-    @Override public boolean performClick() { super.performClick(); showControls(); scheduleHide(); return true; }
+    @Override public boolean performClick() {
+      super.performClick();
+      handler.removeCallbacks(autoHide);
+      interaction.toggle();
+      animateControls();
+      scheduleHide();
+      return true;
+    }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
       if (interaction.locked()) return false;
@@ -573,9 +582,12 @@ public class FloatingLyricService extends Service {
           if (interaction.state() == FloatingLyricInteraction.State.DRAGGING) {
             interaction.endDrag(); persistPosition(); animateControls();
           } else {
-            if (controlsAtDown) onBtnTap(event.getX(), event.getY());
+            boolean button = controlsAtDown && onBtnTap(event.getX(), event.getY());
             // 按钮可能已经锁定或关闭，不能再反转状态
-            if (!interaction.locked() && !destroyed) performClick();
+            if (!interaction.locked() && !destroyed) {
+              if (button) showControls();
+              else performClick();
+            }
           }
           scheduleHide();
           return true;

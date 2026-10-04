@@ -1175,7 +1175,22 @@ const contentTransform = computed(() => {
 
   &.phone-portrait {
     &.controls-hidden {
-      padding-bottom: 0;
+      padding-bottom: var(--mobile-safe-bottom);
+      padding-top: var(--mobile-safe-top);
+      .top-bar,
+      .lyric-header,
+      .mobile-player-bottom-controls {
+        position: absolute;
+        left: 0;
+        width: 100%;
+      }
+      .top-bar,
+      .lyric-header {
+        top: 0;
+      }
+      .mobile-player-bottom-controls {
+        bottom: 0;
+      }
     }
     .portrait-controls-hidden {
       visibility: hidden;

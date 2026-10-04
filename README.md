@@ -12,6 +12,8 @@
 
 桌面歌词默认只显示歌词；触摸展开控制，4 秒无操作后控件与背景同步淡出。开启文字背景遮罩时也不会在待机或锁定后留下一块背景。验证范围见 [桌面歌词验收说明](docs/validation/desktop-lyrics.md)。
 
+手机歌词页隐藏控件后，歌词向上下扩展至安全区域，显示更多上下文；点击空白恢复控制布局。桌面歌词普通触碰可切换控制显隐，按钮点击继续执行操作，拖动与锁定行为保留。最新验证见 [歌词扩展与触碰切换](docs/validation/lyrics-expansion-toggle.md)。
+
 ### 桌面歌词与手机横屏（v3.0.11）
 
 [v3.0.11 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.11)已发布，提供四种 ABI；正式签名保持兼容，可原位升级。

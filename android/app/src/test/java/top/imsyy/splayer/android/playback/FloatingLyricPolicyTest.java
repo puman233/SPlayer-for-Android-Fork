@@ -4,6 +4,16 @@ import static org.junit.Assert.*;
 import org.junit.Test;
 
 public class FloatingLyricPolicyTest {
+  @Test public void ordinaryTouchTogglesButCannotUnlockOrInterruptDrag() {
+    FloatingLyricInteraction state = new FloatingLyricInteraction();
+    state.toggle(); assertTrue(state.controls());
+    state.toggle(); assertEquals(FloatingLyricInteraction.State.IDLE, state.state());
+    state.toggle(); state.drag(); state.toggle();
+    assertEquals(FloatingLyricInteraction.State.DRAGGING, state.state());
+    state.lock(); state.toggle();
+    assertTrue(state.locked());
+    state.unlock(); assertTrue(state.controls());
+  }
   @Test public void fontIsBoundedAcrossViewportAndFontScale() {
     for (float[] viewport : new float[][] {{320, 480}, {360, 800}, {800, 360}, {1280, 800}}) {
       for (float scale : new float[] {1, 1.5f, 2}) {

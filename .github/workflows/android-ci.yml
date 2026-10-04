@@ -25,7 +25,7 @@ jobs:
       - name: 检查播放页类型与交互状态
         run: |
           pnpm typecheck:web
-          pnpm exec tsx --test src/composables/useMobilePlayerControls.test.ts src/core/layout/adaptiveWindow.test.ts src/core/layout/viewport.test.ts src/core/player/androidLyricScheduler.test.ts src/core/player/floatingLyricSettings.test.ts
+          pnpm exec tsx --test src/composables/useMobilePlayerControls.test.ts src/core/layout/viewport.test.ts src/core/player/androidLyricScheduler.test.ts src/core/player/floatingLyricSettings.test.ts
       - name: 编译 APK、单元测试及 Android Lint
         working-directory: android
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

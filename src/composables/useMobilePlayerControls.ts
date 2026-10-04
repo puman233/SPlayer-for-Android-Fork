@@ -4,12 +4,21 @@ import type { PlayerMetaHold } from "./usePlayerMetaHold";
 
 export type MobilePlayerPage = "info" | "lyric" | "comment";
 
-export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 4000) {
-  const visibility = ref({ info: true, lyric: true, comment: true });
+export function useMobilePlayerControls(
+  page: Ref<MobilePlayerPage>,
+  delay = 4000,
+  initiallyVisible = true,
+) {
+  const visibility = ref({
+    info: initiallyVisible,
+    lyric: initiallyVisible,
+    comment: initiallyVisible,
+  });
   const visible = computed(() => page.value === "info" || visibility.value[page.value]);
   const pointers = new Set<number>();
   const touches = new Set<number>();
   const holds = ref(0);
+  let disposed = false;
   const { start, stop } = useTimeoutFn(
     () => {
       if (page.value !== "info" && !pointers.size && !touches.size && !holds.value) {
@@ -21,6 +30,7 @@ export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 400
   );
 
   const interact = () => {
+    if (disposed) return;
     visibility.value[page.value] = true;
     stop();
     if (page.value !== "info" && !pointers.size && !touches.size && !holds.value) start();
@@ -63,12 +73,17 @@ export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 400
   };
 
   // 切页重新计时，主播放页始终显示，不继承其他页的隐藏状态
-  watch(page, interact, { immediate: true });
+  watch(page, interact, { immediate: initiallyVisible });
   const resetPointers = () => {
     pointers.clear();
     touches.clear();
     interact();
   };
-  onScopeDispose(stop);
+  onScopeDispose(() => {
+    disposed = true;
+    stop();
+    pointers.clear();
+    touches.clear();
+  });
   return { visible, interact, pointerDown, pointerEnd, touchStart, touchEnd, resetPointers, hold };
 }

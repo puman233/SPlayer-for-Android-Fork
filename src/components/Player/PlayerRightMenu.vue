@@ -60,6 +60,7 @@
     <!-- 其他控制 -->
     <n-dropdown
       v-if="settingStore.fullscreenPlayerElements.moreSettings"
+      v-model:show="controlsPopoverShow"
       :options="controlsOptions"
       :show-arrow="false"
       @select="handleControls"
@@ -69,7 +70,7 @@
       </div>
     </n-dropdown>
     <!-- 音量 -->
-    <n-popover :show-arrow="false" :style="{ padding: 0 }">
+    <n-popover v-model:show="volumePopoverShow" :show-arrow="false" :style="{ padding: 0 }">
       <template #trigger>
         <div class="menu-icon hidden" @click.stop="player.toggleMute" @wheel="player.setVolume">
           <SvgIcon :name="statusStore.playVolumeIcon" />
@@ -115,6 +116,7 @@ import { useAudioManager } from "@/core/player/AudioManager";
 import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 
 defineProps<{ persistent?: boolean }>();
 
@@ -134,6 +136,11 @@ const {
 } = useQualityControl();
 
 const showQualityPopover = ref(false);
+const controlsPopoverShow = ref(false);
+const volumePopoverShow = ref(false);
+usePlayerMetaPopoverHold(showQualityPopover);
+usePlayerMetaPopoverHold(controlsPopoverShow);
+usePlayerMetaPopoverHold(volumePopoverShow);
 useBackClosable(showQualityPopover);
 const qualityTagRef = ref<HTMLElement | null>(null);
 

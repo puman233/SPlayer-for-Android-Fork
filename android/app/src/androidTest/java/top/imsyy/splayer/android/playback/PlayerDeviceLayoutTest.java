@@ -40,7 +40,7 @@ public class PlayerDeviceLayoutTest {
   }
   @Test public void playerRemainsReachableAcrossRealRotations() throws Exception {
     String pkg = instrumentation.getTargetContext().getPackageName();
-    assertTrue(pkg.endsWith(".lyricsverify"));
+    assertTrue(pkg.endsWith(".lyricsverify") || pkg.endsWith(".phase1verify"));
     Intent intent = new Intent(instrumentation.getTargetContext(), MainActivity.class);
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     MainActivity activity = (MainActivity) instrumentation.startActivitySync(intent);
@@ -63,7 +63,7 @@ public class PlayerDeviceLayoutTest {
       for (int r : new int[]{0,1,0,1}) {
         shell("wm user-rotation -d " + display[0] + " lock " + r);
         SystemClock.sleep(1600);
-        js(web, "verifyPinia._s.get('status').playerMetaShow=true;window.$modal?.destroyAll()");
+        js(web, "verifyPinia._s.get('status').playerMetaShow=true;window.$modal?.destroyAll();document.querySelector('.landscape-header')?.click()");
         SystemClock.sleep(200);
         String raw = js(web, "JSON.stringify((()=>{const root=document.querySelector('.full-player'),l=document.querySelector('.full-player-mobile-landscape'),p=document.querySelector('.full-player-mobile');const rect=e=>{if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};return {width:innerWidth,height:innerHeight,screenWidth:screen.width,screenHeight:screen.height,ua:navigator.userAgent,mobile:!!p,landscape:!!l,cover:l?rect(l.querySelector('.landscape-cover')):null,info:l?rect(l.querySelector('.info')):null,control:rect(root?.querySelector('.player-control,.mobile-player-bottom-controls')),buttons:[...(root?.querySelectorAll('.btn-icon,.play-pause')||[])].map(rect)}})())");
         JSONObject g = new JSONObject((String)new JSONTokener(raw).nextValue());
@@ -78,7 +78,7 @@ public class PlayerDeviceLayoutTest {
           JSONObject cover=g.getJSONObject("cover"), info=g.getJSONObject("info");
           assertTrue(cover.getDouble("height")>0);
           assertTrue(cover.getDouble("bottom")<=info.getDouble("y")+1);
-          assertTrue(info.getDouble("bottom")<=c.getDouble("y")+1);
+          assertTrue(info.getDouble("bottom")<=g.getDouble("height")+1);
         }
       }
     } finally {

@@ -1,5 +1,11 @@
 # 🎵 SPlayer for Android
 
+### 横屏内容优先布局（未发布）
+
+手机与 Android 大屏横屏播放器默认展示封面、歌曲信息和歌词。轻触播放器展开临时控制层，包含播放、进度、音质/歌词来源、歌词工具与其他操作；停止操作 3 秒后淡出。拖动进度、弹出菜单或打开队列期间保持显示，控件展开不改变封面与歌词区域的尺寸。竖屏沿用现有页面。
+
+本阶段属于 Adaptive UI Phase 1，正式发布须等待所有 UI 阶段验收完成。独立模拟器验收包使用 `.phase1verify` 后缀，不覆盖正式应用数据。验收方式见 [横屏播放器验证说明](docs/validation/landscape-phase1.md)。
+
 ### 桌面歌词与手机横屏（v3.0.11）
 
 [v3.0.11 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.11)已发布，提供四种 ABI；正式签名保持兼容，可原位升级。

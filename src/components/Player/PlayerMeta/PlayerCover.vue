@@ -1,7 +1,7 @@
 <template>
   <!-- 全屏封面 -->
   <div
-    v-if="settingStore.playerType === 'fullscreen' && !isPhone"
+    v-if="!compact && settingStore.playerType === 'fullscreen' && !isPhone"
     class="full-screen"
     :style="{ '--gradient-percent': settingStore.playerFullscreenGradient + '%' }"
     @pointerdown.stop
@@ -20,13 +20,17 @@
   <!-- 普通封面 -->
   <div
     v-else
-    :class="['player-cover', settingStore.playerType, { playing: statusStore.playStatus }]"
+    :class="[
+      'player-cover',
+      compact ? 'cover' : settingStore.playerType,
+      { playing: statusStore.playStatus },
+    ]"
     @pointerdown.stop
     @pointerup="onCoverPointerUp"
   >
     <!-- 指针 -->
     <img
-      v-if="settingStore.playerType === 'record'"
+      v-if="!compact && settingStore.playerType === 'record'"
       class="pointer"
       src="/images/pointer.png?asset"
       alt="pointer"
@@ -70,6 +74,8 @@ import { useSettingStore, useStatusStore, useMusicStore } from "@/stores";
 import { isLogin } from "@/utils/auth";
 import { isElectron } from "@/utils/env";
 import { isEmpty } from "lodash-es";
+
+defineProps<{ compact?: boolean }>();
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();

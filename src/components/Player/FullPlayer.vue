@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import { useDevice } from "@/composables/useDevice";
 import { useStatusStore, useMusicStore, useSettingStore } from "@/stores";
-import { isElectron } from "@/utils/env";
+import { isElectron, isCapacitorAndroid } from "@/utils/env";
 import { PLAYER_META_HOLD_KEY, type PlayerMetaHold } from "@/composables/usePlayerMetaHold";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
 
@@ -123,7 +123,7 @@ const settingStore = useSettingStore();
 // 横竖屏切换状态机：phase 写到 root data-attribute，供 [data-stagger] CSS 触发
 const { phase: orientationPhase } = useOrientationTransition();
 
-const { isPhone, isPhonePortrait, isPad } = useDevice();
+const { isPhone, isPhonePortrait, isPad, isLandscape } = useDevice();
 // tap-restore 仅沉浸式 / 平板生效；其他场景保留 autohide
 const tapRestoreEnabled = computed(
   () =>
@@ -135,7 +135,9 @@ const tapRestoreShield = ref(false);
 let tapRestoreShieldTimer: number | undefined;
 const isCompactMobilePlayer = computed(() => isPhonePortrait.value);
 // 手机横屏走紧凑布局（左小封面 + 右歌词），不走桌面/平板分支
-const isMobileLandscape = computed(() => isPhone.value && !isPhonePortrait.value);
+const isMobileLandscape = computed(
+  () => isLandscape.value && (isPhone.value || isCapacitorAndroid),
+);
 
 // 移动端卡片化进出场动画：兼容拖拽中的 inline transform，从当前位置平滑过渡
 const MOBILE_CARD_ENTER = "transform 0.36s cubic-bezier(0.22, 1, 0.36, 1)";
@@ -330,6 +332,7 @@ const {
   start: startShow,
   stop: stopShow,
 } = useTimeoutFn(() => {
+  if (isMobileLandscape.value) return;
   if (!settingStore.autoHidePlayerMeta) return;
   // 有弹层 hold 时不隐藏，避免 popover trigger DOM 消失导致定位错乱
   if (playerMetaHoldCount.value > 0) return;
@@ -341,6 +344,7 @@ const inControlArea = ref(false);
 
 const playerMove = useThrottleFn(
   () => {
+    if (isMobileLandscape.value) return;
     statusStore.playerMetaShow = true;
     if (settingStore.autoHidePlayerMeta && !isPending.value && !inControlArea.value) {
       startShow();
@@ -364,6 +368,7 @@ const resumeHide = () => {
 };
 
 const playerLeave = () => {
+  if (isMobileLandscape.value) return;
   if (settingStore.autoHidePlayerMeta && playerMetaHoldCount.value === 0) {
     statusStore.playerMetaShow = false;
     stopShow();

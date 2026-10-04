@@ -19,6 +19,7 @@ import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { msToTime } from "@/utils/time";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { LyricLine } from "@applemusic-like-lyrics/lyric";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 
 withDefaults(defineProps<{ showTooltip?: boolean }>(), { showTooltip: true });
 
@@ -41,6 +42,7 @@ const sliderMax = computed(() => {
 const dragValue = ref(0);
 // 是否拖动
 const isDragging = ref(false);
+usePlayerMetaPopoverHold(isDragging);
 // 是否显示提示
 // const showSliderTooltip = ref(false);
 const tooltipVisible = ref(false);

@@ -46,60 +46,68 @@
     />
     <n-flex :align="center ? 'center' : undefined" size="small" vertical>
       <!-- 播放状态 + 操作按钮 -->
-      <div class="meta-actions-row">
-        <n-flex
-          v-if="settingStore.showPlayMeta && !light"
-          class="play-meta"
-          size="small"
-          align="center"
-        >
-          <!-- 音质 -->
-          <n-popselect
-            v-if="settingStore.showPlayerQuality && canQuickSelectQuality"
-            v-model:show="showQualityPopover"
-            trigger="manual"
-            placement="right"
-            :value="currentPlayingLevel"
-            :options="qualityOptions"
-            @update:value="handleQualitySelectAndClose"
-            @clickoutside="handleQualityClickOutside"
+      <Teleport :to="metaTarget || 'body'" :disabled="!metaTarget" defer>
+        <div class="meta-actions-row">
+          <n-flex
+            v-if="settingStore.showPlayMeta && !light"
+            class="play-meta"
+            size="small"
+            align="center"
           >
-            <span ref="qualityTagRef" class="meta-item clickable" @click.stop="handleQualityClick">
+            <!-- 音质 -->
+            <n-popselect
+              v-if="settingStore.showPlayerQuality && canQuickSelectQuality"
+              v-model:show="showQualityPopover"
+              trigger="manual"
+              placement="right"
+              :value="currentPlayingLevel"
+              :options="qualityOptions"
+              @update:value="handleQualitySelectAndClose"
+              @clickoutside="handleQualityClickOutside"
+            >
+              <span
+                ref="qualityTagRef"
+                class="meta-item clickable"
+                @click.stop="handleQualityClick"
+              >
+                {{ qualityText }}
+              </span>
+            </n-popselect>
+            <span v-else-if="settingStore.showPlayerQuality" class="meta-item">
               {{ qualityText }}
             </span>
-          </n-popselect>
-          <span v-else-if="settingStore.showPlayerQuality" class="meta-item">
-            {{ qualityText }}
-          </span>
-          <!-- 歌词模式 -->
-          <n-popselect
-            v-if="lyricSourceOptions.length > 1"
-            trigger="click"
-            :value="settingStore.lyricPriority"
-            :options="lyricSourceOptions"
-            @update:value="(val) => lyricManager.switchLyricSource(val)"
-          >
-            <span class="meta-item clickable">{{ lyricMode }}</span>
-          </n-popselect>
-          <span v-else class="meta-item">{{ lyricMode }}</span>
-          <!-- 音源状态 -->
-          <n-popselect
-            v-if="audioSourceOptions.length > 1 && canSwitchSource"
-            trigger="click"
-            :value="statusStore.audioSource"
-            :options="audioSourceOptions"
-            @update:value="(val) => player.switchAudioSource(val)"
-          >
-            <span class="meta-item clickable">
+            <!-- 歌词模式 -->
+            <n-popselect
+              v-if="lyricSourceOptions.length > 1"
+              v-model:show="showLyricPopover"
+              trigger="click"
+              :value="settingStore.lyricPriority"
+              :options="lyricSourceOptions"
+              @update:value="(val) => lyricManager.switchLyricSource(val)"
+            >
+              <span class="meta-item clickable">{{ lyricMode }}</span>
+            </n-popselect>
+            <span v-else class="meta-item">{{ lyricMode }}</span>
+            <!-- 音源状态 -->
+            <n-popselect
+              v-if="audioSourceOptions.length > 1 && canSwitchSource"
+              v-model:show="showSourcePopover"
+              trigger="click"
+              :value="statusStore.audioSource"
+              :options="audioSourceOptions"
+              @update:value="(val) => player.switchAudioSource(val)"
+            >
+              <span class="meta-item clickable">
+                {{ audioSourceText }}
+              </span>
+            </n-popselect>
+            <span v-else class="meta-item">
               {{ audioSourceText }}
             </span>
-          </n-popselect>
-          <span v-else class="meta-item">
-            {{ audioSourceText }}
-          </span>
-        </n-flex>
-        <slot name="actions" />
-      </div>
+          </n-flex>
+          <slot name="actions" />
+        </div>
+      </Teleport>
       <!-- 歌手 -->
       <div v-if="musicStore.playSong.type !== 'radio'" class="artists">
         <SvgIcon :depth="3" name="Artist" size="20" />
@@ -173,11 +181,14 @@ import { isCapacitorAndroid } from "@/utils/env";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 import { useDevice } from "@/composables/useDevice";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 const props = defineProps<{
   /** 数据居中 */
   center?: boolean;
   /** 少量数据模式 */
   light?: boolean;
+  /** 横屏将标签移动到临时控制层 */
+  metaTarget?: string;
 }>();
 
 const router = useRouter();
@@ -197,6 +208,11 @@ const {
   isOnlineSong,
 } = useQualityControl();
 const showQualityPopover = ref(false);
+const showLyricPopover = ref(false);
+const showSourcePopover = ref(false);
+usePlayerMetaPopoverHold(showQualityPopover);
+usePlayerMetaPopoverHold(showLyricPopover);
+usePlayerMetaPopoverHold(showSourcePopover);
 useBackClosable(showQualityPopover);
 const qualityTagRef = ref<HTMLElement | null>(null);
 const qualityLoading = ref(false);

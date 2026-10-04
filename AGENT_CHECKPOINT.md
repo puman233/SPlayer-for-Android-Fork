@@ -1,5 +1,51 @@
 # Android 自动发布工作流检查点
 
+## Adaptive UI Phase 1：Landscape Player（2026-10-04）
+
+状态：VERIFIED（以下模拟器矩阵）；等待用户视觉验收。当前分支 `dev`，从 `b33d71d0` 开始，本阶段仅本地提交，未 push、未发布、未进入 Phase 2。
+
+### 修改与根因
+
+- 根因：横屏菜单、底栏和歌词工具使用 persistent 常驻，顶栏/底栏占据主内容布局；歌曲标签和侧边歌词菜单继续挤压内容。
+- FullPlayerMobileLandscape 默认 Idle，独立临时 overlay 在点击后显示，3 秒无操作淡出；隐藏时 inert + display:none，背景同步退出。
+- 主内容约 36% / 64% grid，正方形封面由真实剩余高度计算；长元信息可独立滚动。窄窗口歌词留白按约束收缩，展开控制层不改变内容尺寸。
+- Teleport 将元信息标签、来源选择和歌词工具移入控制层，继续复用 PlayerControl、PlayerSlider、现有菜单与两种歌词引擎。
+- 父级桌面隐藏计时不再影响横屏，子级 hold 覆盖拖动、菜单与队列；卸载后的 release 不再重新启动计时器。Android 大屏横屏复用该 composition。
+- 新增 AdaptiveWindowInfo 约束描述与测试；已有手机计时器支持默认隐藏。README/CHANGELOG、验证文档、CI 测试列表已同步。
+
+### 实际验证
+
+| 项目                                                             | 结果                                                                   |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 手机 MuMu：1080×1920、density 480；横屏 WebView 640×360 CSS px   | VERIFIED                                                               |
+| 大屏 MuMu：1080×1920、density 280；横屏 WebView 1098×618 CSS px  | VERIFIED                                                               |
+| 每台 LandscapePlayerTest + PlayerDeviceLayoutTest                | VERIFIED，各 2 项通过                                                  |
+| Portrait → Landscape → Portrait → Landscape                      | VERIFIED，歌曲与随机/循环状态保持                                      |
+| 初始隐藏、原生 MotionEvent 展开、timeout、inert、无残留背景      | VERIFIED                                                               |
+| 控件展开前后内容尺寸不变、封面/信息/歌词边界、播放按钮位于窗口内 | VERIFIED                                                               |
+| 快捷菜单超过时限、拖动超过 4 秒、松手恢复隐藏                    | VERIFIED                                                               |
+| 原生静音 WAV 的实际 seek                                         | VERIFIED，positionMs 手机 38858、大屏 37284                            |
+| textZoom 100/130、长标题/多歌手/长专辑、DefaultLyric/AMLL/无歌词 | VERIFIED，长元信息可滚动                                               |
+| TS 状态/布局/歌词调度/设置回归                                   | VERIFIED，24 项通过                                                    |
+| pnpm format、pnpm lint、typecheck:web、build:android             | VERIFIED，ESLint 零错误/警告                                           |
+| 四 ABI debug APK、instrumentation APK、JVM 任务                  | VERIFIED，JVM 缓存报告 18 项无失败                                     |
+| Android Lint 全项目零错误                                        | BLOCKED，历史报告仍 187 errors / 27 warnings；任务退出成功不等于零错误 |
+
+### 证据与产物
+
+- 最终证据根目录：`C:/Users/ihyj/.codex/visualizations/2026/10/04/01a10549-90ac-7e40-adfe-0e909a47e44b`。
+- 实际窗口截图与 JSON：`final-phone/`、`final-tablet/`；最终仪器日志：`phone-instrumentation-final.txt`、`tablet-instrumentation-final.txt`。早期截图位于其他目录，不作为最终效果。
+- 图像已实际查看：手机/大屏 Idle、Controls、130% 长元信息、AMLL。截图由目标 Window PixelCopy 获取，原生 MotionEvent 发送到目标 WebView，避免 MuMu 多显示面默认截图或注入错误。
+- 独立测试包：`SPlayer-Phase1-arm64-debug.apk`，64,743,351 字节，包名 `top.imsyy.splayer.android.phase1verify`，SHA-256 `ce693c5af69836fa7c9067b9fa31d33be4a2637db231dc88668c45b938f3fa98`。此为 debug 验收包，不是正式 Release。
+- 没有覆盖正式应用或清除其数据；测试 WAV 已删除，测试包进程已停止。未修改系统分辨率、密度或字体设置。
+
+### 边界与下一步
+
+- MainActivity 原有 WebView textZoom 固定 100%，大字验收通过显式设置 130% 完成，不代表产品已跟随系统 fontScale。真实硬件 cutout、Android 10、折叠屏与在线歌曲账号功能未在本轮扩展验证。
+- 超长元信息在小高度窗口中滚动阅读；临时控制层会覆盖其下方内容，但不改变内容尺寸。
+- 当前停止，等待用户确认 Phase 1 效果。仅收到明确通过/继续后才进入 Phase 2 Portrait Player；不得自动 push 或 Release。
+- 复现命令及隔离包保护见 `docs/validation/landscape-phase1.md`。
+
 ## 本次对话修改回退（2026-10-04）
 
 状态：VERIFIED（以下范围）。按用户要求撤销本次对话的五个提交：920996ce、cf8aaa8d、1a65f64b、99c2c3ce、1090e1e0。使用新的回退提交保留历史，不强推、不移动 Tag。添加本回退记录前，暂存内容已与基线 `16e220977f8eaa971f6b5b531ce138c82e0f0732` 完全一致；本次自适应基础层、播放器/共享控件修改及同版本修补工作流均撤销。

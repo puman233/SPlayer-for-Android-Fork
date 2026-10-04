@@ -4,6 +4,25 @@ import { effectScope, nextTick, ref } from "vue";
 import { useMobilePlayerControls, type MobilePlayerPage } from "./useMobilePlayerControls.ts";
 
 describe("手机播放器控件", () => {
+  it("横屏初始隐藏且不启动计时，点击后续时，隐藏状态的触摸不提前展开", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const scope = effectScope();
+    const controls = scope.run(() =>
+      useMobilePlayerControls(ref<MobilePlayerPage>("lyric"), 3000, false),
+    )!;
+    assert.equal(controls.visible.value, false);
+    controls.pointerDown({ pointerId: 1 } as PointerEvent);
+    controls.pointerEnd({ pointerId: 1 } as PointerEvent);
+    assert.equal(controls.visible.value, false);
+    controls.interact();
+    t.mock.timers.tick(2500);
+    controls.interact();
+    t.mock.timers.tick(2999);
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(1);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+  });
   const setup = () => {
     const scope = effectScope();
     const page = ref<MobilePlayerPage>("lyric");
@@ -75,6 +94,7 @@ describe("手机播放器控件", () => {
     assert.equal(controls.visible.value, false);
     controls.interact();
     scope.stop();
+    controls.hold.release();
     t.mock.timers.tick(9000);
     assert.equal(controls.visible.value, true);
   });

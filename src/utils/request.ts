@@ -10,7 +10,8 @@ import { useSettingStore } from "@/stores";
 import { getCookie } from "./cookie";
 import { isLogin } from "./auth";
 import { isCapacitorAndroid, isCapacitorNative, isDev } from "./env";
-import { EMBEDDED_API_BASE_URL, restartEmbeddedApi, waitForEmbeddedApiReady } from "./embeddedApi";
+import { EMBEDDED_API_BASE_URL, recoverEmbeddedApi, waitForEmbeddedApiReady } from "./embeddedApi";
+import { createNetworkFailureNotice } from "./requestRecovery";
 
 declare module "axios" {
   interface InternalAxiosRequestConfig {
@@ -27,6 +28,17 @@ const DEV_PROXY_BASE_URL = "/api/netease";
 const ABSOLUTE_HTTP_URL_RE = /^https?:\/\//i;
 
 let apiConfigWarningShown = false;
+const networkFailureNotice = createNetworkFailureNotice();
+const failureKey = (config?: AxiosRequestConfig) =>
+  `${config?.baseURL || ""}|${config?.url?.split("?")[0] || ""}`;
+const isEmbeddedRequest = (config: AxiosRequestConfig) => {
+  try {
+    const url = new URL(config.url || "", `${config.baseURL || ""}/`);
+    return url.origin === new URL(EMBEDDED_API_BASE_URL).origin;
+  } catch {
+    return false;
+  }
+};
 
 const normalizeApiBaseUrl = (value?: string | null): string => {
   const normalized = String(value ?? "").trim();
@@ -159,6 +171,7 @@ server.interceptors.request.use(
 
 server.interceptors.response.use(
   (response: AxiosResponse) => {
+    networkFailureNotice.success(failureKey(response.config));
     // 慢请求诊断：仅当耗时超过阈值时输出（页面加载卡顿排查用）
     if (response.config?._startTime) {
       const cost = performance.now() - response.config._startTime;
@@ -173,14 +186,18 @@ server.interceptors.response.use(
     if (
       isCapacitorAndroid &&
       error.config &&
+      isEmbeddedRequest(error.config) &&
       !error.config._embeddedApiRetried &&
       (error.code === "ECONNABORTED" ||
         error.code === "ERR_NETWORK" ||
         error.message.includes("Network Error") ||
         error.message.includes("timeout"))
     ) {
-      const restarted = await restartEmbeddedApi();
-      if (restarted) {
+      const restarted = await recoverEmbeddedApi();
+      if (
+        restarted &&
+        ["get", "head", "options"].includes((error.config.method || "get").toLowerCase())
+      ) {
         error.config._embeddedApiRetried = true;
         return server.request(error.config);
       }
@@ -191,10 +208,9 @@ server.interceptors.response.use(
       error.message.includes("timeout") ||
       error.message.includes("Network Error")
     ) {
-      const activeBaseUrl = String(error.config?.baseURL || resolveApiBaseUrl() || "未配置");
-      window.$message?.warning(
-        `网络请求超时，请检查 API 服务地址和当前网络连接。当前地址: ${activeBaseUrl}`,
-      );
+      if (networkFailureNotice.fail(failureKey(error.config))) {
+        window.$message?.warning("网络连接暂时不可用，请稍后重试。", { duration: 3000 });
+      }
       return Promise.resolve({ data: null });
     }
 

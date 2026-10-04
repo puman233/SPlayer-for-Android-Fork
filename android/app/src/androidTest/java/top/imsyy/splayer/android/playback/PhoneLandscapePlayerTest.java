@@ -163,9 +163,8 @@ public class PhoneLandscapePlayerTest {
     assertTrue("标题在歌手上方", title.getDouble("bottom") <= artists.getDouble("y") + 1);
     assertTrue("歌手在专辑上方", artists.getDouble("bottom") <= album.getDouble("y") + 1);
     assertTrue("标签操作在专辑下方", album.getDouble("bottom") <= row.getDouble("y") + 1);
-    assertTrue("标签不能与操作重叠", tags.getDouble("right") <= actions.getDouble("x") + 1);
-    assertEquals("标签和操作共用一行", tags.getDouble("y") + tags.getDouble("height") / 2,
-        actions.getDouble("y") + actions.getDouble("height") / 2, 1);
+    assertTrue("标签不能与操作重叠", tags.getDouble("right") <= actions.getDouble("x") + 1 || tags.getDouble("bottom") <= actions.getDouble("y") + 1);
+    assertEquals("手机操作顺序必须为收藏、桌面歌词、队列、更多", "true", js("(()=>{const row=document.querySelector('.info-page .info-actions');const d=row.querySelector('.portrait-desktop-lyric'),q=row.querySelector('.n-badge');return !!d&&!!q&&d.previousElementSibling?.classList.contains('action-btn')&&d.nextElementSibling===q&&q.nextElementSibling?.classList.contains('qa-trigger')})()"));
     assertTrue("操作不能越界", actions.getDouble("right") <= row.getDouble("right") + 1);
     assertTrue("手机操作触控热区至少48px", bounds(".info-page .qa-trigger").getDouble("height") >= 48);
     save("portrait-geometry", json("({title:" + title + ",artists:" + artists + ",album:" + album + ",tags:" + tags + ",actions:" + actions + "})"));
@@ -206,11 +205,45 @@ public class PhoneLandscapePlayerTest {
         JSONObject menu = bounds(".quick-actions-popover");
         assertTrue("竖屏收纳菜单顶部不得裁切", menu.getDouble("y") >= 0);
         assertTrue("竖屏收纳菜单底部不得越界", menu.getDouble("bottom") <= json("({height:innerHeight})").getDouble("height") + 1);
-        JSONObject queue = bounds(".portrait-overflow-actions .n-button:last-child");
+        assertEquals("只有添加歌单可收纳", "true", js("document.querySelector('.portrait-overflow-actions').textContent.trim()==='添加到歌单'"));
+        tap(12, 100);
+        JSONObject queue = bounds(".info-page .info-actions .n-badge .action-btn");
         tap((float)(queue.getDouble("x") + queue.getDouble("width") / 2), (float)(queue.getDouble("y") + queue.getDouble("height") / 2));
-        assertEquals("真实点击收纳后的队列入口应打开队列", "true", js("t.playListShow"));
+        assertEquals("真实点击常驻队列入口应打开队列", "true", js("t.playListShow"));
         js("t.playListShow=false");
         tap(12, 100);
+        JSONObject desktop = bounds(".portrait-desktop-lyric");
+        tap((float)(desktop.getDouble("x") + desktop.getDouble("width") / 2), (float)(desktop.getDouble("y") + desktop.getDouble("height") / 2));
+        SystemClock.sleep(1000);
+        assertEquals("桌面歌词按钮应调用现有原生开关", "true", js("t.showDesktopLyric"));
+        tap((float)(desktop.getDouble("x") + desktop.getDouble("width") / 2), (float)(desktop.getDouble("y") + desktop.getDouble("height") / 2));
+        SystemClock.sleep(500);
+        assertEquals("桌面歌词应可关闭", "false", js("t.showDesktopLyric"));
+
+        JSONObject lyricDot = bounds(".pagination .dot:last-child");
+        tap((float)(lyricDot.getDouble("x") + lyricDot.getDouble("width") / 2), (float)(lyricDot.getDouble("y") + lyricDot.getDouble("height") / 2));
+        capture("portrait-lyric-controls");
+        SystemClock.sleep(2100);
+        assertEquals("手机歌词页两秒隐藏", "true", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
+        assertEquals("隐藏控件禁用触摸", "true", js("document.querySelector('.mobile-player-bottom-controls').inert"));
+        capture("portrait-lyric-idle");
+        tap(180, 40);
+        assertEquals("空白点击恢复歌词页控件", "false", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
+        assertEquals("进度与播放按钮恢复后可见且可命中", "true", js("(()=>{const b=document.querySelector('.mobile-player-bottom-controls'),p=b.querySelector('.play-btn'),r=p.getBoundingClientRect();return !b.inert&&getComputedStyle(b).visibility==='visible'&&r.height>=48&&r.bottom<=innerHeight&&!!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('.play-btn')})()"));
+        capture("portrait-lyric-restored");
+        save("portrait-lyric-dom", json("(()=>{const q=s=>{const e=document.querySelector(s),r=e.getBoundingClientRect(),c=getComputedStyle(e);return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,display:c.display,opacity:c.opacity,zIndex:c.zIndex,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.className}};return {height:innerHeight,footer:q('.mobile-player-bottom-controls'),progress:q('.mobile-player-bottom-controls .progress-section'),controls:q('.mobile-player-bottom-controls .control-section'),play:q('.mobile-player-bottom-controls .play-btn'),html:document.querySelector('.mobile-player-bottom-controls').outerHTML}})()"));
+        js("window.testGeneration=null;fetch('http://127.0.0.1:1145/api').then(r=>r.json()).then(x=>window.testGeneration=x.generation)");
+        for(int i=0;i<40&&"null".equals(js("window.testGeneration"));i++) SystemClock.sleep(200);
+        assertFalse("本地服务应就绪", "null".equals(js("window.testGeneration")));
+        js("window.nodejs.channel.send('embedded-api-reload')");
+        SystemClock.sleep(700);
+        js("window.reloadGeneration=null;fetch('http://127.0.0.1:1145/api').then(r=>r.json()).then(x=>window.reloadGeneration=x.generation)");
+        for(int i=0;i<40&&"null".equals(js("window.reloadGeneration"));i++) SystemClock.sleep(200);
+        assertEquals("真实桥接热重载必须创建新的HTTP服务", "true", js("window.reloadGeneration>window.testGeneration"));
+        save("api-reload", json("({before:window.testGeneration,after:window.reloadGeneration,songId:m.playSong.id,playStatus:t.playStatus})"));
+        tap(180, 40);
+        JSONObject infoDot = bounds(".pagination .dot:nth-last-child(2)");
+        tap((float)(infoDot.getDouble("x") + infoDot.getDouble("width") / 2), (float)(infoDot.getDouble("y") + infoDot.getDouble("height") / 2));
       }
       rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
       if ("tablet".equals(label)) {
@@ -289,6 +322,13 @@ public class PhoneLandscapePlayerTest {
       JSONObject nativeState = json("window.nativeState");
       assertTrue("真实 seek 改变原生播放位置", nativeState.getDouble("positionMs") > 1000);
       save("native-seek", nativeState);
+      js("window.nativeReloadState=null;window.nodejs.channel.send('embedded-api-reload');");
+      SystemClock.sleep(700);
+      js("window.Capacitor.nativePromise('AndroidNativePlayback','getState',{}).then(v=>window.nativeReloadState=v)");
+      SystemClock.sleep(300);
+      JSONObject nativeReloadState = json("window.nativeReloadState");
+      assertEquals("服务热重载不得重置原生播放进度", nativeState.getDouble("positionMs"), nativeReloadState.getDouble("positionMs"), 1000);
+      save("native-after-reload", nativeReloadState);
       SystemClock.sleep(2400);
       assertFalse("松手后恢复隐藏计时", visible());
 

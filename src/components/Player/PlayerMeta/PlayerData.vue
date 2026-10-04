@@ -48,7 +48,10 @@
       :align="center ? 'center' : undefined"
       size="small"
       vertical
-      :class="{ 'phone-portrait-meta': phonePortrait }"
+      :class="{
+        'phone-portrait-meta': phonePortrait,
+        'portrait-actions-stacked': stackedPortraitActions,
+      }"
     >
       <!-- 播放状态 + 操作按钮 -->
       <div
@@ -206,9 +209,12 @@ const metaRowRef = ref<HTMLElement | null>(null);
 const tagsRef = ref<HTMLElement | null>(null);
 const { width: metaRowWidth } = useElementSize(metaRowRef);
 const { width: tagsWidth } = useElementSize(tagsRef);
-// 四个 48px 热区、间距、队列徽标与标签间隔按实际宽度预算。
+// 五个操作热区，空间不足只收纳添加歌单，其余入口保持可见。
 const compactPortraitActions = computed(
-  () => props.phonePortrait && metaRowWidth.value < tagsWidth.value + 224,
+  () => props.phonePortrait && metaRowWidth.value < tagsWidth.value + 292,
+);
+const stackedPortraitActions = computed(
+  () => compactPortraitActions.value && metaRowWidth.value < tagsWidth.value + 174,
 );
 
 const router = useRouter();
@@ -554,6 +560,10 @@ const jumpToRadio = debounce(
       flex: 0 0 auto;
       width: max-content;
       padding-left: 0;
+    }
+    &.portrait-actions-stacked .meta-actions-row {
+      flex-direction: column;
+      align-items: stretch;
     }
   }
   &.record {

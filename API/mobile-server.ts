@@ -2,6 +2,7 @@ import http, { IncomingMessage, ServerResponse } from "http";
 import https from "https";
 import { createRequire } from "module";
 import path from "path";
+import type { Socket } from "net";
 import { handleUnblockRequest } from "./unblock";
 
 const DEFAULT_PORT = Number(process.env["SP_API_PORT"] || process.env["VITE_SERVER_PORT"] || 1145);
@@ -20,6 +21,26 @@ const EMBEDDED_API_MAIN_ENTRY = path.join(EMBEDDED_API_VENDOR_ROOT, "main.js");
 const nodeRequire = createRequire(EMBEDDED_API_MAIN_ENTRY);
 let generateNeteaseApiConfig: (() => Promise<void>) | null = null;
 let neteaseApiConfigPromise: Promise<void> | null = null;
+let activeServer: http.Server | null = null;
+let reloadPromise: Promise<void> | null = null;
+let serverGeneration = 0;
+const activeSockets = new Set<Socket>();
+
+const getRuntimeBridge = () => {
+  const globalRequire =
+    typeof globalThis.require === "function" ? globalThis.require : process.mainModule?.require;
+  if (!globalRequire) return null;
+  try {
+    return globalRequire("cordova-bridge") as {
+      channel?: {
+        send?: (payload: unknown) => void;
+        on?: (event: string, callback: (payload: unknown) => void) => void;
+      };
+    };
+  } catch {
+    return null;
+  }
+};
 
 const notifyEmbeddedApiReady = () => {
   try {
@@ -104,6 +125,7 @@ const sendJson = (
   statusCode: number,
   payload: unknown,
 ) => {
+  if (response.destroyed || response.writableEnded) return;
   setCorsHeaders(request, response);
   response.statusCode = statusCode;
   response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -321,6 +343,7 @@ export const startEmbeddedApiServer = async () => {
       sendJson(request, response, 200, {
         name: "SPlayer API",
         description: "Embedded local API service for SPlayer Android",
+        generation: serverGeneration,
         list: [
           {
             name: "NeteaseCloudMusicApi",
@@ -338,6 +361,10 @@ export const startEmbeddedApiServer = async () => {
 
     sendJson(request, response, 404, { error: "API not found" });
   });
+  server.on("connection", (socket) => {
+    activeSockets.add(socket);
+    socket.once("close", () => activeSockets.delete(socket));
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -348,9 +375,40 @@ export const startEmbeddedApiServer = async () => {
   });
 
   console.log(`[embedded-api] listening on http://${DEFAULT_HOST}:${DEFAULT_PORT}/api`);
+  activeServer = server;
+  serverGeneration++;
   notifyEmbeddedApiReady();
   return server;
 };
+
+const reloadEmbeddedApiServer = () => {
+  if (reloadPromise) return reloadPromise;
+  reloadPromise = (async () => {
+    if (activeServer?.listening) {
+      await new Promise<void>((resolve, reject) => {
+        activeServer!.close((error) => (error ? reject(error) : resolve()));
+        // 释放旧监听器与连接，未完成请求由前端的有界重试处理。
+        for (const socket of activeSockets) socket.destroy();
+      });
+    }
+    activeServer = null;
+    neteaseApiConfigPromise = null;
+    await startEmbeddedApiServer();
+  })().finally(() => {
+    reloadPromise = null;
+  });
+  return reloadPromise;
+};
+
+if (process.env["SP_EMBEDDED"] === "1") {
+  getRuntimeBridge()?.channel?.on?.("message", (message) => {
+    if (message === "embedded-api-reload") {
+      void reloadEmbeddedApiServer().catch((error) =>
+        console.error("[embedded-api] reload failed", error),
+      );
+    }
+  });
+}
 
 void startEmbeddedApiServer().catch((error) => {
   console.error("[embedded-api] startEmbeddedApiServer failed", error);

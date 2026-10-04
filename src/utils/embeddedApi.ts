@@ -1,4 +1,5 @@
 import { isCapacitorAndroid } from "./env";
+import { createEmbeddedRecovery } from "./requestRecovery";
 
 export const EMBEDDED_API_PORT = 1145;
 export const EMBEDDED_API_ORIGIN = `http://127.0.0.1:${EMBEDDED_API_PORT}`;
@@ -6,7 +7,6 @@ export const EMBEDDED_API_BASE_URL = `${EMBEDDED_API_ORIGIN}/api/netease`;
 
 const DEVICE_READY_TIMEOUT_MS = 15000;
 const EMBEDDED_API_READY_TIMEOUT_MS = 45000;
-const EMBEDDED_API_READY_EVENT = "embedded-api-ready";
 
 let nodeRuntimeStartPromise: Promise<void> | null = null;
 let embeddedApiReadyPromise: Promise<void> | null = null;
@@ -17,33 +17,9 @@ let restartInProgress: Promise<void> | null = null;
 
 const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
-const waitForEmbeddedApiReadyEvent = () => {
-  return new Promise<void>((resolve) => {
-    const nodeRuntime = window.nodejs;
-    if (!nodeRuntime) {
-      // bridge 不可用时保持 pending，交由轮询决定结果
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      // 超时后清除 listener 避免吞掉后续通道消息，但不 resolve，交由轮询兜底
-      nodeRuntime.channel.setListener(() => {});
-      console.warn("[embedded-api] 就绪事件超时，依赖轮询兜底");
-    }, EMBEDDED_API_READY_TIMEOUT_MS);
-
-    nodeRuntime.channel.setListener((message) => {
-      console.info("[embedded-api]", message);
-      if (message === EMBEDDED_API_READY_EVENT) {
-        window.clearTimeout(timer);
-        resolve();
-      }
-    });
-  });
-};
-
 const waitForEmbeddedApiPolling = async (shouldStop: () => boolean) => {
-  const maxAttempts = Math.ceil(EMBEDDED_API_READY_TIMEOUT_MS / 500);
-  for (let i = 0; i < maxAttempts; i++) {
+  const deadline = Date.now() + EMBEDDED_API_READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
     if (shouldStop()) return;
     if (await isEmbeddedApiHealthy()) return;
     await delay(500);
@@ -67,7 +43,9 @@ const waitForNodeRuntimeBridge = async () => {
   if (window.nodejs) return;
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
     const cleanup = () => {
+      settled = true;
       window.clearTimeout(timer);
       document.removeEventListener("deviceready", onDeviceReady);
     };
@@ -87,9 +65,9 @@ const waitForNodeRuntimeBridge = async () => {
     document.addEventListener("deviceready", onDeviceReady, { once: true });
 
     const poll = async () => {
-      while (!window.nodejs) {
+      while (!settled && !window.nodejs) {
         await delay(100);
-        if (window.nodejs) {
+        if (!settled && window.nodejs) {
           cleanup();
           resolve();
           return;
@@ -147,7 +125,7 @@ export const startEmbeddedApiRuntime = async () => {
   }
 };
 
-const isEmbeddedApiHealthy = async () => {
+export const isEmbeddedApiHealthy = async () => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 2000);
 
@@ -171,18 +149,10 @@ export const waitForEmbeddedApiReady = async () => {
 
   embeddedApiReadyPromise = (async () => {
     await waitForNodeRuntimeBridge();
-    let ready = false;
-    const readyEventPromise = nodeRuntimeStarted
-      ? Promise.resolve()
-      : waitForEmbeddedApiReadyEvent();
     await startEmbeddedApiRuntime();
-    // 事件和轮询并行，任一先成功即视为就绪，败者通过标志位提前终止
-    await Promise.race([
-      readyEventPromise.then(() => {
-        ready = true;
-      }),
-      waitForEmbeddedApiPolling(() => ready),
-    ]);
+    // 已启动不代表 HTTP 服务可用，必须实际通过健康检查。
+    await waitForEmbeddedApiPolling(() => false);
+    embeddedApiErrorShown = false;
   })();
 
   try {
@@ -211,12 +181,13 @@ export const restartEmbeddedApi = async (): Promise<boolean> => {
 
   restartInProgress = (async () => {
     console.warn("[embedded-api] restarting Node.js runtime...");
-    // 重置状态以允许重新启动
-    nodeRuntimeStartPromise = null;
     embeddedApiReadyPromise = null;
-    nodeRuntimeStarted = false;
-    embeddedApiErrorShown = false;
-    await waitForEmbeddedApiReady();
+    await startEmbeddedApiRuntime();
+    // Node.js 运行时不能通过重复 start 重启，使用现有桥接热重载 HTTP 服务。
+    window.nodejs?.channel.send("embedded-api-reload");
+    await delay(300);
+    await waitForEmbeddedApiPolling(() => false);
+    embeddedApiReadyPromise = Promise.resolve();
     console.info("[embedded-api] restart successful");
   })();
 
@@ -230,6 +201,8 @@ export const restartEmbeddedApi = async (): Promise<boolean> => {
     restartInProgress = null;
   }
 };
+
+export const recoverEmbeddedApi = createEmbeddedRecovery(isEmbeddedApiHealthy, restartEmbeddedApi);
 
 const HEALTH_CHECK_INTERVAL_MS = 30000;
 const HEALTH_CHECK_MAX_FAILURES = 2;
@@ -257,8 +230,7 @@ export const startHealthCheck = () => {
 
     if (consecutiveFailures >= HEALTH_CHECK_MAX_FAILURES) {
       consecutiveFailures = 0;
-      window.$message?.warning("内置 API 服务异常，正在自动恢复...", { duration: 3000 });
-      await restartEmbeddedApi();
+      await recoverEmbeddedApi();
     }
   }, HEALTH_CHECK_INTERVAL_MS);
 };

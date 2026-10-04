@@ -31,7 +31,14 @@ let savedPageType: MobilePageType = "info";
     @keydown.capture="interact"
   >
     <Transition name="mobile-controls">
-      <div v-show="controlsVisible" ref="topBarRef" class="top-bar">
+      <div
+        v-show="controlsVisible || isPhoneDevice"
+        ref="topBarRef"
+        class="top-bar"
+        :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
+        :inert="isPhoneDevice && !controlsVisible"
+        :aria-hidden="isPhoneDevice && !controlsVisible"
+      >
         <!-- 左：进入横屏沉浸式（仅 Android 手机有意义） -->
         <div
           v-if="showPureLyricButton && currentPageType === 'lyric'"
@@ -92,7 +99,7 @@ let savedPageType: MobilePageType = "info";
                 class="mobile-data"
               >
                 <template #actions="{ compact }">
-                  <div class="info-actions">
+                  <div class="info-actions" :class="{ compact }">
                     <div
                       v-if="musicStore.playSong.type !== 'radio'"
                       class="action-btn"
@@ -113,6 +120,20 @@ let savedPageType: MobilePageType = "info";
                         :class="{ liked: dataStore.isLikeSong(musicStore.playSong.id) }"
                       />
                     </div>
+                    <n-button
+                      v-if="isPhoneDevice"
+                      text
+                      class="portrait-desktop-lyric action-btn"
+                      aria-label="桌面歌词"
+                      :aria-pressed="statusStore.showDesktopLyric"
+                      @click.stop="player.setDesktopLyricShow(!statusStore.showDesktopLyric)"
+                    >
+                      <SvgIcon
+                        name="DesktopLyric"
+                        :size="26"
+                        :class="{ liked: statusStore.showDesktopLyric }"
+                      />
+                    </n-button>
                     <div
                       v-if="!compact"
                       class="action-btn"
@@ -123,7 +144,7 @@ let savedPageType: MobilePageType = "info";
                       <SvgIcon name="AddList" :size="26" />
                     </div>
                     <n-badge
-                      v-if="showPortraitPlaylistButton && !compact"
+                      v-if="showPortraitPlaylistButton"
                       :value="dataStore.playList?.length ?? 0"
                       :show="settingStore.showPlaylistCount"
                       :max="9999"
@@ -143,14 +164,6 @@ let savedPageType: MobilePageType = "info";
                             "
                             ><SvgIcon name="AddList" :size="24" />添加到歌单</n-button
                           >
-                          <n-button
-                            v-if="showPortraitPlaylistButton"
-                            text
-                            @click="statusStore.playListShow = true"
-                            ><SvgIcon name="PlayList" :size="24" />播放队列（{{
-                              dataStore.playList.length
-                            }}）</n-button
-                          >
                         </div>
                       </template>
                     </PlayerQuickActionsMenu>
@@ -164,7 +177,13 @@ let savedPageType: MobilePageType = "info";
 
       <div v-if="hasLyric" class="page lyric-page">
         <Transition name="mobile-controls">
-          <div v-show="controlsVisible" class="lyric-header">
+          <div
+            v-show="controlsVisible || isPhoneDevice"
+            class="lyric-header"
+            :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
+            :inert="isPhoneDevice && !controlsVisible"
+            :aria-hidden="isPhoneDevice && !controlsVisible"
+          >
             <div
               class="lyric-cover"
               data-no-page-swipe
@@ -211,7 +230,10 @@ let savedPageType: MobilePageType = "info";
     <Transition name="mobile-controls">
       <MobilePlayerBottomControls
         v-if="currentPageType !== 'comment'"
-        v-show="controlsVisible"
+        v-show="controlsVisible || isPhoneDevice"
+        :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
+        :inert="isPhoneDevice && !controlsVisible"
+        :aria-hidden="isPhoneDevice && !controlsVisible"
         :page-count="totalPages"
         :page-index="pageIndex"
         :large="isPadDevice"
@@ -241,12 +263,14 @@ import { isCapacitorAndroid } from "@/utils/env";
 import { toLikeSong } from "@/utils/auth";
 import { openPlaylistAdd } from "@/utils/modal";
 import { removeBrackets } from "@/utils/format";
+import { usePlayerController } from "@/core/player/PlayerController";
 import { getFontSize } from "@/utils/style";
 
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const dataStore = useDataStore();
+const player = usePlayerController();
 
 const LYRIC_HEADER_MAX_PADDING = 60;
 
@@ -408,7 +432,7 @@ const {
   touchEnd,
   resetPointers,
   hold,
-} = useMobilePlayerControls(currentPageType);
+} = useMobilePlayerControls(currentPageType, isPhoneDevice.value ? 2000 : 4000);
 provide(PLAYER_META_HOLD_KEY, hold);
 // 只观察事件，不消费歌词点击、滚动、长按和进度条拖动
 useEventListener(window, "pointerup", pointerEnd, { capture: true, passive: true });
@@ -1150,19 +1174,38 @@ const contentTransform = computed(() => {
   }
 
   &.phone-portrait {
+    &.controls-hidden {
+      padding-bottom: 0;
+    }
+    .portrait-controls-hidden {
+      visibility: hidden;
+      pointer-events: none;
+    }
     .info-page .song-info-bar .info-section :deep(.mobile-data) {
       .meta-actions-row {
         flex-wrap: nowrap;
+        gap: 4px;
       }
       .play-meta {
         flex: 0 0 auto;
       }
       .info-actions {
-        gap: 4px;
+        gap: 8px;
+        align-self: flex-end;
         .action-btn,
         .qa-trigger--mobile {
           width: 48px;
           height: 48px;
+        }
+        &.compact {
+          gap: 2px;
+          > .n-badge {
+            margin-right: 4px;
+          }
+          .action-btn,
+          .qa-trigger--mobile {
+            width: 40px;
+          }
         }
       }
     }

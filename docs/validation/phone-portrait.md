@@ -1,5 +1,7 @@
 # Phase 2：手机竖屏播放器
 
+本文件记录上一轮实现；用户本阶段后续修订（常驻桌面歌词、队列及超时恢复）以 phone-portrait-revision.md 为准。
+
 ## Phase / Root Cause
 
 Phase 1 手机横屏已获用户确认。本阶段只调整硬件手机的竖屏信息页，平板使用原布局。

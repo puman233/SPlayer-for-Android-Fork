@@ -1,4 +1,4 @@
-# 🎵 SPlayer for Android
+# 🎵 SPlayer for Android Fork
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.0.13-blue?style=flat-square" alt="version">
@@ -9,18 +9,20 @@
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="typescript">
 </p>
 
-> **SPlayer for Android 是一款第三方非官方移植版 Android 音乐播放器**，基于 [SPlayer](https://github.com/SPlayer-Dev/SPlayer) 与 [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next) 二次开发，仅用于**个人学习与练习**，与 SPlayer 原项目无任何关联。
+> **SPlayer for Android Fork** 是基于 [SPlayer-Dev/SPlayer-for-Android](https://github.com/SPlayer-Dev/SPlayer-for-Android) 的个人维护分支，在其 Android 移植版本基础上继续进行功能修复、适配与扩展。上游 Android 项目源自 [SPlayer](https://github.com/SPlayer-Dev/SPlayer)。
+>
+> 本项目为社区非官方 Fork，与 SPlayer / SPlayer for Android 上游开发团队不存在官方隶属、合作、授权背书或认可关系。
 
 ---
 
 ## ⚠️ 免责声明 (Disclaimer)
 
-- **非官方性质**：本项目是**第三方非官方移植版**，与 [SPlayer](https://github.com/SPlayer-Dev/SPlayer) / [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next) 原项目及其开发者无任何直接关联，亦未获其任何形式的认可或背书。
-- **API 使用风险**：本项目可能调用第三方 API（如网易云音乐等）的非官方接口，其稳定性与可用性不受本项目控制，可能随时失效、变更或产生异常，请自行承担相应风险。
-- **责任归属**：本项目仅用于**个人学习与练习**。因使用本项目（包括但不限于播放、下载、解锁等操作）而引发的任何直接或间接损失、纠纷或法律责任，均由使用者自行承担，项目作者不承担任何责任。
-- **商业使用风险**：请勿将本项目用于商业用途或盈利行为。AGPL-3.0 协议虽允许商业使用，但本项目作者明确声明仅限学习交流，若违反由此产生的法律风险由使用者自行承担。
+- **非官方性质**：本项目为独立维护的社区 Fork，与上游存在代码及 Git 历史上的派生关系，但不代表上游团队，亦未获其认可或背书。
+- **开源许可证**：本项目依据 AGPL-3.0 提供。AGPL-3.0 本身允许包括商业使用在内的使用方式；修改、传播、分发及其他适用场景应遵守许可证对应义务。
+- **第三方服务与内容**：本项目可能使用网易云音乐等第三方服务、接口或内容，其可用性与稳定性不受本项目控制。这些服务、接口、音乐资源、商标及其他内容受各自服务条款、版权及其他法律约束。AGPL-3.0 对本项目源代码的授权，不代表使用者自动取得第三方 API、音乐内容、商标或其他第三方资源的商业使用权。
+- **风险承担**：使用者应自行确认其使用方式符合当地法律法规及相关第三方服务条款，并承担相应使用风险。
 
-> 音乐资源版权归各版权方所有，请支持正版音乐；涉及解锁/试听相关的音源接口，请遵守当地法律法规并仅用于个人学习。
+> 音乐资源版权归各版权方所有，请支持正版音乐；涉及解锁／试听相关音源接口时，应遵守适用法律法规及第三方服务条款。
 
 ---
 
@@ -231,21 +233,23 @@ pnpm exec cap open android      # Android Studio 打开
 - ✨ [提交功能建议](../../issues/new?template=feature.yml)
 - 📮 [发起 Pull Request](../../compare)
 
-### 👥 贡献者
+### 👥 上游贡献者
 
-感谢每一位为本项目付出时间与代码的伙伴 ❤️
+感谢 SPlayer for Android 与 SPlayer 的开发者及所有上游贡献者。下图展示直接上游 SPlayer for Android 的贡献者。
 
 <a href="https://github.com/SPlayer-Dev/SPlayer-for-Android/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=SPlayer-Dev/SPlayer-for-Android" alt="contributors">
+  <img src="https://contrib.rocks/image?repo=SPlayer-Dev/SPlayer-for-Android" alt="SPlayer for Android 上游贡献者">
 </a>
 
-> 图片由 [contrib.rocks](https://contrib.rocks) 自动生成，随 GitHub 贡献图谱更新。
+> 图片由 [contrib.rocks](https://contrib.rocks) 自动生成，随上游仓库的 GitHub 贡献图谱更新。
 
 ---
 
 ## 🤝 致谢
 
-本项目基于 [**SPlayer**](https://github.com/imsyy/SPlayer) 移植，向原作者 [@imsyy](https://github.com/imsyy) 与所有贡献者致以最诚挚的感谢 ❤️
+本项目 Fork 自 [SPlayer-Dev/SPlayer-for-Android](https://github.com/SPlayer-Dev/SPlayer-for-Android)，并在其 Android 移植版本基础上继续开发。SPlayer for Android 源自 [SPlayer](https://github.com/SPlayer-Dev/SPlayer)。
+
+感谢 SPlayer for Android 的维护者、SPlayer 原作者 [@imsyy](https://github.com/imsyy) 及所有上游贡献者提供的代码、设计与维护工作。
 
 ---
 
@@ -253,13 +257,9 @@ pnpm exec cap open android      # Android Studio 打开
 
 本项目基于 [**AGPL-3.0**](./LICENSE)（GNU Affero General Public License v3.0）开源协议发布，与上游保持一致。
 
-- **原项目版权**：原 [SPlayer](https://github.com/SPlayer-Dev/SPlayer) / [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next) 版权归原开发者团队所有，本版本保留其原始版权声明。
-- **修改说明**：本版本为 Android 平台移植版，已对前端与原生层进行适配和优化，属 AGPL-3.0 协议下的衍生作品。
+- **上游版权**：本项目保留 [SPlayer for Android](https://github.com/SPlayer-Dev/SPlayer-for-Android) 与 [SPlayer](https://github.com/SPlayer-Dev/SPlayer) 的原始版权声明及许可信息。
+- **修改说明**：本 Fork 在上游 Android 移植版本基础上进行修复、适配与扩展，属 AGPL-3.0 协议下的衍生作品。
 
-**AGPL-3.0 核心要求**：
+修改、传播、分发或以网络服务方式提供本项目时，应根据 AGPL-3.0 的适用条款履行源代码提供、许可证及版权声明保留，以及其他相关义务。
 
-- 🔓 **开源**：任何修改、衍生或分发本项目的作品，必须同样以 AGPL-3.0 协议开源，并完整提供对应的源代码。
-- ©️ **保留版权**：不得移除或修改原始版权声明与许可信息。
-- 📦 **提供源码**：向使用者分发本项目或其修改版本时，须同时提供可获取的源代码，或提供指向源代码的明确链接。
-
-完整条款请参阅 [LICENSE](./LICENSE) 文件或 [GNU AGPL-3.0 官方文本](https://www.gnu.org/licenses/agpl-3.0.html)。
+具体权利与义务以仓库中的 [LICENSE](./LICENSE) 正文为准；亦可参阅 [GNU AGPL-3.0 官方文本](https://www.gnu.org/licenses/agpl-3.0.html)。

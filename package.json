@@ -6,10 +6,10 @@
   "description": "Android-first SPlayer build with Capacitor and embedded local API",
   "main": "./out/main/index.js",
   "author": "imsyy",
-  "home": "https://imsyy.top",
-  "github": "https://github.com/SPlayer-Dev/SPlayer-for-Android",
+  "home": "https://github.com/puman233/SPlayer-for-Android-Fork",
+  "github": "https://github.com/puman233/SPlayer-for-Android-Fork",
   "blog": "https://blog.imsyy.top",
-  "repository": "github:SPlayer-Dev/SPlayer-for-Android",
+  "repository": "github:puman233/SPlayer-for-Android-Fork",
   "license": "AGPL-3.0",
   "license-file": "LICENSE",
   "engines": {

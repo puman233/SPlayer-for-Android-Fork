@@ -1,5 +1,22 @@
 # Android 自动发布工作流检查点
 
+## 手机横屏参考布局修订（2026-10-04）
+
+状态：VERIFIED（以下模拟器范围），等待用户视觉确认。按用户要求，先用 `b802f47d` 回退上一轮 `60f5f936`，保留历史，再只修改手机横屏；平板恢复并保留原 composition。当前 `dev`，未 push、未 Release、未进入下一 UI 阶段。
+
+- 手机横屏采用参考图的分区：左封面/信息、右歌词，中央播放与进度、两侧操作组，取消整块底部控制面板。
+- 初次显示控件；2 秒无操作后淡出，点击空白恢复并重新计时。隐藏保留布局，pointer-events + inert 防止误触，背景随操作组一起隐藏。
+- 拖动与弹层保持显示；歌词工具收纳到顶部，次要播放设置收纳到更多快捷操作中，仍复用原来的播放与 seek 逻辑。
+- 仅手机横屏提供新的弹层 hold key；共享组件参数默认关闭。FullPlayer 分支仍为原来的手机判断，未把平板纳入新布局。
+- 手机 MuMu（density 480，横屏 WebView 640×360 CSS px）与平板 MuMu（density 280，1098×618 CSS px）各 2 项仪器测试通过。手机实际 MotionEvent、2 秒隐藏/恢复、菜单保持、拖动保持、原生 seek、横竖屏往返、两种歌词引擎、无歌词、长信息、WebView textZoom 100/130% 已验证。平板确认保留 `.player-content .content-left`，且不存在新手机横屏组件。
+- pnpm format、lint（零错误/警告）、typecheck:web、build:android 成功；23 项 TS 回归通过。四 ABI debug APK 与仪器包构建成功，JVM 缓存报告 18 项无失败。
+- Android Lint 全项目零错误：BLOCKED，历史 187 errors / 27 warnings 仍存在，任务正常退出不等于零错误通过。Vite/Gradle 的既有构建提示仍保留。
+- 本轮证据：`C:/Users/ihyj/.codex/visualizations/2026/10/04/01a10549-90ac-7e40-adfe-0e909a47e44b/phone-only`。`phone/controls.png`、`phone/idle.png`、`tablet/landscape.png` 为本轮实际窗口截图；之前 `final-phone/`、`final-tablet/` 属于已回退方案。
+- 验收 APK：证据目录中的 `SPlayer-phone-landscape-arm64-debug.apk`，64,743,482 字节，包名 `top.imsyy.splayer.android.phase1verify`，SHA-256 `ab9466bee195fc4102e55d83749ea6aa9ccf2d1e55985aa8d81a30ce981d7d05`。
+- 未覆盖正式包或清除数据；临时静音 WAV 已在 finally 删除，系统字体、分辨率、密度不改。固定截图使用已有隐藏别名设置，避免启动异步详情影响素材；产品设置不改，截图不使用真实用户歌曲。
+- 验证边界：MainActivity 原有 textZoom 固定 100%，显式 130% 压力测试不代表产品已跟随系统字体；真实硬件 cutout、Android 10、折叠屏、在线账号功能未扩展验证。超长元信息可滚动阅读。
+- 当前停止等待用户确认，复现说明见 `docs/validation/phone-landscape.md`。
+
 ## 本次对话修改回退（2026-10-04）
 
 状态：VERIFIED（以下范围）。按用户要求撤销本次对话的五个提交：920996ce、cf8aaa8d、1a65f64b、99c2c3ce、1090e1e0。使用新的回退提交保留历史，不强推、不移动 Tag。添加本回退记录前，暂存内容已与基线 `16e220977f8eaa971f6b5b531ce138c82e0f0732` 完全一致；本次自适应基础层、播放器/共享控件修改及同版本修补工作流均撤销。

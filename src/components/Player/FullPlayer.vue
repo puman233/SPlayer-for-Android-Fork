@@ -330,6 +330,7 @@ const {
   start: startShow,
   stop: stopShow,
 } = useTimeoutFn(() => {
+  if (isMobileLandscape.value) return;
   if (!settingStore.autoHidePlayerMeta) return;
   // 有弹层 hold 时不隐藏，避免 popover trigger DOM 消失导致定位错乱
   if (playerMetaHoldCount.value > 0) return;
@@ -341,6 +342,7 @@ const inControlArea = ref(false);
 
 const playerMove = useThrottleFn(
   () => {
+    if (isMobileLandscape.value) return;
     statusStore.playerMetaShow = true;
     if (settingStore.autoHidePlayerMeta && !isPending.value && !inControlArea.value) {
       startShow();
@@ -364,6 +366,7 @@ const resumeHide = () => {
 };
 
 const playerLeave = () => {
+  if (isMobileLandscape.value) return;
   if (settingStore.autoHidePlayerMeta && playerMetaHoldCount.value === 0) {
     statusStore.playerMetaShow = false;
     stopShow();

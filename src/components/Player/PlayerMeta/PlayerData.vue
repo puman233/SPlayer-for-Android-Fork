@@ -46,7 +46,11 @@
     />
     <n-flex :align="center ? 'center' : undefined" size="small" vertical>
       <!-- 播放状态 + 操作按钮 -->
-      <div class="meta-actions-row">
+      <div
+        class="meta-actions-row"
+        :inert="controlsVisible === false"
+        :aria-hidden="controlsVisible === false"
+      >
         <n-flex
           v-if="settingStore.showPlayMeta && !light"
           class="play-meta"
@@ -74,6 +78,7 @@
           <!-- 歌词模式 -->
           <n-popselect
             v-if="lyricSourceOptions.length > 1"
+            v-model:show="lyricPopoverOpen"
             trigger="click"
             :value="settingStore.lyricPriority"
             :options="lyricSourceOptions"
@@ -85,6 +90,7 @@
           <!-- 音源状态 -->
           <n-popselect
             v-if="audioSourceOptions.length > 1 && canSwitchSource"
+            v-model:show="sourcePopoverOpen"
             trigger="click"
             :value="statusStore.audioSource"
             :options="audioSourceOptions"
@@ -173,11 +179,14 @@ import { isCapacitorAndroid } from "@/utils/env";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 import { useDevice } from "@/composables/useDevice";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 const props = defineProps<{
   /** 数据居中 */
   center?: boolean;
   /** 少量数据模式 */
   light?: boolean;
+  /** 手机横屏控制层可见性，其他布局不传入 */
+  controlsVisible?: boolean;
 }>();
 
 const router = useRouter();
@@ -197,12 +206,19 @@ const {
   isOnlineSong,
 } = useQualityControl();
 const showQualityPopover = ref(false);
+const lyricPopoverOpen = ref(false);
+const sourcePopoverOpen = ref(false);
+usePlayerMetaPopoverHold(showQualityPopover);
+usePlayerMetaPopoverHold(lyricPopoverOpen);
+usePlayerMetaPopoverHold(sourcePopoverOpen);
 useBackClosable(showQualityPopover);
 const qualityTagRef = ref<HTMLElement | null>(null);
 const qualityLoading = ref(false);
 
 const qualityText = computed(() => getQualityName(statusStore.songQuality));
-const canQuickSelectQuality = computed(() => isPhonePortrait.value && isOnlineSong.value);
+const canQuickSelectQuality = computed(
+  () => (isPhonePortrait.value || props.controlsVisible !== undefined) && isOnlineSong.value,
+);
 
 const handleQualityClick = async () => {
   if (qualityLoading.value) return;

@@ -1,18 +1,52 @@
 <template>
   <div
+    ref="rootRef"
     class="full-player-mobile-landscape"
+    :data-controls-visible="controls.visible.value"
     :style="{
-      '--amll-landscape-font-size': amllLandscapeFontSize,
-      '--lrc-landscape-size': lrcLandscapeSize,
-      '--lrc-landscape-tran-size': lrcLandscapeTranSize,
-      '--lrc-landscape-roma-size': lrcLandscapeRomaSize,
-      '--landscape-cover-size': `${coverSize}px`,
-      '--landscape-lyric-padding-x': landscapeLyricPaddingX,
+      '--landscape-cover-size': coverSize + 'px',
+      '--lrc-landscape-size': settingStore.lyricFontSizeLandscape + 'px',
+      '--lrc-landscape-tran-size': Math.round(settingStore.lyricFontSizeLandscape * 0.5) + 'px',
+      '--lrc-landscape-roma-size': Math.round(settingStore.lyricFontSizeLandscape * 0.43) + 'px',
+      '--landscape-lyric-padding-x': settingStore.landscapeLyricPaddingX + 'px',
     }"
+    @click.capture="controls.interact"
+    @pointerdown.capture="controls.pointerDown"
+    @touchstart.capture.passive="controls.touchStart"
+    @keydown.capture="controls.interact"
   >
-    <PlayerMenu persistent />
+    <header class="landscape-header">
+      <n-button class="collapse" circle quaternary aria-label="收起播放器" @click.stop="collapse">
+        <template #icon><SvgIcon name="Down" :size="24" /></template>
+      </n-button>
+      <div
+        class="header-actions auto-controls"
+        :inert="!controls.visible.value"
+        :aria-hidden="!controls.visible.value"
+      >
+        <n-button circle quaternary aria-label="切换沉浸式全屏" @click.stop="toggleFullscreen">
+          <template #icon
+            ><SvgIcon
+              :name="statusStore.isImmersiveFullscreen ? 'FullscreenExit' : 'Fullscreen'"
+              :size="24"
+          /></template>
+        </n-button>
+        <n-popover
+          v-model:show="toolsOpen"
+          trigger="click"
+          placement="bottom-end"
+          :show-arrow="false"
+        >
+          <template #trigger>
+            <n-button circle quaternary aria-label="歌词工具">
+              <template #icon><SvgIcon name="Replay5" :size="24" /></template>
+            </n-button>
+          </template>
+          <div :id="toolsTarget" class="landscape-lyric-tools" />
+        </n-popover>
+      </div>
+    </header>
     <div class="landscape-content">
-      <!-- 左：封面 + 紧凑信息 -->
       <div ref="leftRef" class="left-section" :class="{ 'show-comment': showComment }">
         <PlayerComment
           v-if="showComment"
@@ -22,56 +56,102 @@
         />
         <template v-else>
           <div ref="coverRef" class="landscape-cover" data-stagger="cover">
-            <!-- 复用 PlayerCover：跟随 settingStore.playerType / dynamicCover 走动态封面逻辑 -->
-            <PlayerCover />
+            <PlayerCover compact />
           </div>
           <div ref="infoRef" class="info" data-stagger="title">
-            <PlayerData :center="true" :light="false" />
+            <PlayerData center :controls-visible="controls.visible.value" />
           </div>
         </template>
       </div>
-
-      <!-- 右：歌词 -->
       <div class="right-section" data-stagger="lyric">
-        <PlayerLyric v-if="!noLrc" persistent />
+        <PlayerLyric
+          v-if="!noLrc"
+          persistent
+          :tools-target="toolsOpen ? '#' + toolsTarget : undefined"
+        />
         <div v-else class="no-lrc">
-          <SvgIcon name="MusicNote" :size="36" :depth="3" />
-          <span>暂无歌词</span>
+          <SvgIcon name="MusicNote" :size="36" :depth="3" /><span>暂无歌词</span>
         </div>
       </div>
     </div>
-    <PlayerControl persistent />
+    <!-- 控件保留原位置，淡出不改变封面与歌词尺寸。 -->
+    <section
+      class="landscape-controls auto-controls"
+      :inert="!controls.visible.value"
+      :aria-hidden="!controls.visible.value"
+    >
+      <PlayerControl persistent phone-landscape />
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, provide, ref, useId, watch } from "vue";
+import { useEventListener, useResizeObserver } from "@vueuse/core";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
+import {
+  useMobilePlayerControls,
+  type MobilePlayerPage,
+} from "@/composables/useMobilePlayerControls";
+import { PLAYER_META_HOLD_KEY } from "@/composables/usePlayerMetaHold";
+import { PHONE_LANDSCAPE_HOLD_KEY } from "@/composables/usePlayerMetaPopoverHold";
 import PlayerComment from "@/components/Player/PlayerComponents/PlayerComment.vue";
 import PlayerLyric from "@/components/Player/PlayerLyric/index.vue";
 import PlayerCover from "@/components/Player/PlayerMeta/PlayerCover.vue";
 import PlayerData from "@/components/Player/PlayerMeta/PlayerData.vue";
-import PlayerMenu from "@/components/Player/PlayerMenu.vue";
 import PlayerControl from "@/components/Player/PlayerControl.vue";
-import { useResizeObserver } from "@vueuse/core";
 
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const statusStore = useStatusStore();
-
-// Hero 流转的终点位置（横屏 cover 容器）
 const orientationTransition = useOrientationTransition();
+const page = ref<MobilePlayerPage>("lyric");
+const controls = useMobilePlayerControls(page, 2000);
+provide(PLAYER_META_HOLD_KEY, controls.hold);
+provide(PHONE_LANDSCAPE_HOLD_KEY, controls.hold);
+const toolsTarget = "phone-landscape-tools-" + useId();
+const toolsOpen = ref(false);
+const rootRef = ref<HTMLElement | null>(null);
+const leftRef = ref<HTMLElement | null>(null);
+const infoRef = ref<HTMLElement | null>(null);
 const coverRef = ref<HTMLElement | null>(null);
+const coverSize = ref(0);
 watch(coverRef, (el) => orientationTransition.setCoverEl(el, "landscape"));
 onBeforeUnmount(() => orientationTransition.setCoverEl(null, "landscape"));
+useEventListener(window, "pointerup", controls.pointerEnd);
+useEventListener(window, "pointercancel", controls.pointerEnd);
+useEventListener(window, "touchend", controls.touchEnd, { passive: true });
+useEventListener(window, "touchcancel", controls.touchEnd, { passive: true });
+useEventListener(window, "blur", controls.resetPointers);
 
-const noLrc = computed(() => {
-  const noNormalLrc = !musicStore.isHasLrc;
-  const noYrcAvailable = !musicStore.isHasYrc || !settingStore.showWordLyrics;
-  return noNormalLrc && noYrcAvailable;
-});
+// 弹层在 body 中，使用持有状态保持其入口，关闭后重新计时。
+let overlayHeld = false;
+watch(
+  () => toolsOpen.value || statusStore.playListShow,
+  (open) => {
+    if (open && !overlayHeld) {
+      overlayHeld = true;
+      controls.hold.acquire();
+    } else if (!open && overlayHeld) {
+      overlayHeld = false;
+      controls.hold.release();
+    }
+  },
+  { immediate: true },
+);
 
+const collapse = async () => {
+  if (statusStore.isImmersiveFullscreen) await orientationTransition.exit(musicStore.songCover);
+  statusStore.showFullPlayer = false;
+};
+const toggleFullscreen = async () => {
+  if (statusStore.isImmersiveFullscreen) await orientationTransition.exit(musicStore.songCover);
+  else await orientationTransition.enter(musicStore.songCover);
+};
+const noLrc = computed(
+  () => !musicStore.isHasLrc && (!musicStore.isHasYrc || !settingStore.showWordLyrics),
+);
 const showComment = computed(
   () =>
     statusStore.showPlayerComment &&
@@ -79,38 +159,20 @@ const showComment = computed(
     (!statusStore.effectivePureLyricMode || statusStore.isImmersiveFullscreen),
 );
 
-// 字号独立绑定 lyricFontSizeLandscape；翻译/罗马音按 0.5 / 0.43 缩放
-const amllLandscapeFontSize = computed(() => `${settingStore.lyricFontSizeLandscape}px`);
-const lrcLandscapeSize = computed(() => `${settingStore.lyricFontSizeLandscape}px`);
-const lrcLandscapeTranSize = computed(
-  () => `${Math.round(settingStore.lyricFontSizeLandscape * 0.5)}px`,
-);
-const lrcLandscapeRomaSize = computed(
-  () => `${Math.round(settingStore.lyricFontSizeLandscape * 0.43)}px`,
-);
-
-// 测量内容区和元信息，封面只使用真实剩余空间
-const leftRef = ref<HTMLElement | null>(null);
-const infoRef = ref<HTMLElement | null>(null);
-const coverSize = ref(0);
 const measureCover = () => {
   const left = leftRef.value;
   if (!left) return;
   const style = getComputedStyle(left);
-  const usableWidth =
-    left.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-  const usableHeight =
+  const width = left.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const height =
     left.clientHeight -
     parseFloat(style.paddingTop) -
     parseFloat(style.paddingBottom) -
     (infoRef.value?.offsetHeight || 0) -
     parseFloat(style.rowGap || "0");
-  const ratio = settingStore.playerType === "record" ? 1.45 : 1;
-  coverSize.value = Math.max(0, Math.min(usableWidth, usableHeight / ratio, 320));
+  coverSize.value = Math.max(0, Math.min(width * 0.66, height));
 };
 useResizeObserver([leftRef, infoRef], measureCover);
-watch(() => settingStore.playerType, measureCover, { flush: "post" });
-const landscapeLyricPaddingX = computed(() => `${settingStore.landscapeLyricPaddingX}px`);
 </script>
 
 <style lang="scss" scoped>
@@ -119,292 +181,324 @@ const landscapeLyricPaddingX = computed(() => `${settingStore.landscapeLyricPadd
   width: 100%;
   height: 100%;
   min-height: 0;
-  container: landscape-player / inline-size;
   box-sizing: border-box;
+  container: landscape-player / size;
   padding: var(--safe-area-top, 0px) var(--safe-area-right, 0px) var(--safe-area-bottom, 0px)
     var(--safe-area-left, 0px);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-rows: 24px minmax(0, 1fr) 84px;
   color: rgb(var(--main-cover-color));
-
+  .landscape-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+  }
+  .header-actions {
+    display: flex;
+    gap: 4px;
+  }
+  .landscape-header .n-button {
+    width: 48px;
+    height: 48px;
+    color: inherit;
+  }
+  .auto-controls {
+    transition:
+      opacity 0.2s ease,
+      visibility 0.2s;
+  }
+  &[data-controls-visible="false"] .auto-controls {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
   .landscape-content {
+    min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
     grid-template-rows: minmax(0, 1fr);
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
     container-type: size;
   }
-  :deep(.player-menu) {
-    position: relative;
-    flex: 0 0 auto;
-    min-height: 48px;
-    .drag-dom {
-      height: 48px;
-      margin: 0;
-    }
-    .menu-icon {
-      width: 48px;
-      height: 48px;
-    }
-  }
-  :deep(.player-control) {
-    position: relative;
-    flex: 0 0 auto;
-    height: auto;
-    --play-control-touch-size: 48px;
-    --play-control-gap: 0px;
-    overflow: visible;
-    .control-content {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: auto auto;
-      gap: 4px;
-    }
-    .center {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      min-width: 0;
-      max-height: none;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 8px;
-    }
-    .left,
-    .right {
-      min-width: 0;
-      grid-row: 2;
-      height: auto;
-      padding: 0;
-      overflow-x: auto;
-      flex-wrap: nowrap;
-      gap: 0;
-    }
-    .right-menu {
-      flex-wrap: nowrap;
-      gap: 0;
-      width: max-content;
-    }
-    .menu-icon {
-      width: 48px;
-      height: 48px;
-      box-sizing: border-box;
-      flex-shrink: 0;
-    }
-    .left > * {
-      flex-shrink: 0;
-    }
-    .btn {
-      gap: 0;
-      width: 100%;
-      justify-content: center;
-    }
-    .btn-icon {
-      margin: 0;
-      width: 48px;
-      height: 48px;
-      flex: 1 1 0;
-    }
-    .slider {
-      width: 100%;
-      min-width: 0;
-      box-sizing: border-box;
-    }
-  }
-
-  @container landscape-player (max-width: 560px) {
-    :deep(.player-control .center) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
   .left-section {
     min-width: 0;
     min-height: 0;
-    box-sizing: border-box;
-    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 8px 16px;
-    gap: 12px;
-
-    &.show-comment {
-      align-items: stretch;
-      justify-content: stretch;
-      padding: 6px 10px;
-      gap: 0;
-      transform: none;
+    padding: 4px 16px;
+    gap: 10px;
+  }
+  .landscape-cover {
+    width: var(--landscape-cover-size);
+    aspect-ratio: 1;
+    flex-shrink: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 12px 28px #00000030;
+    :deep(.player-cover) {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
     }
-
-    .landscape-comment {
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      border-radius: 14px;
-      background-color: rgba(var(--main-cover-color), 0.06);
-      :deep(.song-data) {
-        height: 64px;
-        margin: 0 0 8px;
-        padding: 0 10px;
-        border-radius: 10px;
-      }
-      :deep(.song-data .cover-img) {
-        width: 44px;
-        height: 44px;
-        border-radius: 9px;
-      }
-      :deep(.song-data .title) {
-        font-size: 14px;
-      }
-      :deep(.song-data .artist) {
-        font-size: 12px;
-      }
-      :deep(.song-data .actions) {
-        gap: 6px;
-      }
-      :deep(.song-data .actions .close) {
-        width: 32px;
-        height: 32px;
-      }
-      :deep(.comment-scroll .n-scrollbar-content) {
-        padding: 0 8px;
-      }
-      :deep(.placeholder) {
-        height: 54px;
-        padding-bottom: 10px;
-      }
-      :deep(.placeholder .title) {
-        font-size: 16px;
-      }
-    }
-
-    .landscape-cover {
-      // 参照原封面逻辑，横屏限制上限
-      width: var(--landscape-cover-size);
-      height: auto;
-      aspect-ratio: v-bind('settingStore.playerType === "record" ? 1 / 1.45 : 1');
-      flex-shrink: 0;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-      background-color: rgba(255, 255, 255, 0.06);
-      // 重置 PlayerCover 默认尺寸约束
-      :deep(.player-cover) {
-        width: 100% !important;
-        height: 100% !important;
-        max-width: none !important;
-        max-height: none !important;
-        border-radius: 0 !important;
-        background: transparent !important;
-        box-shadow: none !important;
-      }
-      :deep(.cover-img),
-      :deep(.dynamic-cover) {
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: cover;
-      }
-    }
-
-    .info {
-      width: 100%;
-      min-height: 0;
-      max-height: 60%;
-      overflow: auto;
-      flex-shrink: 0;
-      text-align: center;
-      :deep(.player-data) {
-        width: 100%;
-        max-width: none;
-        margin-top: 0;
-        padding: 0;
-      }
-      :deep(.name-text) {
-        font-size: clamp(16px, 3cqh, 24px);
-      }
-
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
+    :deep(.cover-img),
+    :deep(.dynamic-cover) {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
     }
   }
-
-  .right-section {
-    flex: 1;
-    height: 100%;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    mix-blend-mode: var(--lyric-blend-mode);
-    overflow: hidden;
-
-    .no-lrc {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      height: 100%;
-      opacity: 0.6;
-      font-size: 13px;
-    }
-
-    // === 修复 DefaultLyric 横屏被 300px placeholder 顶下 ===
-    :deep(.default-lyric),
-    :deep(.lyric-scroll-container) {
-      // 歌词区保留菜单宽度，避免文字被菜单覆盖
-      padding-right: max(52px, var(--landscape-lyric-padding-x, 20px)) !important;
-      padding-left: var(--landscape-lyric-padding-x, 20px) !important;
-    }
-    :deep(.lyric-scroll-container) {
-      .placeholder:first-child {
-        // 原 300px 顶占位会把横屏歌词挤出
-        height: 35cqh !important;
-      }
-    }
-    // 菜单保留且可滚动，不以隐藏功能换取空间
-    :deep(.lyric-menu) {
-      width: 48px;
+  .info {
+    width: 100%;
+    min-height: 0;
+    max-height: 55%;
+    overflow: auto;
+    flex-shrink: 0;
+    :deep(.player-data) {
+      width: 100%;
+      max-width: none;
+      margin: 0;
       padding: 0;
-      opacity: 0.8;
-      pointer-events: auto;
-      overflow-y: auto;
-      justify-content: flex-start;
-      gap: 4px;
-      .menu-icon {
-        min-height: 48px;
-        flex-shrink: 0;
-      }
-      .time {
-        min-height: 36px;
-        flex-shrink: 0;
-      }
     }
-
-    // === AMLL：字号独立 ===
-    // AMLyric 在 .amll-lyric-player 用 inline style 设 --amll-lp-font-size，
-    // 必须 !important 直接覆盖
-    :deep(.amll-lyric-player) {
-      --amll-lp-font-size: var(--amll-landscape-font-size) !important;
+    :deep(.name) {
+      margin-bottom: 6px;
     }
+    :deep(.name .name-text) {
+      font-size: clamp(16px, 5cqh, 22px);
+    }
+    :deep(.player-data > .n-flex) {
+      gap: 4px !important;
+      flex-flow: row wrap !important;
+      justify-content: center !important;
+    }
+    :deep(.artists),
+    :deep(.album),
+    :deep(.dj) {
+      font-size: 12px;
+      line-height: 1.3;
+      margin: 0;
+      min-width: 0;
+    }
+    :deep(.artists .n-icon),
+    :deep(.album .n-icon) {
+      display: none;
+    }
+    :deep(.album .name-text) {
+      font-size: inherit;
+    }
+    :deep(.artists),
+    :deep(.album),
+    :deep(.dj) {
+      max-width: 100%;
+    }
+    :deep(.artists .ar) {
+      font-size: 12px;
+    }
+    :deep(.meta-actions-row) {
+      order: 3;
+      margin-top: 4px;
+      transition:
+        opacity 0.2s,
+        visibility 0.2s;
+    }
+    :deep(.play-meta) {
+      gap: 6px !important;
+      justify-content: center !important;
+    }
+    :deep(.meta-item) {
+      font-size: 11px;
+      border: 1px solid rgba(var(--main-cover-color), 0.35);
+      border-radius: 6px;
+      padding: 2px 5px;
+    }
+  }
+  &[data-controls-visible="false"] :deep(.meta-actions-row) {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .landscape-comment {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+  .right-section {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    mix-blend-mode: var(--lyric-blend-mode);
+    :deep(.player-lyric > .lyric-menu) {
+      display: none;
+    }
+    :deep(.default-lyric),
+    :deep(.lyric-scroll-container),
     :deep(.am-lyric) {
-      // 收紧 AMLL 左右 padding（原硬编 80px），改为滑块控制
-      padding-right: max(52px, var(--landscape-lyric-padding-x, 20px)) !important;
-      padding-left: var(--landscape-lyric-padding-x, 20px) !important;
+      padding-inline: min(var(--landscape-lyric-padding-x), 3cqw) !important;
     }
-
-    // === DefaultLyric：三组字号独立 ===
-    // DefaultLyric inline style 设 --lrc-size 等，必须 !important 覆盖
+    :deep(.lyric-scroll-container .placeholder:first-child) {
+      height: 27cqh !important;
+    }
+    :deep(.amll-lyric-player) {
+      --amll-lp-font-size: var(--lrc-landscape-size) !important;
+    }
     :deep(.lyric) {
       --lrc-size: var(--lrc-landscape-size) !important;
       --lrc-tran-size: var(--lrc-landscape-tran-size) !important;
       --lrc-roma-size: var(--lrc-landscape-roma-size) !important;
     }
+    .no-lrc {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      opacity: 0.6;
+    }
+  }
+  .landscape-controls {
+    min-height: 0;
+    padding: 0 12px 12px;
+  }
+  :deep(.player-control) {
+    --play-control-touch-size: 48px;
+    position: relative;
+    height: 100%;
+    overflow: visible;
+    .control-content {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr);
+      gap: 8px;
+      align-items: end;
+    }
+    .center {
+      height: 100%;
+      max-height: none;
+      justify-content: space-between;
+      min-width: 0;
+    }
+    .btn {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .btn-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .play-pause {
+      width: 48px;
+      height: 48px;
+      --n-width: 48px;
+      --n-height: 48px;
+      margin: 0;
+      flex-shrink: 0;
+      border: 1px solid rgba(var(--main-cover-color), 0.2);
+    }
+    .slider {
+      width: 100%;
+      font-size: 11px;
+      min-width: 0;
+      height: 24px;
+    }
+    .slider .n-slider {
+      min-width: 0;
+      margin-inline: 8px;
+    }
+    .left,
+    .right {
+      padding: 0 4px;
+      height: 40px;
+      border: 1px solid rgba(var(--main-cover-color), 0.15);
+      border-radius: 14px;
+      background: rgba(var(--main-cover-color), 0.06);
+      flex-wrap: nowrap;
+      gap: 0 !important;
+      overflow-x: auto;
+      overflow-y: hidden;
+      justify-content: center;
+    }
+    .left > .menu-icon:first-child {
+      display: none;
+    }
+    .left > * {
+      flex-shrink: 0;
+    }
+    .menu-icon {
+      width: 40px;
+      height: 40px;
+      padding: 8px;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .right-menu {
+      flex-wrap: nowrap;
+      gap: 0 !important;
+    }
+    .right-menu > .n-badge.hidden,
+    .right-menu > .quality-tag,
+    .right-menu > div:has(.quality-tag) {
+      display: none;
+    }
+    .right-menu .n-badge {
+      margin-right: 0 !important;
+      order: 0;
+    }
+    .right-menu > .menu-icon {
+      order: 1;
+    }
+    .qa-trigger .n-icon {
+      transform: rotate(90deg);
+    }
+    .n-badge-sup {
+      display: none;
+    }
+  }
+  @container landscape-player (max-width: 600px) {
+    :deep(.player-control .control-content) {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2.8fr) minmax(0, 1fr);
+      gap: 4px;
+    }
+    :deep(.player-control .menu-icon) {
+      width: 32px;
+      padding: 6px;
+    }
+    :deep(.player-control .btn-icon) {
+      width: 40px;
+    }
+  }
+}
+.landscape-lyric-tools :deep(.lyric-menu) {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: 0;
+  flex-flow: row wrap !important;
+  opacity: 1;
+  pointer-events: auto;
+  gap: 4px !important;
+  .menu-icon,
+  .time {
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .divider {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auto-controls {
+    transition: none !important;
   }
 }
 </style>

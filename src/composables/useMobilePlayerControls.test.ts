@@ -4,6 +4,26 @@ import { effectScope, nextTick, ref } from "vue";
 import { useMobilePlayerControls, type MobilePlayerPage } from "./useMobilePlayerControls.ts";
 
 describe("手机播放器控件", () => {
+  it("手机横屏两秒隐藏，操作恢复并重新计时", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const scope = effectScope();
+    const page = ref<MobilePlayerPage>("lyric");
+    const controls = scope.run(() => useMobilePlayerControls(page, 2000))!;
+    t.mock.timers.tick(1999);
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(1);
+    assert.equal(controls.visible.value, false);
+    controls.interact();
+    t.mock.timers.tick(1000);
+    controls.interact();
+    t.mock.timers.tick(1999);
+    assert.equal(controls.visible.value, true);
+    t.mock.timers.tick(1);
+    assert.equal(controls.visible.value, false);
+    scope.stop();
+    controls.hold.release();
+    assert.equal(controls.visible.value, false);
+  });
   const setup = () => {
     const scope = effectScope();
     const page = ref<MobilePlayerPage>("lyric");

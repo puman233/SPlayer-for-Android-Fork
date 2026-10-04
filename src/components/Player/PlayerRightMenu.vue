@@ -7,7 +7,7 @@
     :class="{ persistent }"
   >
     <!-- 音质 -->
-    <template v-if="settingStore.showPlayerQuality">
+    <template v-if="!controlsOnly && settingStore.showPlayerQuality">
       <n-popselect
         v-if="isOnlineSong"
         v-model:show="showQualityPopover"
@@ -47,7 +47,9 @@
     <!-- 桌面歌词 -->
     <n-badge
       v-if="
-        (isElectron || isCapacitorAndroid) && settingStore.fullscreenPlayerElements.desktopLyric
+        !controlsOnly &&
+        (isElectron || isCapacitorAndroid) &&
+        settingStore.fullscreenPlayerElements.desktopLyric
       "
       value="ON"
       :show="statusStore.showDesktopLyric"
@@ -59,17 +61,25 @@
     </n-badge>
     <!-- 其他控制 -->
     <n-dropdown
-      v-if="settingStore.fullscreenPlayerElements.moreSettings"
+      v-model:show="controlsOpen"
+      :trigger="phoneLandscape ? 'click' : 'hover'"
+      v-if="(controlsOnly || !phoneLandscape) && settingStore.fullscreenPlayerElements.moreSettings"
       :options="controlsOptions"
       :show-arrow="false"
       @select="handleControls"
     >
       <div class="menu-icon hidden">
-        <SvgIcon name="Controls" />
+        <SvgIcon name="Controls" /><span v-if="controlsOnly">更多播放设置</span>
       </div>
     </n-dropdown>
     <!-- 音量 -->
-    <n-popover :show-arrow="false" :style="{ padding: 0 }">
+    <n-popover
+      v-if="!controlsOnly"
+      v-model:show="volumeOpen"
+      :trigger="phoneLandscape ? 'click' : 'hover'"
+      :show-arrow="false"
+      :style="{ padding: 0 }"
+    >
       <template #trigger>
         <div class="menu-icon hidden" @click.stop="player.toggleMute" @wheel="player.setVolume">
           <SvgIcon :name="statusStore.playVolumeIcon" />
@@ -90,7 +100,7 @@
     </n-popover>
     <!-- 播放列表 -->
     <n-badge
-      v-if="!statusStore.personalFmMode"
+      v-if="!controlsOnly && !statusStore.personalFmMode"
       :value="dataStore.playList?.length ?? 0"
       :show="settingStore.showPlaylistCount"
       :max="9999"
@@ -115,8 +125,9 @@ import { useAudioManager } from "@/core/player/AudioManager";
 import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 
-defineProps<{ persistent?: boolean }>();
+defineProps<{ persistent?: boolean; phoneLandscape?: boolean; controlsOnly?: boolean }>();
 
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
@@ -134,6 +145,11 @@ const {
 } = useQualityControl();
 
 const showQualityPopover = ref(false);
+const controlsOpen = ref(false);
+const volumeOpen = ref(false);
+usePlayerMetaPopoverHold(showQualityPopover);
+usePlayerMetaPopoverHold(controlsOpen);
+usePlayerMetaPopoverHold(volumeOpen);
 useBackClosable(showQualityPopover);
 const qualityTagRef = ref<HTMLElement | null>(null);
 

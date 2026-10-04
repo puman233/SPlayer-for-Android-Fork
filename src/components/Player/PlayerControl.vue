@@ -55,7 +55,7 @@
             </div>
           </n-badge>
           <!-- 快捷操作菜单：频谱 / AMLL / 动态封面 / 音量 / 桌面歌词 / 逐词 / TTML -->
-          <PlayerQuickActionsMenu variant="control" />
+          <PlayerQuickActionsMenu v-if="!phoneLandscape" variant="control" />
         </n-flex>
         <div class="center">
           <div class="btn">
@@ -142,7 +142,10 @@
         </div>
         <n-flex class="right" align="center" justify="end" :wrap="!persistent">
           <!-- 功能区 -->
-          <PlayerRightMenu :persistent="persistent" />
+          <PlayerQuickActionsMenu v-if="phoneLandscape" variant="control">
+            <template #footer><PlayerRightMenu controls-only phone-landscape /></template>
+          </PlayerQuickActionsMenu>
+          <PlayerRightMenu :persistent="persistent" :phone-landscape="phoneLandscape" />
         </n-flex>
       </div>
     </Transition>
@@ -168,7 +171,7 @@ const settingStore = useSettingStore();
 const { isPad } = useDevice();
 
 // 沉浸式 / 平板下 Down 仅藏 UI（轻触屏幕恢复）；其他场景关闭全屏
-const props = defineProps<{ persistent?: boolean }>();
+const props = defineProps<{ persistent?: boolean; phoneLandscape?: boolean }>();
 const hideUiOnly = computed(
   () => !props.persistent && (statusStore.isImmersiveFullscreen || isPad.value),
 );

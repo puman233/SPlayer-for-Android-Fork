@@ -8,92 +8,95 @@
     />
     <DefaultLyric v-else :currentTime="playSeek" @lyric-line-long-press="openCopyLyrics" />
     <!-- 歌词菜单 -->
-    <n-flex
-      :class="['lyric-menu', { show: persistent || statusStore.playerMetaShow }]"
-      justify="center"
-      vertical
-    >
-      <div
-        v-if="settingStore.fullscreenPlayerElements.copyLyric"
-        class="menu-icon"
-        @click="openCopyLyrics()"
+    <Teleport :to="toolsTarget || 'body'" :disabled="!toolsTarget" defer>
+      <n-flex
+        :class="['lyric-menu', { show: persistent || statusStore.playerMetaShow }]"
+        justify="center"
+        vertical
       >
-        <SvgIcon name="Copy" />
-      </div>
-      <div
-        v-if="
-          settingStore.fullscreenPlayerElements.copyLyric &&
-          (settingStore.fullscreenPlayerElements.lyricOffset ||
-            settingStore.fullscreenPlayerElements.lyricSettings)
-        "
-        class="divider"
-      />
-      <div
-        v-if="settingStore.fullscreenPlayerElements.lyricOffset"
-        class="menu-icon"
-        @click="changeOffset(-settingStore.lyricOffsetStep)"
-      >
-        <SvgIcon name="Replay5" />
-      </div>
-      <n-popover
-        v-if="settingStore.fullscreenPlayerElements.lyricOffset"
-        class="player"
-        trigger="click"
-        placement="left"
-        style="padding: 8px"
-      >
-        <template #trigger>
-          <span class="time">
-            {{ currentTimeOffsetValue }}
-          </span>
-        </template>
-        <n-flex class="offset-menu" :size="4" vertical>
-          <span class="title"> 歌词偏移 </span>
-          <span class="tip"> 正值为歌词提前，单位毫秒 </span>
-          <n-input-number
-            v-model:value="offsetMilliseconds"
-            class="offset-input"
-            :precision="0"
-            :step="100"
-            placeholder="0"
-            size="small"
-          >
-            <template #suffix>ms</template>
-          </n-input-number>
-          <n-button
-            :disabled="offsetMilliseconds == 0"
-            class="player"
-            size="small"
-            secondary
-            strong
-            @click="resetOffset"
-          >
-            清零
-          </n-button>
-        </n-flex>
-      </n-popover>
-      <div
-        v-if="settingStore.fullscreenPlayerElements.lyricOffset"
-        class="menu-icon"
-        @click="changeOffset(settingStore.lyricOffsetStep)"
-      >
-        <SvgIcon name="Forward5" />
-      </div>
-      <div
-        v-if="
-          settingStore.fullscreenPlayerElements.lyricOffset &&
-          settingStore.fullscreenPlayerElements.lyricSettings
-        "
-        class="divider"
-      />
-      <div
-        v-if="settingStore.fullscreenPlayerElements.lyricSettings"
-        class="menu-icon"
-        @click="openSetting('lyrics')"
-      >
-        <SvgIcon name="Settings" />
-      </div>
-    </n-flex>
+        <div
+          v-if="settingStore.fullscreenPlayerElements.copyLyric"
+          class="menu-icon"
+          @click="openCopyLyrics()"
+        >
+          <SvgIcon name="Copy" />
+        </div>
+        <div
+          v-if="
+            settingStore.fullscreenPlayerElements.copyLyric &&
+            (settingStore.fullscreenPlayerElements.lyricOffset ||
+              settingStore.fullscreenPlayerElements.lyricSettings)
+          "
+          class="divider"
+        />
+        <div
+          v-if="settingStore.fullscreenPlayerElements.lyricOffset"
+          class="menu-icon"
+          @click="changeOffset(-settingStore.lyricOffsetStep)"
+        >
+          <SvgIcon name="Replay5" />
+        </div>
+        <n-popover
+          v-model:show="offsetOpen"
+          v-if="settingStore.fullscreenPlayerElements.lyricOffset"
+          class="player"
+          trigger="click"
+          placement="left"
+          style="padding: 8px"
+        >
+          <template #trigger>
+            <span class="time">
+              {{ currentTimeOffsetValue }}
+            </span>
+          </template>
+          <n-flex class="offset-menu" :size="4" vertical>
+            <span class="title"> 歌词偏移 </span>
+            <span class="tip"> 正值为歌词提前，单位毫秒 </span>
+            <n-input-number
+              v-model:value="offsetMilliseconds"
+              class="offset-input"
+              :precision="0"
+              :step="100"
+              placeholder="0"
+              size="small"
+            >
+              <template #suffix>ms</template>
+            </n-input-number>
+            <n-button
+              :disabled="offsetMilliseconds == 0"
+              class="player"
+              size="small"
+              secondary
+              strong
+              @click="resetOffset"
+            >
+              清零
+            </n-button>
+          </n-flex>
+        </n-popover>
+        <div
+          v-if="settingStore.fullscreenPlayerElements.lyricOffset"
+          class="menu-icon"
+          @click="changeOffset(settingStore.lyricOffsetStep)"
+        >
+          <SvgIcon name="Forward5" />
+        </div>
+        <div
+          v-if="
+            settingStore.fullscreenPlayerElements.lyricOffset &&
+            settingStore.fullscreenPlayerElements.lyricSettings
+          "
+          class="divider"
+        />
+        <div
+          v-if="settingStore.fullscreenPlayerElements.lyricSettings"
+          class="menu-icon"
+          @click="openSetting('lyrics')"
+        >
+          <SvgIcon name="Settings" />
+        </div>
+      </n-flex>
+    </Teleport>
   </div>
 </template>
 
@@ -101,8 +104,11 @@
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { openSetting, openCopyLyrics } from "@/utils/modal";
+import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
 
-defineProps<{ persistent?: boolean }>();
+defineProps<{ persistent?: boolean; toolsTarget?: string }>();
+const offsetOpen = ref(false);
+usePlayerMetaPopoverHold(offsetOpen);
 
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();

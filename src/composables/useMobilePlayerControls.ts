@@ -10,6 +10,7 @@ export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 400
   const pointers = new Set<number>();
   const touches = new Set<number>();
   const holds = ref(0);
+  let disposed = false;
   const { start, stop } = useTimeoutFn(
     () => {
       if (page.value !== "info" && !pointers.size && !touches.size && !holds.value) {
@@ -21,6 +22,7 @@ export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 400
   );
 
   const interact = () => {
+    if (disposed) return;
     visibility.value[page.value] = true;
     stop();
     if (page.value !== "info" && !pointers.size && !touches.size && !holds.value) start();
@@ -69,6 +71,11 @@ export function useMobilePlayerControls(page: Ref<MobilePlayerPage>, delay = 400
     touches.clear();
     interact();
   };
-  onScopeDispose(stop);
+  onScopeDispose(() => {
+    disposed = true;
+    stop();
+    pointers.clear();
+    touches.clear();
+  });
   return { visible, interact, pointerDown, pointerEnd, touchStart, touchEnd, resetPointers, hold };
 }

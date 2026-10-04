@@ -1,5 +1,11 @@
 # 🎵 SPlayer for Android
 
+### 未发布：仅手机横屏播放器
+
+手机横屏采用左侧封面与信息、右侧歌词、中央播放与进度、底部两侧操作组。控件在 2 秒无操作后淡出，点击空白恢复；拖动进度、打开菜单或队列期间保持显示。平板继续使用原来的播放器布局。
+
+本轮验证与复现见 [手机横屏验收说明](docs/validation/phone-landscape.md)。
+
 ### 桌面歌词与手机横屏（v3.0.11）
 
 [v3.0.11 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.11)已发布，提供四种 ABI；正式签名保持兼容，可原位升级。

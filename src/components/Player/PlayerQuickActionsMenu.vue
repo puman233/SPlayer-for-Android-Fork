@@ -368,6 +368,7 @@
         </div>
       </div>
     </div>
+    <slot name="footer" />
   </n-popover>
 </template>
 

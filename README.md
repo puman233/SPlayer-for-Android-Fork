@@ -1,39 +1,7 @@
 # 🎵 SPlayer for Android
 
-### 更新下载与手机布局（v3.0.13）
-
-[v3.0.13 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.13)已发布，四种架构正式签名与上一版一致；MuMu 双端真实下载验证通过。详见 [发布验收](docs/validation/release-v3.0.13.md)。
-
-应用内 APK 更新默认通过 gh.llkk.cc 下载，失败后有限回退到 GitHub 原地址；版本和摘要仍来自 GitHub 官方接口。安装前检查完整性、包名、版本及签名。手机横屏隐藏控件后释放歌词空间，专辑操作保持横排，浮动定位按钮按实际播放栏位置避让。实现及验证边界见 [更新下载与布局验收](docs/validation/update-download-layout.md)。
-
-### 手机播放器与桌面歌词（v3.0.12）
-
-[v3.0.12 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.12)已通过现有工作流发布，提供四种 ABI；正式签名与上一版一致。发布验证见 [v3.0.12 发布验收](docs/validation/release-v3.0.12.md)。
-
-手机横屏采用左侧封面与信息、右侧歌词、中央播放与进度、底部两侧操作组。控件在 2 秒无操作后淡出，点击空白恢复；拖动进度、打开菜单或队列期间保持显示。平板继续使用原来的播放器布局。
-
-本轮验证与复现见 [手机横屏验收说明](docs/validation/phone-landscape.md)。
-
-手机竖屏的信息顺序调整为标题、歌手、专辑、标签与操作。操作顺序为收藏、桌面歌词、添加歌单、队列、更多；空间不足只收纳添加歌单，桌面歌词与队列常驻。手机歌词页控件 2 秒无操作隐藏，点击空白恢复。平板继续使用原布局。本阶段最新验收见 [竖屏修订说明](docs/validation/phone-portrait-revision.md)。
-
-本地 API 异常时自动尝试服务热重载，并合并并发恢复；外网超时只提示一次，避免反复弹出相同故障提示。
-
-桌面歌词默认只显示歌词；普通触摸切换控制显隐，2.5 秒无操作后控件与背景同步渐隐。锁定后从独立解锁按钮恢复触碰。开启文字背景遮罩时也不会在待机或锁定后留下一块背景。最新验证见 [实际触碰与 2.5 秒渐隐](docs/validation/desktop-touch-2500.md)。
-
-手机歌词页隐藏控件后，歌词向上下扩展至安全区域，显示更多上下文；点击空白恢复控制布局。桌面歌词普通触碰可切换控制显隐，按钮点击继续执行操作，拖动与锁定行为保留。最新验证见 [歌词扩展与触碰切换](docs/validation/lyrics-expansion-toggle.md)。
-
-### 桌面歌词与手机横屏（v3.0.11）
-
-[v3.0.11 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.11)已发布，提供四种 ABI；正式签名保持兼容，可原位升级。
-
-桌面歌词首次使用自动字号与 `#6BB2FF`；手动修改字号后会保存，旋转不覆盖用户值，可在歌词设置中恢复自动字号。旧版已有字号和颜色保守保留。长句保持字号并横向滚动，暂停冻结、seek 和切歌重新从起点显示。
-
-触摸歌词显示控制，闲置自动淡出；锁定后主窗口触摸穿透并快速消除控制背景，独立锁按钮负责解锁。窗口按系统安全区保存相对位置，旋转后重新约束边界。手机横屏保留完整播放控件与歌词菜单；长歌曲信息和极窄空间中的次要操作支持局部滚动。
-
-专项实现、测试边界与历史 Android Lint 问题记录在 [重构方案](DESKTOP_LYRICS_REFACTOR_PLAN.md) 和 [执行检查点](AGENT_CHECKPOINT.md)。
-
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.11-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-3.0.13-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-red?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white" alt="vue">
@@ -67,7 +35,7 @@
 | 📝 **逐字歌词**    | 毫秒级插值高亮，翻译 / 罗马音，拖动吸附最近行，支持全局歌词偏移                       |
 | 📂 **本地音乐**    | 自动扫描本地歌曲，支持 TTML / LRC 歌词匹配（同目录 / 独立歌词目录），与桌面端行为对齐 |
 | ☁️ **WebDAV 音乐** | 通过 WebDAV 连接远程音乐，在线播放与浏览，扩展私人曲库                                |
-| 🪟 **桌面歌词**    | `WindowManager` 悬浮窗，逐字动画、锁定穿透、拖拽、播控                                |
+| 🪟 **桌面歌词**    | 悬浮歌词、逐字动画、锁定穿透、拖动、播控与自动字号                                    |
 | 🔔 **通知栏**      | 原生 `MediaSession`，完整播控，支持桌面歌词一键开关                                   |
 | 🎚️ **精细控制**    | 渐入渐出、进度吸附歌词、允许与其他应用同时播放                                        |
 | 🌐 **在线音乐**    | 网易云 + Jellyfin / Navidrome / Emby / Subsonic / OpenSubsonic / Last.fm              |
@@ -75,6 +43,8 @@
 | ⬇️ **音乐下载**    | 开发者模式下可下载歌曲至 SAF 授权目录，支持自定义子目录分类、歌词/ASS 附件下载        |
 | 🧩 **内置 API**    | `nodejs-mobile-cordova` 嵌入网易云 API，离线可用                                      |
 | 📦 **分架构打包**  | `arm64-v8a` / `armeabi-v7a` / `x86_64` / `x86` 独立 APK                               |
+
+手机横屏采用封面与歌词双栏布局，播放控件支持自动隐藏，点击空白恢复；隐藏后歌词扩展至安全区域。桌面歌词支持触摸切换控制显隐，无操作后控件与背景自动淡出，锁定后可通过独立按钮解锁。
 
 ---
 
@@ -92,7 +62,7 @@
 
 ## 📦 下载与安装
 
-前往 [**Releases**](../../releases) 选择对应 CPU 架构的 APK：
+前往 [**Releases**](https://github.com/puman233/SPlayer-for-Android-Fork/releases) 选择对应 CPU 架构的 APK：
 
 |       ABI       | 适用设备                       |   推荐度   |
 | :-------------: | ------------------------------ | :--------: |
@@ -103,7 +73,7 @@
 
 > 💡 不清楚自己设备架构？装个 **CPU-Z**，或者无脑选 `arm64-v8a`——99% 都是它。
 
-也可以在「设置 → 关于软件 → 检查更新」中由应用自动选择匹配 ABI。应用会显示包体大小和下载进度，强制核对 GitHub Release 的 SHA-256，并在包名、版本和签名证书均可升级后调用 Android 系统安装器。首次使用需按系统提示允许此来源安装，最终安装仍须由用户确认。
+也可以在「设置 → 关于软件 → 检查更新」中由应用自动选择匹配 ABI。应用会显示包体大小和下载进度，校验 GitHub Release 提供的文件摘要，并在包名、版本和签名证书均可升级后调用 Android 系统安装器。首次使用需按系统提示允许此来源安装，最终安装仍须由用户确认。
 
 ---
 
@@ -117,12 +87,12 @@
 
 ### 环境要求
 
-| 工具              | 版本    |
-| ----------------- | ------- |
-| Node.js           | `>= 20` |
-| pnpm              | `>= 10` |
-| JDK               | `21`    |
-| Android SDK / NDK | 最新    |
+| 工具              | 版本                       |
+| ----------------- | -------------------------- |
+| Node.js           | `>= 20`                    |
+| pnpm              | `>= 10`                    |
+| JDK               | `21`                       |
+| Android SDK / NDK | API 36 / NDK 28.2.13676358 |
 
 ### 一键构建
 
@@ -142,8 +112,8 @@ Debug 包使用 `top.imsyy.splayer.android.debug` 包名，可直接安装并与
 pnpm build:web                  # 前端 Vite 构建
 pnpm build:android:node         # 内置 Node API Bundle
 pnpm prepare:android:embedded   # 准备嵌入资源
-npx cap sync android            # 同步 Capacitor 工程
-npx cap open android            # Android Studio 打开
+pnpm exec cap sync android      # 同步 Capacitor 工程
+pnpm exec cap open android      # Android Studio 打开
 ```
 
 ---
@@ -236,7 +206,7 @@ npx cap open android            # Android Studio 打开
 
 推送到 `dev` 或向 `dev` 提交 PR 时，[Android CI](./.github/workflows/android-ci.yml) 自动构建 Web/嵌入资源，并执行 `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug`，不会创建 Release。
 
-推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如当前版本使用 `v3.0.11`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
+推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如版本 `3.0.13` 对应 Tag `v3.0.13`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
 
 附件沿用 `app-arm64-v8a-release.apk` 等 Gradle 最终文件名。发布正文使用下载与安装表格、当前版本的分类更新日志和 Full Changelog 链接，另保留 GitHub 自动生成记录。已发布的 Tag 自动跳过；失败留下的草稿可安全重跑，不会重复上传相同附件。
 
@@ -293,13 +263,3 @@ npx cap open android            # Android Studio 打开
 - 📦 **提供源码**：向使用者分发本项目或其修改版本时，须同时提供可获取的源代码，或提供指向源代码的明确链接。
 
 完整条款请参阅 [LICENSE](./LICENSE) 文件或 [GNU AGPL-3.0 官方文本](https://www.gnu.org/licenses/agpl-3.0.html)。
-
-## 手机播放页交互
-
-- 评论页仅显示评论内容与歌曲卡片，不显示进度、播放按钮或分页点；左右滑动返回歌曲或歌词页。
-- 歌词页控件与评论页歌曲卡片在无操作 4 秒后淡出，点击页面恢复。拖动歌词、进度条或打开快捷菜单期间保持显示，结束后重新计时；自动滚词不会重置计时。
-- 主播放页顶栏、内容、底栏均参与布局，封面随剩余空间收缩，过多的歌曲信息独立滚动；长标题、歌手与专辑名省略，安全区沿用 Android / WebView inset。
-
-### Android 设备回归测试
-
-`FloatingLyricOverlayTest` 和 `PlayerDeviceLayoutTest` 仅允许 `.lyricsverify` 隔离包运行。使用 `-PverificationSuffix=.lyricsverify` 构建测试包，不能对已有正式包清理数据。MuMu 手机/平板补充验收与验证边界见 [AGENT_CHECKPOINT.md](AGENT_CHECKPOINT.md)。

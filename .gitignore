@@ -6,7 +6,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-task.md
 
 node_modules
 .DS_Store
@@ -36,10 +35,26 @@ target
 docs/.vitepress/cache
 docs/.vitepress/dist
 
-# AI
-.trae/*
-.cursor/*
-.claude/*
+# AI / Agent local files
+.codex/
+.claude/
+.cursor/
+.trae/
+.opencode/
+
+# Agent temporary work files (explicit paths only)
+/AGENT_CHECKPOINT.md
+/DESKTOP_LYRICS_REFACTOR_PLAN.md
+task.md
+/docs/UPDATE_DOWNLOAD_PLAN.md
+/docs/desktop-lyric-refactor-plan.md
+/docs/desktop-lyric-study.md
+/docs/plan-android-features.md
+/docs/v305-ui-features-plan.md
+
+# Agent work logs and validation artifacts
+/docs/codex/
+/docs/validation/
 
 # Gradle / Android Studio
 .gradle/
@@ -64,3 +79,8 @@ key.properties
 
 # GitHub Actions temp release files
 release/
+
+# Local temporary files
+*.tmp
+*.bak
+local.properties

@@ -589,8 +589,10 @@ public class FloatingLyricService extends Service {
     @Override protected void onDraw(Canvas canvas) {
       float d = getResources().getDisplayMetrics().density;
       int w = getWidth(), h = getHeight();
-      if (textBackgroundMask) {
+      // 背景与控件共用透明度，待机和锁定只保留歌词。
+      if (textBackgroundMask && controlsAlpha > 0) {
         bp.setColor(backgroundMaskColor);
+        bp.setAlpha(Math.round(Color.alpha(backgroundMaskColor) * controlsAlpha));
         canvas.drawRoundRect(0, 0, w, h, 14 * d, 14 * d, bp);
       }
       if (controlsAlpha > 0) {

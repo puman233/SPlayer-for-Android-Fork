@@ -17,6 +17,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.lang.reflect.Field;
 import java.io.FileInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -75,6 +77,44 @@ public class FloatingLyricOverlayTest {
   }
   private void draw(View view) { capture(view).recycle(); }
 
+  private void saveScreen(String name, View view) throws Exception {
+    File directory = new File(context.getExternalFilesDir(null), "phase3");
+    assertTrue(directory.exists() || directory.mkdirs());
+    String label = InstrumentationRegistry.getArguments().getString("label", "device");
+    int[] display = new int[1];
+    main(() -> display[0] = view.getDisplay().getDisplayId());
+    java.util.regex.Matcher physical = java.util.regex.Pattern.compile(
+        "DisplayViewport\\{[^}]*displayId=" + display[0] + ", uniqueId='local:([0-9]+)'")
+        .matcher(shell("dumpsys display"));
+    Bitmap screen;
+    if (physical.find()) {
+      try (ParcelFileDescriptor fd = instrumentation.getUiAutomation().executeShellCommand(
+          "screencap -p -d " + physical.group(1)); FileInputStream stream = new FileInputStream(fd.getFileDescriptor())) {
+        byte[] png = stream.readAllBytes();
+        screen = android.graphics.BitmapFactory.decodeByteArray(png, 0, png.length);
+      }
+    } else {
+      assertEquals("无法确定非默认显示面的实际截图来源", 0, display[0]);
+      screen = instrumentation.getUiAutomation().takeScreenshot();
+    }
+    assertNotNull("必须取得实际窗口截图", screen);
+    try (FileOutputStream output = new FileOutputStream(new File(directory, label + "-" + name + ".png"))) {
+      assertTrue(screen.compress(Bitmap.CompressFormat.PNG, 100, output));
+    } finally { screen.recycle(); }
+    Bitmap overlay = capture(view);
+    try (FileOutputStream output = new FileOutputStream(new File(directory, label + "-" + name + "-overlay.png"))) {
+      assertTrue(overlay.compress(Bitmap.CompressFormat.PNG, 100, output));
+    } finally { overlay.recycle(); }
+  }
+
+  private void assertBackground(View view, boolean visible) {
+    Bitmap bitmap = capture(view);
+    int alpha = android.graphics.Color.alpha(bitmap.getPixel(bitmap.getWidth() / 2, bitmap.getHeight() - 2));
+    bitmap.recycle();
+    if (visible) assertTrue("展开后背景可见", alpha > 0);
+    else assertEquals("待机和锁定背景必须完全透明", 0, alpha);
+  }
+
   @Test public void overlayKeepsFontLocksCleanlyAndRestoresPreferences() throws Exception {
     context = instrumentation.getTargetContext();
     assertTrue("必须使用 -PverificationSuffix=.lyricsverify", context.getPackageName().endsWith(".lyricsverify"));
@@ -94,8 +134,23 @@ public class FloatingLyricOverlayTest {
       assertTrue((boolean) field(service, "attached"));
       assertEquals(FloatingLyricPolicy.DEFAULT_COLOR, service.colorPlayed);
       View view = (View) field(service, "view");
-      JSONObject auto = new JSONObject().put("fontSizeMode", "AUTO_DEFAULT").put("isDoubleLine", true);
+      JSONObject auto = new JSONObject().put("fontSizeMode", "AUTO_DEFAULT").put("isDoubleLine", true)
+          .put("textBackgroundMask", true);
       main(() -> service.applyConfig(auto));
+      String sampleJson = new org.json.JSONArray().put(new JSONObject().put("startTime", 0).put("endTime", 20000)
+          .put("translatedLyric", "如此 永不改变").put("words", new org.json.JSONArray().put(
+              new JSONObject().put("word", "変わらない このままだよ").put("startTime", 0).put("endTime", 20000)))).toString();
+      main(() -> { service.pushLyrics(sampleJson, "[]"); service.pushProgress(0, false); });
+      assertBackground(view, false);
+      saveScreen("idle", view);
+      tap(view, view.getWidth() / 2f, view.getHeight() / 2f);
+      awaitControlsAlpha(1f);
+      assertBackground(view, true);
+      saveScreen("controls", view);
+      SystemClock.sleep(4400);
+      awaitControlsAlpha(0f);
+      assertBackground(view, false);
+      saveScreen("timeout", view);
       String[] samples = {"光", "光に溢れて　陰に居場所がない",
           "这是一条非常非常非常非常非常非常非常非常非常长的歌词，用于测试桌面歌词横向滚动是否可以稳定完整显示",
           "This is an intentionally very long lyric line used for verifying smooth marquee scrolling without dynamically shrinking the font size.",
@@ -155,13 +210,23 @@ public class FloatingLyricOverlayTest {
       FloatingLyricInteraction interaction = (FloatingLyricInteraction) field(service, "interaction");
       assertTrue(interaction.locked());
       assertTrue((boolean) field(service, "unlockAttached"));
-      main(() -> service.setLocked(false));
+      assertBackground(view, false);
+      WindowManager.LayoutParams lockedLayout = (WindowManager.LayoutParams) field(service, "lp");
+      int lockedX = lockedLayout.x, lockedY = lockedLayout.y;
+      tap(view, view.getWidth() / 2f, view.getHeight() / 2f);
+      assertTrue("锁定时普通触摸不能展开", interaction.locked());
+      assertEquals(lockedX, lockedLayout.x);
+      assertEquals(lockedY, lockedLayout.y);
+      saveScreen("locked", view);
+      View unlock = (View) field(service, "unlockBtnView");
+      tap(unlock, unlock.getWidth() / 2f, unlock.getHeight() / 2f);
       awaitControlsAlpha(1f);
       assertFalse(interaction.locked());
       assertFalse((boolean) field(service, "unlockAttached"));
       SystemClock.sleep(4400);
       awaitControlsAlpha(0f);
       assertFalse(interaction.controls());
+      assertBackground(view, false);
       JSONObject user = new JSONObject().put("fontSizeMode", "USER_DEFINED").put("fontSize", 30)
           .put("playedColor", "#123456");
       main(() -> service.applyConfig(user));
@@ -192,6 +257,7 @@ public class FloatingLyricOverlayTest {
           assertEquals("USER_DEFINED", service.fontSizeMode);
           assertEquals(30f, service.fontSizeSp, 0);
           assertSame(service, field(manager, "floatingLyricService"));
+          saveScreen("rotation-" + rotation, view);
         }
       } finally {
         shell("settings put system user_rotation " + oldRotation);

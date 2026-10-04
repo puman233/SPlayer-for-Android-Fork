@@ -151,6 +151,26 @@ public class PhoneLandscapePlayerTest {
     return file;
   }
 
+  private void assertPortraitMetadata() throws Exception {
+    assertEquals("未传入横屏可见性参数时标签操作必须可交互", "false", js("document.querySelector('.info-page .meta-actions-row').inert"));
+    if (!"phone".equals(label)) {
+      assertEquals("平板竖屏不得开启手机专属布局", "false", js("!!document.querySelector('.phone-portrait-meta')"));
+      return;
+    }
+    JSONObject title = bounds(".info-page .mobile-data > .name"), artists = bounds(".info-page .artists");
+    JSONObject album = bounds(".info-page .album"), row = bounds(".info-page .meta-actions-row");
+    JSONObject tags = bounds(".info-page .play-meta"), actions = bounds(".info-page .info-actions");
+    assertTrue("标题在歌手上方", title.getDouble("bottom") <= artists.getDouble("y") + 1);
+    assertTrue("歌手在专辑上方", artists.getDouble("bottom") <= album.getDouble("y") + 1);
+    assertTrue("标签操作在专辑下方", album.getDouble("bottom") <= row.getDouble("y") + 1);
+    assertTrue("标签不能与操作重叠", tags.getDouble("right") <= actions.getDouble("x") + 1);
+    assertEquals("标签和操作共用一行", tags.getDouble("y") + tags.getDouble("height") / 2,
+        actions.getDouble("y") + actions.getDouble("height") / 2, 1);
+    assertTrue("操作不能越界", actions.getDouble("right") <= row.getDouble("right") + 1);
+    assertTrue("手机操作触控热区至少48px", bounds(".info-page .qa-trigger").getDouble("height") >= 48);
+    save("portrait-geometry", json("({title:" + title + ",artists:" + artists + ",album:" + album + ",tags:" + tags + ",actions:" + actions + "})"));
+  }
+
   @Test public void landscapeContentAndTemporaryControls() throws Exception {
     String pkg = inst.getTargetContext().getPackageName();
     assertTrue("禁止对正式应用执行测试", pkg.endsWith(".phase1verify"));
@@ -172,6 +192,26 @@ public class PhoneLandscapePlayerTest {
       SystemClock.sleep(1800);
       assertEquals("true", js("!!document.querySelector('.full-player-mobile')"));
       capture("portrait");
+      assertPortraitMetadata();
+      if ("phone".equals(label)) {
+        int[] currentWidth = new int[1];
+        inst.runOnMainSync(() -> currentWidth[0] = web.getWidth());
+        scale = (float)(currentWidth[0] / json("({width:innerWidth})").getDouble("width"));
+        JSONObject more = bounds(".info-page .qa-trigger");
+        save("portrait-touch", json("(()=>{const e=document.querySelector('.info-page .qa-trigger'),r=e.getBoundingClientRect();return {scale:" + scale + ",width:innerWidth,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.outerHTML}})()"));
+        tap((float)(more.getDouble("x") + more.getDouble("width") / 2), (float)(more.getDouble("y") + more.getDouble("height") / 2));
+        capture("portrait-more-attempt");
+        assertEquals("窄屏次要操作应可在更多菜单访问", "true", js("!!document.querySelector('.portrait-overflow-actions')"));
+        capture("portrait-more");
+        JSONObject menu = bounds(".quick-actions-popover");
+        assertTrue("竖屏收纳菜单顶部不得裁切", menu.getDouble("y") >= 0);
+        assertTrue("竖屏收纳菜单底部不得越界", menu.getDouble("bottom") <= json("({height:innerHeight})").getDouble("height") + 1);
+        JSONObject queue = bounds(".portrait-overflow-actions .n-button:last-child");
+        tap((float)(queue.getDouble("x") + queue.getDouble("width") / 2), (float)(queue.getDouble("y") + queue.getDouble("height") / 2));
+        assertEquals("真实点击收纳后的队列入口应打开队列", "true", js("t.playListShow"));
+        js("t.playListShow=false");
+        tap(12, 100);
+      }
       rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
       if ("tablet".equals(label)) {
         assertEquals("平板不得采用手机横屏布局", "false", js("!!document.querySelector('.full-player-mobile-landscape')"));
@@ -275,6 +315,7 @@ public class PhoneLandscapePlayerTest {
       assertEquals("true", js("!!document.querySelector('.full-player-mobile')"));
       assertEquals("true", js("m.playSong.id===window.savedSongId&&t.shuffleMode==='on'&&t.repeatMode==='one'"));
       capture("portrait-1.3-return");
+      assertPortraitMetadata();
       rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
       SystemClock.sleep(2400); assertFalse("再进入横屏应自动隐藏", visible());
       save("result", new JSONObject().put("status", "VERIFIED").put("textZoom", "100/130").put("seekPositionMs", nativeState.getDouble("positionMs")));

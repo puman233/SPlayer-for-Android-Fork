@@ -1,8 +1,20 @@
 # Android 自动发布工作流检查点
 
+## Phase 2 手机竖屏（2026-10-04）
+
+状态：VERIFIED（本轮双端模拟器范围），等待用户视觉确认。Phase 1 已获用户“通过，继续”确认；本阶段只处理手机竖屏，平板不变。当前 dev，未 push、未发布，停止等待验收。
+
+- 根因、布局策略与测试边界见 docs/validation/phone-portrait.md。
+- 可选 phonePortrait 参数默认关闭，只由硬件手机竖屏启用；按实际标签宽度收纳次要操作。
+- pnpm format、pnpm lint、pnpm typecheck:web、23 项 TS 测试通过。Android 构建/单元测试成功；历史 Android Lint 仍为 187 errors / 27 warnings。
+- 修复 controlsVisible 省略时 Vue 转为 false 导致原布局操作行 inert 的回归；仅显式传入 false 时禁用隐藏控件。
+- 手机和平板各 2 项仪器测试通过，真实点击更多/队列，100/130% 字体与长文本、菜单边界、横屏两秒隐藏、旋转及原生 seek 38381ms 通过；窗口截图已自检。
+- 四 ABI debug APK 与仪器包生成；最终 arm64 APK 64,743,944 字节，ZIP 资源检查通过。SHA-256：5e8cd73babe6b4ec2a04c6d47ba5d7647876efbff0264c6fffdd786d49f0e813。
+- 证据和 APK：C:/Users/ihyj/.codex/visualizations/2026/10/04/01a10549-90ac-7e40-adfe-0e909a47e44b/phone-portrait。正式用户数据未清除，测试包已停止。
+
 ## 手机横屏参考布局修订（2026-10-04）
 
-状态：VERIFIED（以下模拟器范围），等待用户视觉确认。按用户要求，先用 `b802f47d` 回退上一轮 `60f5f936`，保留历史，再只修改手机横屏；平板恢复并保留原 composition。当前 `dev`，未 push、未 Release、未进入下一 UI 阶段。
+状态：VERIFIED（以下模拟器范围），用户已确认通过。按用户要求，先用 `b802f47d` 回退上一轮 `60f5f936`，保留历史，再只修改手机横屏；平板恢复并保留原 composition。该阶段提交 `66feb9bd`，未 push、未 Release；后续进度见上方 Phase 2。
 
 - 手机横屏采用参考图的分区：左封面/信息、右歌词，中央播放与进度、两侧操作组，取消整块底部控制面板。
 - 初次显示控件；2 秒无操作后淡出，点击空白恢复并重新计时。隐藏保留布局，pointer-events + inert 防止误触，背景随操作组一起隐藏。

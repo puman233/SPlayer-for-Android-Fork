@@ -10,6 +10,7 @@ let savedPageType: MobilePageType = "info";
       'full-player-mobile',
       {
         'pad-portrait': isPadDevice,
+        'phone-portrait': isPhoneDevice,
         'controls-hidden': !controlsVisible,
         'comment-active': currentPageType === 'comment',
       },
@@ -84,8 +85,13 @@ let savedPageType: MobilePageType = "info";
         <div class="info-group">
           <div class="song-info-bar">
             <div class="info-section">
-              <PlayerData :center="false" :light="false" class="mobile-data">
-                <template #actions>
+              <PlayerData
+                :center="false"
+                :light="false"
+                :phone-portrait="isPhoneDevice"
+                class="mobile-data"
+              >
+                <template #actions="{ compact }">
                   <div class="info-actions">
                     <div
                       v-if="musicStore.playSong.type !== 'radio'"
@@ -108,6 +114,7 @@ let savedPageType: MobilePageType = "info";
                       />
                     </div>
                     <div
+                      v-if="!compact"
                       class="action-btn"
                       @click.stop="
                         openPlaylistAdd([musicStore.playSong], !!musicStore.playSong.path)
@@ -116,7 +123,7 @@ let savedPageType: MobilePageType = "info";
                       <SvgIcon name="AddList" :size="26" />
                     </div>
                     <n-badge
-                      v-if="showPortraitPlaylistButton"
+                      v-if="showPortraitPlaylistButton && !compact"
                       :value="dataStore.playList?.length ?? 0"
                       :show="settingStore.showPlaylistCount"
                       :max="9999"
@@ -126,7 +133,27 @@ let savedPageType: MobilePageType = "info";
                       </div>
                     </n-badge>
                     <!-- 快捷操作菜单 -->
-                    <PlayerQuickActionsMenu />
+                    <PlayerQuickActionsMenu :compact-portrait="compact">
+                      <template v-if="compact" #footer>
+                        <div class="portrait-overflow-actions">
+                          <n-button
+                            text
+                            @click="
+                              openPlaylistAdd([musicStore.playSong], !!musicStore.playSong.path)
+                            "
+                            ><SvgIcon name="AddList" :size="24" />添加到歌单</n-button
+                          >
+                          <n-button
+                            v-if="showPortraitPlaylistButton"
+                            text
+                            @click="statusStore.playListShow = true"
+                            ><SvgIcon name="PlayList" :size="24" />播放队列（{{
+                              dataStore.playList.length
+                            }}）</n-button
+                          >
+                        </div>
+                      </template>
+                    </PlayerQuickActionsMenu>
                   </div>
                 </template>
               </PlayerData>
@@ -1122,6 +1149,25 @@ const contentTransform = computed(() => {
     }
   }
 
+  &.phone-portrait {
+    .info-page .song-info-bar .info-section :deep(.mobile-data) {
+      .meta-actions-row {
+        flex-wrap: nowrap;
+      }
+      .play-meta {
+        flex: 0 0 auto;
+      }
+      .info-actions {
+        gap: 4px;
+        .action-btn,
+        .qa-trigger--mobile {
+          width: 48px;
+          height: 48px;
+        }
+      }
+    }
+  }
+
   &.pad-portrait {
     .top-bar {
       min-height: calc(72px + var(--mobile-safe-top));
@@ -1267,6 +1313,19 @@ const contentTransform = computed(() => {
         }
       }
     }
+  }
+}
+.portrait-overflow-actions {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 4px;
+  .n-button {
+    min-height: 48px;
+    justify-content: flex-start;
+  }
+  .n-icon {
+    margin-right: 8px;
   }
 }
 </style>

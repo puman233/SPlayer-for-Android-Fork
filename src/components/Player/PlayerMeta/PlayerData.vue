@@ -44,16 +44,23 @@
       :speed="0.4"
       :delay="2000"
     />
-    <n-flex :align="center ? 'center' : undefined" size="small" vertical>
+    <n-flex
+      :align="center ? 'center' : undefined"
+      size="small"
+      vertical
+      :class="{ 'phone-portrait-meta': phonePortrait }"
+    >
       <!-- 播放状态 + 操作按钮 -->
       <div
         class="meta-actions-row"
+        ref="metaRowRef"
         :inert="controlsVisible === false"
         :aria-hidden="controlsVisible === false"
       >
         <n-flex
           v-if="settingStore.showPlayMeta && !light"
           class="play-meta"
+          ref="tagsRef"
           size="small"
           align="center"
         >
@@ -104,7 +111,7 @@
             {{ audioSourceText }}
           </span>
         </n-flex>
-        <slot name="actions" />
+        <slot name="actions" :compact="compactPortraitActions" />
       </div>
       <!-- 歌手 -->
       <div v-if="musicStore.playSong.type !== 'radio'" class="artists">
@@ -180,14 +187,29 @@ import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 import { useDevice } from "@/composables/useDevice";
 import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
-const props = defineProps<{
-  /** 数据居中 */
-  center?: boolean;
-  /** 少量数据模式 */
-  light?: boolean;
-  /** 手机横屏控制层可见性，其他布局不传入 */
-  controlsVisible?: boolean;
-}>();
+import { useElementSize } from "@vueuse/core";
+const props = withDefaults(
+  defineProps<{
+    /** 数据居中 */
+    center?: boolean;
+    /** 少量数据模式 */
+    light?: boolean;
+    /** 手机横屏控制层可见性，其他布局不传入 */
+    controlsVisible?: boolean;
+    /** 仅硬件手机竖屏调整信息顺序及操作空间 */
+    phonePortrait?: boolean;
+  }>(),
+  { controlsVisible: undefined },
+);
+
+const metaRowRef = ref<HTMLElement | null>(null);
+const tagsRef = ref<HTMLElement | null>(null);
+const { width: metaRowWidth } = useElementSize(metaRowRef);
+const { width: tagsWidth } = useElementSize(tagsRef);
+// 四个 48px 热区、间距、队列徽标与标签间隔按实际宽度预算。
+const compactPortraitActions = computed(
+  () => props.phonePortrait && metaRowWidth.value < tagsWidth.value + 224,
+);
 
 const router = useRouter();
 const musicStore = useMusicStore();
@@ -521,6 +543,17 @@ const jumpToRadio = debounce(
           cursor: wait;
         }
       }
+    }
+  }
+  .phone-portrait-meta {
+    .meta-actions-row {
+      order: 1;
+      flex-wrap: nowrap;
+    }
+    .play-meta {
+      flex: 0 0 auto;
+      width: max-content;
+      padding-left: 0;
     }
   }
   &.record {

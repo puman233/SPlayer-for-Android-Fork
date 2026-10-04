@@ -16,7 +16,11 @@
       </div>
     </template>
 
-    <div class="quick-actions-panel" @click.stop>
+    <div
+      class="quick-actions-panel"
+      :class="{ 'portrait-compact-panel': compactPortrait }"
+      @click.stop
+    >
       <!-- 快捷开关分组 -->
       <div class="qa-group">
         <div class="qa-group-title">快捷开关</div>
@@ -384,9 +388,12 @@ const popoverShow = ref(false);
 useBackClosable(popoverShow);
 
 // 触发器外观：mobile 用 40px 圆形，control 与 PlayerControl 其他 menu-icon 一致
-const props = withDefaults(defineProps<{ variant?: "mobile" | "control" }>(), {
-  variant: "mobile",
-});
+const props = withDefaults(
+  defineProps<{ variant?: "mobile" | "control"; compactPortrait?: boolean }>(),
+  {
+    variant: "mobile",
+  },
+);
 const triggerIconSize = computed(() => (props.variant === "control" ? 24 : 26));
 // 同时挂 menu-icon class 让父级 :deep(.menu-icon) 选择器也能命中
 const triggerClass = computed(() => ["qa-trigger", `qa-trigger--${props.variant}`, "menu-icon"]);
@@ -582,6 +589,10 @@ onBeforeUnmount(() => {
 // 紧凑菜单：背景 / 文字 / 边框 / 阴影由 Naive UI popover 主题接管，
 // 这里只负责内部布局，避免在浅色模式下因自定义颜色对比度不足看不清
 .quick-actions-panel {
+  &.portrait-compact-panel {
+    // 为手机竖屏收纳的两个操作预留空间，避免菜单向上翻转后越界。
+    max-height: min(calc(var(--page-zoom-100dvh, 100dvh) - 240px), 220px);
+  }
   width: 220px;
   // 跟随页面缩放；dvh 不解析时 fallback 到 vh
   max-height: min(calc(var(--page-zoom-100vh, 100vh) * 0.48), 360px);

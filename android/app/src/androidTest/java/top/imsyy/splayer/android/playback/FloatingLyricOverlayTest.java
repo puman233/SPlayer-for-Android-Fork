@@ -9,7 +9,6 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.os.ParcelFileDescriptor;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.util.Log;
@@ -57,14 +56,35 @@ public class FloatingLyricOverlayTest {
     assertEquals(expected, (float) field(service, "controlsAlpha"), 0.001f);
   }
 
-  private void tap(View view, float x, float y) {
+  private void tap(View view, float x, float y) throws Exception {
+    int[] location = new int[2];
+    int[] display = new int[1];
     main(() -> {
-      long now = SystemClock.uptimeMillis();
-      MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
-      MotionEvent up = MotionEvent.obtain(now, now + 30, MotionEvent.ACTION_UP, x, y, 0);
-      view.dispatchTouchEvent(down); view.dispatchTouchEvent(up);
-      down.recycle(); up.recycle();
+      view.getLocationOnScreen(location);
+      display[0] = view.getDisplay().getDisplayId();
     });
+    // 通过系统输入路由，验证悬浮窗真实接收触碰
+    shell("input -d " + display[0] + " tap " + Math.round(location[0] + x)
+        + " " + Math.round(location[1] + y));
+    main(() -> {});
+  }
+
+  private void assertAutoFade() throws Exception {
+    assertEquals(2500L, field(service, "HIDE_DELAY_MS"));
+    SystemClock.sleep(1700);
+    assertEquals("超时前不能提前隐藏", 1f, (float) field(service, "controlsAlpha"), 0.001f);
+    boolean fading = false;
+    long deadline = SystemClock.uptimeMillis() + 1400;
+    while (SystemClock.uptimeMillis() < deadline) {
+      main(() -> {});
+      float alpha = (float) field(service, "controlsAlpha");
+      if (alpha > 0 && alpha < 1) fading = true;
+      if (alpha == 0) break;
+      SystemClock.sleep(20);
+    }
+    assertTrue("应观察到渐隐动画而非直接消失", fading);
+    assertEquals("2.5 秒超时与动画结束后完全透明", 0f,
+        (float) field(service, "controlsAlpha"), 0.001f);
   }
 
   private Bitmap capture(View view) {
@@ -122,7 +142,9 @@ public class FloatingLyricOverlayTest {
     Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
     context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     SystemClock.sleep(2000);
-    main(() -> context.getSharedPreferences("floating_lyric_prefs", Context.MODE_PRIVATE).edit().clear().commit());
+    android.content.SharedPreferences preferences = context.getSharedPreferences("floating_lyric_prefs", Context.MODE_PRIVATE);
+    java.util.Map<String, ?> savedPreferences = new java.util.HashMap<>(preferences.getAll());
+    main(() -> preferences.edit().clear().commit());
     PlaybackManager manager = PlaybackManager.getInstance(context);
     try {
       main(manager::showFloatingLyric);
@@ -159,8 +181,7 @@ public class FloatingLyricOverlayTest {
       android.graphics.RectF play = (android.graphics.RectF) field(service, "rPlay");
       tap(view, play.centerX(), play.centerY());
       assertTrue("播放按钮不能被普通触碰切换误隐藏", ((FloatingLyricInteraction) field(service, "interaction")).controls());
-      SystemClock.sleep(4400);
-      awaitControlsAlpha(0f);
+      assertAutoFade();
       assertBackground(view, false);
       saveScreen("timeout", view);
       String[] samples = {"光", "光に溢れて　陰に居場所がない",
@@ -235,8 +256,7 @@ public class FloatingLyricOverlayTest {
       awaitControlsAlpha(1f);
       assertFalse(interaction.locked());
       assertFalse((boolean) field(service, "unlockAttached"));
-      SystemClock.sleep(4400);
-      awaitControlsAlpha(0f);
+      assertAutoFade();
       assertFalse(interaction.controls());
       assertBackground(view, false);
       JSONObject user = new JSONObject().put("fontSizeMode", "USER_DEFINED").put("fontSize", 30)
@@ -291,6 +311,25 @@ public class FloatingLyricOverlayTest {
       assertEquals("USER_DEFINED", service.fontSizeMode);
       assertEquals(30f, service.fontSizeSp, 0);
       assertEquals(0xFF123456, service.colorPlayed);
-    } finally { main(manager::hideFloatingLyric); }
+    } finally {
+      main(manager::hideFloatingLyric);
+      main(() -> {
+        android.content.SharedPreferences.Editor restore = preferences.edit().clear();
+        for (java.util.Map.Entry<String, ?> entry : savedPreferences.entrySet()) {
+          String key = entry.getKey(); Object value = entry.getValue();
+          if (value instanceof String) restore.putString(key, (String) value);
+          else if (value instanceof Boolean) restore.putBoolean(key, (Boolean) value);
+          else if (value instanceof Integer) restore.putInt(key, (Integer) value);
+          else if (value instanceof Long) restore.putLong(key, (Long) value);
+          else if (value instanceof Float) restore.putFloat(key, (Float) value);
+          else if (value instanceof java.util.Set) {
+            java.util.Set<String> strings = new java.util.HashSet<>();
+            for (Object item : (java.util.Set<?>) value) strings.add((String) item);
+            restore.putStringSet(key, strings);
+          }
+        }
+        assertTrue("恢复验证前的桌面歌词偏好", restore.commit());
+      });
+    }
   }
 }

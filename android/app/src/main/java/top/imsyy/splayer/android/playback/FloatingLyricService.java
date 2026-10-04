@@ -46,7 +46,7 @@ import top.imsyy.splayer.android.R;
 public class FloatingLyricService extends Service {
   private static final String TAG = "FloatingLyric";
   private static final String PREFS = "floating_lyric_prefs";
-  private static final long HIDE_DELAY_MS = 4000;
+  private static final long HIDE_DELAY_MS = 2500;
   private WindowManager wm;
   private LyricView view;
   private WindowManager.LayoutParams lp, unlockLp;
@@ -545,7 +545,7 @@ public class FloatingLyricService extends Service {
     LyricView(Context context) {
       super(context);
       dragSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-      setContentDescription("桌面歌词，点击显示控制，拖动调整位置");
+      setContentDescription("桌面歌词，点击切换控制显隐，拖动调整位置");
     }
     void resetScroll() { lastIndex = -2; lineSwitchNano = 0; }
     void resetLayout() { runs.clear(); resetScroll(); }

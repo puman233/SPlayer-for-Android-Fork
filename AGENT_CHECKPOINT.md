@@ -1,5 +1,16 @@
 # Android 自动发布工作流检查点
 
+## 桌面歌词实际触碰与 2.5 秒渐隐（2026-10-04）
+
+状态：VERIFIED（双端模拟器），等待用户确认发布。本轮仅本地 dev，不 push、不触发工作流。
+
+- 核对用户当前 .lyricsverify 的 APK 哈希，确认为旧版仅展开包；上轮切换功能在另一个 .phase1verify 包。现已将最新完整代码原位更新至当前使用的同名隔离包，保留应用数据。
+- 无操作 2500ms 后启动 240ms 渐隐，控件/背景透明；辅助描述与切换语义一致。平板播放器布局不变。
+- 改用窗口所属显示面系统 input tap，手机/平板实际触碰显隐、按钮、超时中间透明度、锁定与独立解锁、旋转/字号/滚动恢复通过；各两项仪器测试 OK，31.979s / 30.370s。测试偏好备份恢复，原有权限保留。
+- format、lint 零错误/警告、类型、Android 构建通过，11 TS / 19 JVM 测试通过。四 ABI debug 与仪器包生成；Android Lint 历史 187 errors / 27 warnings，零错误目标仍 BLOCKED。
+- 实际窗口截图已自检；详见 docs/validation/desktop-touch-2500.md。测试进程停止。
+- APK：C:/Users/ihyj/.codex/visualizations/2026/10/04/01a10549-90ac-7e40-adfe-0e909a47e44b/desktop-touch-2500/SPlayer-desktop-touch-2500-arm64-debug.apk；64,277,767 字节；SHA-256 cbf582e50e8d4569911b3e021c593488130cfa5183d53437058d366ecdbe1e23。
+
 ## 歌词扩展与桌面歌词触碰切换（2026-10-04）
 
 状态：VERIFIED（以下范围），等待用户确认。用户要求持续测试到通过，且明确“我同意后”才同步仓库、触发下一版本发布；当前仅本地 dev 提交，未 push、未发布。

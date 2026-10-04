@@ -2,6 +2,8 @@
 
 ### 手机播放器与桌面歌词（v3.0.12）
 
+[v3.0.12 正式安装包](https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.12)已通过现有工作流发布，提供四种 ABI；正式签名与上一版一致。发布验证见 [v3.0.12 发布验收](docs/validation/release-v3.0.12.md)。
+
 手机横屏采用左侧封面与信息、右侧歌词、中央播放与进度、底部两侧操作组。控件在 2 秒无操作后淡出，点击空白恢复；拖动进度、打开菜单或队列期间保持显示。平板继续使用原来的播放器布局。
 
 本轮验证与复现见 [手机横屏验收说明](docs/validation/phone-landscape.md)。

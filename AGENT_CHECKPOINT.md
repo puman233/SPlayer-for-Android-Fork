@@ -1,5 +1,16 @@
 # Android 自动发布工作流检查点
 
+## v3.0.12 已发布（2026-10-04）
+
+状态：VERIFIED（工作流与正式产物），用户已确认同步和发布。本阶段完成，未继续其它 UI 阶段。
+
+- dev 已同步；v3.0.12 Tag 指向 c5d0cd409390fb75ba9476e8a72707b5337650ef，版本 3.0.12 / 30018。
+- Android CI 37199896277 成功；Android Release 37200119556 第二次运行成功。首轮构建/签名成功，创建草稿后立即读不到而停止；确认草稿提交与零附件后，现有失败作业重跑恢复，未改工作流。
+- Release 已公开四 ABI 正式 APK；已下载并验证文件 CRC、API 哈希、尺寸、ABI、包名、版本、非调试和证书，全部通过。签名与 v3.0.11 一致，支持原位升级；未覆盖用户正式安装数据。
+- 发布地址：https://github.com/puman233/SPlayer-for-Android-Fork/releases/tag/v3.0.12；详情 docs/validation/release-v3.0.12.md。
+- 本地产物：C:/Users/ihyj/.codex/visualizations/2026/10/04/01a10549-90ac-7e40-adfe-0e909a47e44b/release-v3.0.12/apks/app-arm64-v8a-release.apk（其余三 ABI 同目录）。arm64 60,021,608 字节，SHA-256 5d2a108b896468ecd749520956702c33af1fe65b0aee9f1a37071fef01e89283。
+- 历史 Android Lint 187 errors / 27 warnings 保留，真机升级尚未实际测试；双端系统触碰与 UI 模拟器验证在此前记录。
+
 ## v3.0.12 发布准备（2026-10-04）
 
 用户已“继续”确认同步仓库并通过现有工作流发布。状态：IMPLEMENTED（发布准备），正式发布结果待工作流验证。

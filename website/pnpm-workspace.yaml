@@ -1,0 +1,5 @@
+# website/ 是独立项目，不属于仓库根目录的 pnpm workspace。
+# 这个文件让 pnpm 把 website/ 当作自己的 workspace 根，
+# 避免在 website/ 里执行 pnpm install 时误操作 Android 项目的依赖。
+packages:
+  - "."

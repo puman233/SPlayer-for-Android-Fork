@@ -1,0 +1,399 @@
+/* ---------- 按钮 ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.btn-primary:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--accent-contrast);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-soft);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.btn-quiet:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn-sm {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 0.875rem;
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* ---------- 界面预览 ---------- */
+
+.shot-gallery {
+  margin-top: 26px;
+}
+
+/* 截图按真实比例排布：手机竖屏占一列，宽屏占两列，超宽横屏独占一行。 */
+.shot-gallery[data-state="filled"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: dense;
+  gap: 26px 20px;
+}
+
+.shot-gallery[data-state="filled"] figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.shot-gallery img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.shot-gallery figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin-top: 9px;
+  font-size: 0.875rem;
+}
+
+.shot-title {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.shot-note {
+  color: var(--text-muted);
+}
+
+@media (min-width: 640px) {
+  .shot-gallery[data-state="filled"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 30px 24px;
+  }
+
+  .shot-gallery figure[data-category="desktop"],
+  .shot-gallery figure[data-category="landscape"] {
+    grid-column: span 2;
+    /* 宽屏截图比同行的竖屏截图矮，居中放置避免顶部对齐留下大片空白 */
+    align-self: center;
+  }
+}
+
+@media (min-width: 1200px) {
+  /* 4 条轨道：手机竖屏占 1 条，宽屏占 3 条，横屏独占一行。
+     这样同一行里宽屏图与竖屏图的高度接近，不会留下大片空白。 */
+  .shot-gallery[data-state="filled"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .shot-gallery figure[data-category="desktop"] {
+    grid-column: span 3;
+  }
+
+  .shot-gallery figure[data-category="landscape"] {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- 下载 ---------- */
+
+.release {
+  margin-top: 26px;
+}
+
+.release-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin-bottom: 4px;
+  font-size: 0.9375rem;
+}
+
+.release-key {
+  color: var(--text-muted);
+}
+
+.release-value {
+  font-weight: 600;
+}
+
+.release-date {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.875rem;
+}
+
+.release-date:empty {
+  display: none;
+}
+
+.dl-table {
+  width: 100%;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.dl-table th,
+.dl-table td {
+  vertical-align: middle;
+}
+
+.dl-table thead th {
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dl-table tbody th[scope="row"] {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dl-table tbody td {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.dl-table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.dl-table .col-size {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-table .col-action {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.release[data-mode="fallback"] .col-size,
+.release[data-mode="fallback"] .col-action {
+  display: none;
+}
+
+.release-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* 手机上表格改为按行排列的列表，不强行保持桌面表格 */
+@media (max-width: 639px) {
+  .dl-table,
+  .dl-table thead,
+  .dl-table tbody,
+  .dl-table tr,
+  .dl-table th,
+  .dl-table td {
+    display: block;
+  }
+
+  .dl-table thead {
+    display: none;
+  }
+
+  .dl-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "abi abi"
+      "device device"
+      "size action";
+    align-items: center;
+    gap: 2px 12px;
+    padding-block: 14px;
+  }
+
+  .dl-table tbody th[scope="row"] {
+    grid-area: abi;
+  }
+
+  .dl-table .col-device {
+    grid-area: device;
+    margin-bottom: 10px;
+  }
+
+  .dl-table .col-size {
+    grid-area: size;
+    text-align: left;
+  }
+
+  .dl-table .col-action {
+    grid-area: action;
+    width: auto;
+  }
+
+  .release[data-mode="fallback"] .dl-table tbody tr {
+    grid-template-areas:
+      "abi"
+      "device";
+  }
+}
+
+/* 平板上保持紧凑表格 */
+@media (min-width: 640px) {
+  .dl-table thead th,
+  .dl-table tbody td,
+  .dl-table tbody th[scope="row"] {
+    padding-right: 16px;
+  }
+
+  .dl-table tbody th[scope="row"],
+  .dl-table tbody td {
+    padding-block: 14px;
+  }
+}
+
+/* ---------- 常见问题 ---------- */
+
+.faq-item {
+  border-bottom: 1px solid var(--border);
+}
+
+.faq-item:first-of-type {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+}
+
+.faq-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 0;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::after {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.faq-item[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.faq-item summary:hover {
+  color: var(--accent);
+}
+
+.faq-body {
+  padding-bottom: 18px;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.faq-body p {
+  max-width: 64ch;
+}
+
+/* ---------- 项目来源 ---------- */
+
+.source-list {
+  margin: 18px 0 20px;
+  border-top: 1px solid var(--border);
+}
+
+.source-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  padding-block: 13px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9375rem;
+}
+
+.source-label {
+  min-width: 5.5rem;
+  color: var(--text-muted);
+}
+
+.sub-heading {
+  margin-top: 40px;
+}

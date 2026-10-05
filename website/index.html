@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>SPlayer for Android Fork</title>
+    <meta
+      name="description"
+      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+    />
+    <link rel="canonical" href="https://puman233.github.io/SPlayer-for-Android-Fork/" />
+
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SPlayer for Android Fork" />
+    <meta property="og:title" content="SPlayer for Android Fork" />
+    <meta
+      property="og:description"
+      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+    />
+    <meta property="og:url" content="https://puman233.github.io/SPlayer-for-Android-Fork/" />
+    <meta
+      property="og:image"
+      content="https://puman233.github.io/SPlayer-for-Android-Fork/icons/og-splayer-android-fork.png"
+    />
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="1024" />
+    <meta property="og:image:alt" content="SPlayer for Android Fork 应用图标" />
+    <meta property="og:locale" content="zh_CN" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SPlayer for Android Fork" />
+    <meta
+      name="twitter:description"
+      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+    />
+    <meta
+      name="twitter:image"
+      content="https://puman233.github.io/SPlayer-for-Android-Fork/icons/og-splayer-android-fork.png"
+    />
+
+    <link rel="icon" href="/icons/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/icons/favicon-32x32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <link rel="stylesheet" href="/src/styles/main.css" />
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header" id="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="#top">
+          <img
+            class="brand-mark"
+            src="/icons/logo-icon.png"
+            width="28"
+            height="28"
+            alt=""
+            decoding="async"
+          />
+          <span class="brand-text">SPlayer for Android Fork</span>
+        </a>
+
+        <button
+          class="nav-toggle"
+          id="nav-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="site-nav"
+          aria-label="打开导航菜单"
+        >
+          <span class="nav-toggle-bar" aria-hidden="true"></span>
+          <span class="nav-toggle-bar" aria-hidden="true"></span>
+          <span class="nav-toggle-bar" aria-hidden="true"></span>
+        </button>
+
+        <nav class="site-nav" id="site-nav" aria-label="站点导航">
+          <ul class="nav-list">
+            <li><a href="#top" data-nav-link>首页</a></li>
+            <li><a href="#features" data-nav-link>功能</a></li>
+            <li><a href="#screenshots" data-nav-link>界面</a></li>
+            <li><a href="#download" data-nav-link>下载</a></li>
+            <li><a href="#about" data-nav-link>关于</a></li>
+            <li>
+              <a
+                class="nav-external"
+                href="https://github.com/puman233/SPlayer-for-Android-Fork"
+                rel="noopener"
+                >GitHub</a
+              >
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- 项目介绍 -->
+      <section class="section hero" id="top" aria-labelledby="hero-title">
+        <div class="wrap hero-grid" id="hero-grid" data-has-shot="false">
+          <div class="hero-text">
+            <img
+              class="hero-mark"
+              src="/icons/logo-icon-1024x1024.png"
+              width="72"
+              height="72"
+              alt="SPlayer for Android Fork 应用图标"
+              fetchpriority="high"
+              decoding="async"
+            />
+            <h1 id="hero-title">SPlayer for Android Fork</h1>
+            <p class="hero-lead">
+              一个基于 SPlayer for Android 的个人 Fork，记录一些 Android 端的修改和尝试。
+            </p>
+            <p class="hero-sub">
+              主要是根据自己在 Android 上的使用需求，做一些界面、播放、歌词和本地音乐相关的调整。
+            </p>
+
+            <p class="hero-actions">
+              <a class="btn btn-primary" href="#download">下载最新版</a>
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/puman233/SPlayer-for-Android-Fork"
+                rel="noopener"
+                >查看 GitHub</a
+              >
+            </p>
+
+            <ul class="hero-facts">
+              <li>Android 10+</li>
+              <li>AGPL-3.0</li>
+              <li>非官方社区 Fork</li>
+              <li>当前版本 3.0.14</li>
+            </ul>
+          </div>
+
+          <div class="hero-shots" id="hero-shots" hidden></div>
+        </div>
+      </section>
+
+      <!-- 主要修改 -->
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="wrap">
+          <h2 id="features-title">主要修改</h2>
+          <p class="section-intro">
+            目前主要改动集中在 Android 端的界面、播放、歌词和本地音乐等部分。
+          </p>
+
+          <dl class="change-list">
+            <div class="change">
+              <dt>Android 端</dt>
+              <dd>
+                做过一些手机、平板、横屏和安全区相关的布局调整：手机竖屏与横屏分别排版，旋转后恢复原状态，底栏和悬浮播放栏避开系统手势区与刘海。
+              </dd>
+            </div>
+
+            <div class="change">
+              <dt>歌词</dt>
+              <dd>
+                包含逐字歌词、翻译、罗马音、歌词偏移以及悬浮歌词相关功能。桌面歌词支持拖动、锁定穿透、自动字号，无操作后控件自动淡出。
+              </dd>
+            </div>
+
+            <div class="change">
+              <dt>本地音乐</dt>
+              <dd>
+                支持本地歌曲扫描，以及 LRC / TTML
+                歌词匹配，可以放在歌曲同目录，也可以指定独立歌词目录，并选择用本地歌词覆盖在线歌词。
+              </dd>
+            </div>
+
+            <div class="change">
+              <dt>播放相关</dt>
+              <dd>
+                包含 ExoPlayer、后台播放、通知栏控制、MediaSession 等 Android
+                相关修改，另外有弱网重试、断点恢复、渐入渐出和允许与其他应用同时播放的选项。
+              </dd>
+            </div>
+
+            <div class="change">
+              <dt>在线与远程来源</dt>
+              <dd>
+                在线音乐使用网易云，远程曲库支持 WebDAV、Jellyfin、Navidrome、Emby、Subsonic /
+                OpenSubsonic，另外接入了 Last.fm 的播放记录。
+              </dd>
+            </div>
+
+            <div class="change">
+              <dt>安装包与应用内更新</dt>
+              <dd>
+                按 <code>arm64-v8a</code> / <code>armeabi-v7a</code> / <code>x86_64</code> /
+                <code>x86</code>
+                分架构打包。应用内更新会按设备架构选择对应安装包，并在安装前校验文件摘要、包名、版本和签名。
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <!-- 界面预览 -->
+      <section class="section" id="screenshots" aria-labelledby="screenshots-title">
+        <div class="wrap">
+          <h2 id="screenshots-title">界面预览</h2>
+          <p class="section-intro">下面是当前 Android 版本的一些实际界面。</p>
+
+          <div class="shot-gallery" id="shot-gallery" data-state="pending"></div>
+        </div>
+      </section>
+
+      <!-- 下载 -->
+      <section class="section" id="download" aria-labelledby="download-title">
+        <div class="wrap">
+          <h2 id="download-title">下载</h2>
+          <p class="section-intro">安装包发布在 GitHub Releases。</p>
+
+          <div class="release" id="release-panel" data-mode="fallback">
+            <p class="release-line">
+              <span class="release-key">最新版本</span>
+              <span class="release-value" id="release-tag"
+                ><a
+                  href="https://github.com/puman233/SPlayer-for-Android-Fork/releases/latest"
+                  rel="noopener"
+                  >在 GitHub Releases 查看</a
+                ></span
+              >
+              <span class="release-value release-date" id="release-date"></span>
+              <span class="release-value release-date">Android 10+</span>
+            </p>
+
+            <table class="dl-table">
+              <caption class="sr-only">
+                按 CPU 架构选择对应的 APK 安装包
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">架构</th>
+                  <th scope="col">适用设备</th>
+                  <th scope="col" class="col-size">大小</th>
+                  <th scope="col" class="col-action"><span class="sr-only">下载</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr data-abi="arm64-v8a">
+                  <th scope="row">
+                    <code>arm64-v8a</code>
+                    <span class="tag">推荐</span>
+                  </th>
+                  <td class="col-device">大多数现代 Android 手机和平板</td>
+                  <td class="col-size" data-size>—</td>
+                  <td class="col-action" data-action>—</td>
+                </tr>
+                <tr data-abi="armeabi-v7a">
+                  <th scope="row"><code>armeabi-v7a</code></th>
+                  <td class="col-device">较旧的 32 位 ARM 设备</td>
+                  <td class="col-size" data-size>—</td>
+                  <td class="col-action" data-action>—</td>
+                </tr>
+                <tr data-abi="x86_64">
+                  <th scope="row"><code>x86_64</code></th>
+                  <td class="col-device">部分 Android 模拟器或特殊设备</td>
+                  <td class="col-size" data-size>—</td>
+                  <td class="col-action" data-action>—</td>
+                </tr>
+                <tr data-abi="x86">
+                  <th scope="row"><code>x86</code></th>
+                  <td class="col-device">少量旧设备</td>
+                  <td class="col-size" data-size>—</td>
+                  <td class="col-action" data-action>—</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p class="release-actions">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/puman233/SPlayer-for-Android-Fork/releases/latest"
+                rel="noopener"
+                >前往 GitHub Releases 获取最新版</a
+              >
+              <a
+                class="btn btn-quiet"
+                href="https://github.com/puman233/SPlayer-for-Android-Fork/releases"
+                rel="noopener"
+                >查看全部版本</a
+              >
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 关于项目 -->
+      <section class="section" id="about" aria-labelledby="about-title">
+        <div class="wrap narrow">
+          <h2 id="about-title">关于项目</h2>
+          <p>这是一个基于 SPlayer for Android 的个人 Fork，主要记录一些 Android 端的修改和尝试。</p>
+          <p>项目主要用于个人学习、实践，以及处理自己使用 Android 版本时遇到的一些问题。</p>
+          <p>开发过程中也使用了 AI 工具辅助分析、修改和测试。</p>
+          <p>更新没有固定计划，也不承诺长期维护。</p>
+        </div>
+      </section>
+
+      <!-- 常见问题 -->
+      <section class="section" id="faq" aria-labelledby="faq-title">
+        <div class="wrap narrow">
+          <h2 id="faq-title">常见问题</h2>
+
+          <details class="faq-item">
+            <summary>应该下载哪个版本？</summary>
+            <div class="faq-body">
+              <p>
+                多数现代 Android 手机选择 <code>arm64-v8a</code>。2015 年前后的老设备通常是
+                <code>armeabi-v7a</code>，<code>x86_64</code> 和 <code>x86</code> 基本只用于模拟器。
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>最低支持什么系统？</summary>
+            <div class="faq-body">
+              <p>Android 10（API 29）。更早的版本没有计划去实现支持。</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>这是官方 SPlayer 吗？</summary>
+            <div class="faq-body">
+              <p>
+                不是。这是个人维护的社区非官方 Fork，与 SPlayer 及 SPlayer for Android
+                上游不存在官方隶属、合作或授权背书关系。
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>会长期更新吗？</summary>
+            <div class="faq-body">
+              <p>没有固定更新计划，也不承诺长期维护。改动了什么会记在 CHANGELOG 里。</p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>Windows 可以使用吗？</summary>
+            <div class="faq-body">
+              <p>
+                当前这个 Fork 主要维护 Android
+                版本，仓库里已经不包含桌面端打包链路。桌面版本请查看上游 SPlayer。
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>通知栏控制器不显示？</summary>
+            <div class="faq-body">
+              <p>
+                先在「设置 → 播放」中打开「通知栏音乐控制器」，再在系统设置里允许 SPlayer
+                发送通知。Android 13 及以上首次启用时会弹出通知权限请求。
+              </p>
+            </div>
+          </details>
+
+          <details class="faq-item">
+            <summary>本地歌词不显示？</summary>
+            <div class="faq-body">
+              <p>
+                在「设置 → 本地与缓存 → 本地歌词覆盖在线歌词」中添加歌词目录。歌词可以命名为
+                <code>歌曲ID.lrc</code>、<code>歌曲ID.ttml</code>，带 <code>ncmMusicId</code>
+                元数据的 TTML 也能自动匹配；与音频同目录同名的歌词文件同样会被识别。
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- 项目来源 -->
+      <section class="section" id="sources" aria-labelledby="sources-title">
+        <div class="wrap narrow">
+          <h2 id="sources-title">项目来源</h2>
+          <p>本项目是 SPlayer for Android 的社区非官方 Fork。</p>
+          <ul class="source-list">
+            <li>
+              <span class="source-label">直接上游</span>
+              <a href="https://github.com/SPlayer-Dev/SPlayer-for-Android" rel="noopener"
+                >SPlayer-Dev/SPlayer-for-Android</a
+              >
+            </li>
+            <li>
+              <span class="source-label">原项目</span>
+              <a href="https://github.com/SPlayer-Dev/SPlayer" rel="noopener"
+                >SPlayer-Dev/SPlayer</a
+              >
+            </li>
+            <li>
+              <span class="source-label">本 Fork</span>
+              <a href="https://github.com/puman233/SPlayer-for-Android-Fork" rel="noopener"
+                >puman233/SPlayer-for-Android-Fork</a
+              >
+            </li>
+          </ul>
+          <p class="muted">
+            不存在官方隶属、合作、授权背书或认可。上游的代码、设计与维护工作归上游作者所有。
+          </p>
+
+          <h2 class="sub-heading" id="license-title">License</h2>
+          <p>
+            <code>AGPL-3.0</code> ·
+            <a
+              href="https://github.com/puman233/SPlayer-for-Android-Fork/blob/dev/LICENSE"
+              rel="noopener"
+              >仓库中的 LICENSE</a
+            >
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <div class="footer-brand">
+          <p class="footer-name">SPlayer for Android Fork</p>
+          <p class="footer-note">一个基于 SPlayer for Android 的个人 Fork。</p>
+        </div>
+
+        <nav class="footer-nav" aria-label="页脚导航">
+          <ul>
+            <li>
+              <a href="https://github.com/puman233/SPlayer-for-Android-Fork" rel="noopener"
+                >GitHub</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/puman233/SPlayer-for-Android-Fork/releases" rel="noopener"
+                >Releases</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/puman233/SPlayer-for-Android-Fork/issues" rel="noopener"
+                >Issues</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/puman233/SPlayer-for-Android-Fork/blob/dev/CHANGELOG.md"
+                rel="noopener"
+                >Changelog</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/SPlayer-Dev/SPlayer-for-Android" rel="noopener"
+                >上游项目</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/puman233/SPlayer-for-Android-Fork/blob/dev/LICENSE"
+                rel="noopener"
+                >License</a
+              >
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

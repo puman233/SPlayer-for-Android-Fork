@@ -1,0 +1,68 @@
+/* 设计变量：浅色为默认，深色跟随系统。颜色刻意保持低饱和，主色只用于链接、按钮和状态标记。 */
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f7f8fa;
+  --border: #e3e6ea;
+  --border-strong: #d0d5db;
+
+  --text: #1c1f23;
+  --text-muted: #626a73;
+
+  --accent: #3a6ea5;
+  --accent-strong: #2f5c8c;
+  --accent-soft: rgba(58, 110, 165, 0.08);
+  --accent-contrast: #ffffff;
+
+  --code-bg: #f2f4f6;
+
+  --shadow-sm: 0 1px 2px rgba(16, 22, 30, 0.06);
+  --shadow-md: 0 6px 20px rgba(16, 22, 30, 0.1);
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  --wrap-max: 1200px;
+  --wrap-pad: 20px;
+  --header-h: 56px;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    "Noto Sans CJK SC", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111318;
+    --bg-soft: #181b20;
+    --border: #2a2f37;
+    --border-strong: #3b424c;
+
+    --text: #e5e8ec;
+    --text-muted: #9aa3ad;
+
+    --accent: #7fa9d6;
+    --accent-strong: #9dc0e6;
+    --accent-soft: rgba(127, 169, 214, 0.12);
+    --accent-contrast: #111318;
+
+    --code-bg: #22262c;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+}
+
+@media (min-width: 640px) {
+  :root {
+    --wrap-pad: 28px;
+    --header-h: 62px;
+  }
+}
+
+@media (min-width: 900px) {
+  :root {
+    --wrap-pad: 40px;
+    --header-h: 66px;
+  }
+}

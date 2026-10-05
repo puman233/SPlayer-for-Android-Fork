@@ -1,0 +1,77 @@
+name: Website (GitHub Pages)
+
+# 只负责 website/ 这个独立站点。
+# 与 android-ci.yml、release.yml 完全独立：不构建 APK、不签名、不创建 Release、
+# 不读写仓库其它目录，也不共享任何 concurrency group。
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "website/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 与 Android 工作流使用不同的 group，避免互相取消。
+# 官方 Pages 推荐 cancel-in-progress: false，让部署排队而不是中途取消。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建站点
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: 安装依赖
+        working-directory: website
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: 代码检查
+        working-directory: website
+        run: pnpm lint
+
+      - name: 构建
+        working-directory: website
+        run: pnpm build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    name: 发布到 GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,13 @@
+{
+  "name": "SPlayer for Android Fork",
+  "short_name": "SPlayer Fork",
+  "description": "一个基于 SPlayer for Android 的个人 Fork，记录一些 Android 端的修改和尝试。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "icons": [
+    { "src": "icons/favicon-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/favicon-512x512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

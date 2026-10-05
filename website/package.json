@@ -1,0 +1,26 @@
+{
+  "name": "splayer-for-android-fork-website",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "SPlayer for Android Fork 的 GitHub Pages 项目主页",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint": "^9.39.4",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.5"
+  }
+}

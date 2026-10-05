@@ -143,7 +143,7 @@ public class ApkDownloadTest {
 
   @Test public void sourceUrlsAndPackageValidation() throws Exception {
     String url = "https://github.com/puman233/SPlayer-for-Android-Fork/releases/download/v3.0.12/app-arm64-v8a-release.apk";
-    assertEquals(Arrays.asList("https://gh.llkk.cc/" + url, "https://ghfast.top/" + url, url), UpdateDownloadSources.resolve(url));
+    assertEquals(Arrays.asList("https://gh-proxy.com/" + url, "https://gh.llkk.cc/" + url, "https://ghfast.top/" + url, url), UpdateDownloadSources.resolve(url));
     for (String invalid : new String[]{"https://api.github.com/releases", "http://github.com/a/b/releases/download/v1/app.apk", "https://github.com.evil/a/b/releases/download/v1/app.apk"}) {
       try { UpdateDownloadSources.resolve(invalid); fail("必须拒绝非官方 APK 地址"); }
       catch (IllegalArgumentException expected) {}

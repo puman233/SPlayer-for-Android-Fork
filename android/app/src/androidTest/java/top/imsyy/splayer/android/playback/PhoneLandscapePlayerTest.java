@@ -446,8 +446,7 @@ public class PhoneLandscapePlayerTest {
       rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
       js("(()=>{window.hotfixData=p._s.get('data');window.hotfixLogin=hotfixData.userLoginStatus;window.hotfixLoginType=hotfixData.loginType;hotfixData.userLoginStatus=true;hotfixData.loginType='uid';t.showFullPlayer=false;document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/')})()");
       SystemClock.sleep(1200);
-      assertEquals("窄屏主页卡片纵向排列", "true", js("(()=>{const e=document.querySelector('.home-online .rec-list');if(!e)return false;const a=e.children[0].getBoundingClientRect(),b=e.children[1].getBoundingClientRect();return a.width>=innerWidth*.8&&a.bottom<=b.y+1})()"));
-      assertEquals("大字体主页描述不被裁切", "true", js("Array.from(document.querySelectorAll('.home-online .rec-list .desc')).every(e=>e.scrollHeight<=e.clientHeight+1&&getComputedStyle(e).whiteSpace==='normal')"));
+      assertEquals("主页恢复原有双列卡片", "true", js("(()=>{const e=document.querySelector('.home-online .rec-list');if(!e)return false;const a=e.children[0].getBoundingClientRect(),b=e.children[1].getBoundingClientRect();return Math.abs(a.y-b.y)<1&&a.right<=b.x+1})()"));
       capture("home-readable-cards");
       js("hotfixData.userLoginStatus=window.hotfixLogin;hotfixData.loginType=window.hotfixLoginType");
     } finally {

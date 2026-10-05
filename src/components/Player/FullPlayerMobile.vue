@@ -1215,8 +1215,8 @@ const contentTransform = computed(() => {
         opacity 0.2s ease,
         visibility 0.2s;
     }
-    // 歌词视窗始终占满安全区，控件只覆盖和裁切，不参与显隐重排。
-    & {
+    // 仅歌词页使用覆盖控件；播放页保留原有流式排版。
+    &.lyric-active {
       padding-top: var(--mobile-safe-top);
       padding-bottom: var(--mobile-safe-bottom);
       .top-bar,
@@ -1239,10 +1239,6 @@ const contentTransform = computed(() => {
         width: 100%;
         padding-inline: calc(16px + var(--lyric-h-offset, 0px));
         z-index: 11;
-      }
-      .info-page {
-        padding-top: var(--top-bar-height);
-        padding-bottom: calc(var(--lyric-footer-height) + 12px);
       }
       .lyric-main {
         clip-path: inset(

@@ -263,8 +263,38 @@ onMounted(() => {
 
     .rec-list {
       display: grid !important;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 12px;
+      :deep(.song-data-card) {
+        height: auto !important;
+        min-height: 90px;
+        .n-card-content {
+          height: auto;
+        }
+        .content {
+          align-items: center;
+          .cover {
+            width: 56px;
+            height: 56px;
+            flex: 0 0 56px;
+            margin-right: 12px;
+          }
+          .info {
+            min-width: 0;
+            gap: 6px;
+            .name,
+            .desc {
+              display: block;
+              line-clamp: unset;
+              -webkit-line-clamp: unset;
+              white-space: normal;
+              overflow: visible;
+              text-overflow: clip;
+              line-height: 1.4;
+            }
+          }
+        }
+      }
     }
   }
 }

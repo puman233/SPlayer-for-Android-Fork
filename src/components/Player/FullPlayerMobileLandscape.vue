@@ -63,7 +63,7 @@
           </div>
         </template>
       </div>
-      <div class="right-section" data-stagger="lyric">
+      <div v-show="!showComment" class="right-section" data-stagger="lyric">
         <PlayerLyric
           v-if="!noLrc"
           persistent
@@ -236,6 +236,12 @@ useResizeObserver([leftRef, infoRef], measureCover);
     justify-content: center;
     padding: 4px 16px;
     gap: 10px;
+    &.show-comment {
+      grid-column: 1 / -1;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding-inline: 24px;
+    }
   }
   .landscape-cover {
     width: var(--landscape-cover-size);
@@ -337,6 +343,24 @@ useResizeObserver([leftRef, infoRef], measureCover);
     width: 100%;
     height: 100%;
     min-height: 0;
+    :deep(.song-data) {
+      height: 56px;
+      margin: 0 0 8px;
+      .cover-img {
+        width: 40px;
+        height: 40px;
+      }
+    }
+    :deep(.n-scrollbar-content) {
+      padding: 0 8px;
+    }
+    :deep(.placeholder) {
+      height: 36px;
+      padding-bottom: 8px;
+      .title {
+        font-size: 16px;
+      }
+    }
   }
   .right-section {
     min-width: 0;

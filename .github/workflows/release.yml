@@ -8,6 +8,14 @@ on:
         description: 已存在的版本 Tag，用于恢复失败发布
         required: true
         type: string
+      repair_ref:
+        description: 同版本修复的完整提交 SHA（留空按 Tag 发布）
+        required: false
+        type: string
+      replace_release_id:
+        description: 明确要替换的 Release ID（修复时必填）
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -22,10 +30,12 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_REPAIR_REF: ${{ inputs.repair_ref }}
+      RELEASE_REPLACE_ID: ${{ inputs.replace_release_id }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          ref: ${{ inputs.repair_ref || format('refs/tags/{0}', inputs.tag || github.ref_name) }}
           persist-credentials: false
       - name: 检出当前工作流的发布工具
         uses: actions/checkout@v4
@@ -72,6 +82,18 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
         run: python3 .release-tools/.github/scripts/android-release.py collect
+      - name: 备份被替换的发行版
+        if: steps.existing.outputs.exists == 'false' && inputs.replace_release_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .release-tools/.github/scripts/android-release.py backup
+      - uses: actions/upload-artifact@v4
+        if: steps.existing.outputs.exists == 'false' && inputs.replace_release_id != ''
+        with:
+          name: previous-release-${{ inputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-backup/
+          if-no-files-found: error
+          retention-days: 30
       - name: 创建或恢复 Release
         if: steps.existing.outputs.exists == 'false'
         env:

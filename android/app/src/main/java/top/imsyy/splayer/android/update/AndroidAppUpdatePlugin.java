@@ -150,7 +150,7 @@ public class AndroidAppUpdatePlugin extends Plugin {
         throw new IllegalStateException("Cannot create update cache directory");
       }
       if (target.exists() && !target.delete()) throw new IllegalStateException("Cannot replace update");
-      long bytesRead = ApkDownload.fetchSources(UpdateDownloadSources.resolve(sourceUrl), partial,
+      long bytesRead = ApkDownload.fetchSources(UpdateDownloadSources.resolve(sourceUrl, expectedSha256), partial,
           expectedSha256, expectedSize, cancelRequested, new ApkDownload.Observer() {
             public void connection(HttpURLConnection connection) { activeConnection = connection; }
             public void progress(long bytes, long total) { notifyProgress(bytes, total); }

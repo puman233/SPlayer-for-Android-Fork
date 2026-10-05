@@ -1014,6 +1014,7 @@ const contentTransform = computed(() => {
   }
 
   .lyric-page {
+    overflow: hidden;
     padding: 0 20px;
     display: flex;
     flex-direction: column;
@@ -1203,11 +1204,19 @@ const contentTransform = computed(() => {
       }
     }
     .portrait-controls-hidden {
+      opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
+    .top-bar,
+    .lyric-header,
+    .mobile-player-bottom-controls {
+      transition:
+        opacity 0.2s ease,
+        visibility 0.2s;
+    }
     // 歌词视窗始终占满安全区，控件只覆盖和裁切，不参与显隐重排。
-    &.lyric-active {
+    & {
       padding-top: var(--mobile-safe-top);
       padding-bottom: var(--mobile-safe-bottom);
       .top-bar,
@@ -1230,6 +1239,10 @@ const contentTransform = computed(() => {
         width: 100%;
         padding-inline: calc(16px + var(--lyric-h-offset, 0px));
         z-index: 11;
+      }
+      .info-page {
+        padding-top: var(--top-bar-height);
+        padding-bottom: calc(var(--lyric-footer-height) + 12px);
       }
       .lyric-main {
         clip-path: inset(

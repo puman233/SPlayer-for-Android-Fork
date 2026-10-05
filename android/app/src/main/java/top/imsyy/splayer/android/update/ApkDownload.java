@@ -50,12 +50,13 @@ final class ApkDownload {
     HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
     observer.connection(connection);
     try {
-      connection.setConnectTimeout(15_000);
-      connection.setReadTimeout(60_000);
+      connection.setConnectTimeout(10_000);
+      connection.setReadTimeout(15_000);
       connection.setInstanceFollowRedirects(true);
       connection.setRequestProperty("Accept", "application/octet-stream");
       connection.setRequestProperty("Accept-Encoding", "identity");
       connection.setRequestProperty("User-Agent", "SPlayer-Android-Updater");
+      connection.setRequestProperty("Cache-Control", "no-cache");
       checkCancelled(cancelled);
       int status = connection.getResponseCode();
       // 不使用断点续传；206 不能证明得到完整 APK。

@@ -195,5 +195,57 @@ class ReleaseTests(unittest.TestCase):
         self.assertTrue(Path("release/app-demo-arm64-v8a-release.apk").is_file())
 
 
+class ReplacementTests(unittest.TestCase):
+    def test_verified_backup_allows_same_release_replacement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            previous = Path.cwd()
+            try:
+                os.chdir(temporary)
+                Path("release").mkdir()
+                Path("release/app.apk").write_bytes(b"new")
+                Path("release-backup").mkdir()
+                Path("release-backup/app.apk").write_bytes(b"old")
+                current = {"id": 42, "tag_name": "v3.0.14", "assets": [{"name": "app.apk", "size": 3, "digest": "sha256:" + hashlib.sha256(b"old").hexdigest()}]}
+                Path("release-backup/metadata.json").write_text(json.dumps(current), encoding="utf-8")
+                with patch.dict(os.environ, {"RELEASE_TAG": "v3.0.14", "RELEASE_REPLACE_ID": "42", "RELEASE_REPAIR_REF": "a" * 40, "RELEASE_COMMIT": "a" * 40}), patch.object(module, "run") as commands, patch.object(module, "release_notes", return_value="repair"):
+                    module.replace_release(current)
+                    self.assertEqual(commands.call_args_list[0].args, ("gh", "release", "edit", "v3.0.14", "--draft=true"))
+                    self.assertEqual(commands.call_args_list[1].args, ("gh", "release", "upload", "v3.0.14", str(Path("release/app.apk")), "--clobber"))
+                    self.assertIn("--draft=false", commands.call_args_list[-1].args)
+                    commands.reset_mock()
+                    Path("release-backup/app.apk").write_bytes(b"bad")
+                    with self.assertRaises(ValueError):
+                        module.replace_release(current)
+                    commands.assert_not_called()
+            finally:
+                os.chdir(previous)
+
+    def test_replacement_requires_exact_identity_and_sha(self):
+        current = {"id": 42, "tag_name": "v3.0.14"}
+        with patch.dict(os.environ, {"RELEASE_TAG": "v3.0.14", "RELEASE_REPLACE_ID": "42", "RELEASE_REPAIR_REF": "a" * 40, "RELEASE_COMMIT": "a" * 40}):
+            module.validate_replacement(current)
+            for invalid in [None, {"id": 43, "tag_name": "v3.0.14"}, {"id": 42, "tag_name": "v3.0.13"}]:
+                with self.assertRaises(ValueError):
+                    module.validate_replacement(invalid)
+            os.environ["RELEASE_COMMIT"] = "b" * 40
+            with self.assertRaises(ValueError):
+                module.validate_replacement(current)
+
+    def test_replacement_without_backup_does_not_mutate_release(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            previous = Path.cwd()
+            try:
+                os.chdir(temporary)
+                Path("release").mkdir()
+                Path("release/app.apk").write_bytes(b"apk")
+                current = {"id": 42, "tag_name": "v3.0.14", "assets": [{"name": "app.apk"}]}
+                with patch.dict(os.environ, {"RELEASE_TAG": "v3.0.14", "RELEASE_REPLACE_ID": "42", "RELEASE_REPAIR_REF": "a" * 40, "RELEASE_COMMIT": "a" * 40}), patch.object(module, "run") as commands:
+                    with self.assertRaises(ValueError):
+                        module.replace_release(current)
+                    commands.assert_not_called()
+            finally:
+                os.chdir(previous)
+
+
 if __name__ == "__main__":
     unittest.main()

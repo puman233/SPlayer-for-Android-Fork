@@ -152,6 +152,7 @@ public class PhoneLandscapePlayerTest {
         samples.put(position);
         save("stable-" + engine + "-" + cycle, new JSONObject().put("before", before).put("frames", samples));
         assertEquals("显隐全过程当前歌词行不跳动：" + engine, before.getDouble("y"), position.getDouble("y"), 1);
+        assertEquals("封面、顶栏、播放控件同步渐隐", "true", js("(()=>{const opacity=s=>Number(getComputedStyle(document.querySelector(s)).opacity);const header=opacity('.lyric-header');return Math.abs(header-opacity('.top-bar'))<.02&&Math.abs(header-opacity('.mobile-player-bottom-controls'))<.02})()"));
       }
       assertEquals("两秒后控件隐藏", "true", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
       save("stable-" + engine + "-" + cycle, new JSONObject().put("before", before).put("frames", samples));
@@ -277,6 +278,22 @@ public class PhoneLandscapePlayerTest {
         assertEquals("空白点击恢复歌词页控件", "false", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
         assertEquals("进度与播放按钮恢复后可见且可命中", "true", js("(()=>{const b=document.querySelector('.mobile-player-bottom-controls'),p=b.querySelector('.play-btn'),r=p.getBoundingClientRect();return !b.inert&&getComputedStyle(b).visibility==='visible'&&r.height>=48&&r.bottom<=innerHeight&&!!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('.play-btn')})()"));
         capture("portrait-lyric-restored");
+        assertEquals("歌词页裁剪自身内容避免横滑溢出", "true", js("getComputedStyle(document.querySelector('.lyric-page')).overflow==='hidden'"));
+        JSONObject lyricPage = bounds(".lyric-page");
+        float swipeY = (float)(lyricPage.getDouble("y") + lyricPage.getDouble("height") * 0.45);
+        event(MotionEvent.ACTION_DOWN, 60, swipeY);
+        for (int i=1;i<=12;i++) {
+          event(MotionEvent.ACTION_MOVE, 60 + i * 18, swipeY);
+          SystemClock.sleep(20);
+        }
+        capture("portrait-swipe-mid");
+        event(MotionEvent.ACTION_UP, 276, swipeY);
+        SystemClock.sleep(450);
+        assertEquals("真实横滑应返回播放页", "false", js("document.querySelector('.full-player-mobile').classList.contains('lyric-active')"));
+        assertPortraitMetadata();
+        capture("portrait-swipe-info");
+        JSONObject returnDot = bounds(".pagination .dot:last-child");
+        tap((float)(returnDot.getDouble("x")+returnDot.getDouble("width")/2), (float)(returnDot.getDouble("y")+returnDot.getDouble("height")/2));
         save("portrait-lyric-dom", json("(()=>{const q=s=>{const e=document.querySelector(s),r=e.getBoundingClientRect(),c=getComputedStyle(e);return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,display:c.display,opacity:c.opacity,zIndex:c.zIndex,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.className}};return {height:innerHeight,footer:q('.mobile-player-bottom-controls'),progress:q('.mobile-player-bottom-controls .progress-section'),controls:q('.mobile-player-bottom-controls .control-section'),play:q('.mobile-player-bottom-controls .play-btn'),html:document.querySelector('.mobile-player-bottom-controls').outerHTML}})()"));
         js("window.testGeneration=null;fetch('http://127.0.0.1:1145/api').then(r=>r.json()).then(x=>window.testGeneration=x.generation)");
         for(int i=0;i<40&&"null".equals(js("window.testGeneration"));i++) SystemClock.sleep(200);
@@ -302,6 +319,15 @@ public class PhoneLandscapePlayerTest {
         return;
       }
       assertEquals("true", js("!!document.querySelector('.full-player-mobile-landscape')"));
+      js("(()=>{window.hotfixOpen=XMLHttpRequest.prototype.open;window.hotfixSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(method,url,...rest){this.hotfixComment=String(url).includes('/comment/');return window.hotfixOpen.call(this,method,url,...rest)};XMLHttpRequest.prototype.send=function(body){if(!this.hotfixComment)return window.hotfixSend.call(this,body);const comment={commentId:1,content:'横屏评论应该有充分的阅读空间，完整显示较长的文字与回复内容，不再挤在狭窄的一列中。',time:Date.now(),likedCount:12,liked:false,user:{userId:1,nickname:'布局测试用户',avatarUrl:''},beReplied:[]};const payload=JSON.stringify({code:200,hotComments:[comment],data:{comments:[comment],totalCount:1,hasMore:false}});setTimeout(()=>{for(const [key,value] of Object.entries({status:200,readyState:4,responseText:payload,response:this.responseType==='json'?JSON.parse(payload):payload}))Object.defineProperty(this,key,{configurable:true,value});this.dispatchEvent(new Event('load'));this.dispatchEvent(new Event('loadend'))},50)}})()");
+      js("m.playSong.path=undefined;t.showPlayerComment=true");
+      SystemClock.sleep(500);
+      assertTrue("横屏评论使用整行宽度", bounds(".landscape-comment").getDouble("width") >= bounds(".landscape-content").getDouble("width") * 0.85);
+      capture("landscape-comment-full-width");
+      assertEquals("长评论内容实际渲染", "true", js("document.querySelector('.landscape-comment').textContent.includes('充分的阅读空间')"));
+      js("t.showPlayerComment=false");
+      js("XMLHttpRequest.prototype.open=window.hotfixOpen;XMLHttpRequest.prototype.send=window.hotfixSend");
+      SystemClock.sleep(150);
       SystemClock.sleep(2400);
       assertFalse("横屏进入时默认隐藏控件", visible());
       assertMainBounds();
@@ -417,7 +443,15 @@ public class PhoneLandscapePlayerTest {
       rotate(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
       SystemClock.sleep(2400); assertFalse("再进入横屏应自动隐藏", visible());
       save("result", new JSONObject().put("status", "VERIFIED").put("textZoom", "100/130").put("seekPositionMs", nativeState.getDouble("positionMs")));
+      rotate(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+      js("(()=>{window.hotfixData=p._s.get('data');window.hotfixLogin=hotfixData.userLoginStatus;window.hotfixLoginType=hotfixData.loginType;hotfixData.userLoginStatus=true;hotfixData.loginType='uid';t.showFullPlayer=false;document.querySelector('#app').__vue_app__.config.globalProperties.$router.push('/')})()");
+      SystemClock.sleep(1200);
+      assertEquals("窄屏主页卡片纵向排列", "true", js("(()=>{const e=document.querySelector('.home-online .rec-list');if(!e)return false;const a=e.children[0].getBoundingClientRect(),b=e.children[1].getBoundingClientRect();return a.width>=innerWidth*.8&&a.bottom<=b.y+1})()"));
+      assertEquals("大字体主页描述不被裁切", "true", js("Array.from(document.querySelectorAll('.home-online .rec-list .desc')).every(e=>e.scrollHeight<=e.clientHeight+1&&getComputedStyle(e).whiteSpace==='normal')"));
+      capture("home-readable-cards");
+      js("hotfixData.userLoginStatus=window.hotfixLogin;hotfixData.loginType=window.hotfixLoginType");
     } finally {
+      js("if(window.hotfixOpen){XMLHttpRequest.prototype.open=window.hotfixOpen;XMLHttpRequest.prototype.send=window.hotfixSend}if(window.hotfixData){hotfixData.userLoginStatus=window.hotfixLogin;hotfixData.loginType=window.hotfixLoginType}");
       capture("last-state");
       js("window.Capacitor.nativePromise('AndroidNativePlayback','stop',{})");
       inst.runOnMainSync(() -> {

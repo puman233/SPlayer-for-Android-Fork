@@ -57,10 +57,61 @@ def release():
 def probe():
     current = release()
     exists = current is not None and not current["draft"]
+    if os.environ.get("RELEASE_REPLACE_ID") or os.environ.get("RELEASE_REPAIR_REF"):
+        validate_replacement(current)
+        exists = False
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         output.write(f"exists={str(exists).lower()}\n")
     if exists:
         print(f"{tag()} 已发布，跳过构建和上传。")
+
+
+def validate_replacement(current):
+    expected = os.environ.get("RELEASE_REPLACE_ID", "")
+    ref = os.environ.get("RELEASE_REPAIR_REF", "")
+    if not expected.isdigit() or not re.fullmatch(r"[0-9a-f]{40}", ref):
+        raise ValueError("同版本修复需要明确 Release ID 与完整提交 SHA")
+    if not current or str(current["id"]) != expected or current["tag_name"] != tag():
+        raise ValueError("目标 Release ID 或 Tag 不匹配，禁止替换")
+    if os.environ.get("RELEASE_COMMIT", ref) != ref:
+        raise ValueError("修复检出提交与指定 SHA 不一致")
+
+
+def backup():
+    current = release()
+    validate_replacement(current)
+    destination = Path("release-backup")
+    destination.mkdir(exist_ok=True)
+    (destination / "metadata.json").write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+    for asset in current["assets"]:
+        run("gh", "release", "download", tag(), "--pattern", asset["name"], "--dir", str(destination))
+        path = destination / asset["name"]
+        digest = asset.get("digest", "")
+        if not path.is_file() or path.stat().st_size != asset["size"] or not digest.startswith("sha256:") or hashlib.sha256(path.read_bytes()).hexdigest() != digest[7:]:
+            raise ValueError("旧附件备份完整性检查失败，禁止替换")
+
+
+def replace_release(current):
+    validate_replacement(current)
+    files = sorted(Path("release").glob("*.apk"))
+    if not files or {p.name for p in files} != {a["name"] for a in current["assets"]}:
+        raise ValueError("修复附件与原发行版架构不一致")
+    if not Path("release-backup/metadata.json").is_file():
+        raise ValueError("缺少旧发行版备份，禁止替换")
+    saved = json.loads(Path("release-backup/metadata.json").read_text(encoding="utf-8"))
+    validate_replacement(saved)
+    for asset in saved["assets"]:
+        path = Path("release-backup") / asset["name"]
+        if not path.is_file() or path.stat().st_size != asset["size"] or "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest() != asset.get("digest"):
+            raise ValueError("旧发行版备份已损坏，禁止替换")
+    run("gh", "release", "edit", tag(), "--draft=true")
+    for apk in files:
+        run("gh", "release", "upload", tag(), str(apk), "--clobber")
+    with tempfile.TemporaryDirectory() as directory:
+        notes = Path(directory) / "notes.md"
+        notes.write_text(release_notes() + "\n\n同版本修复提交：" + os.environ["RELEASE_COMMIT"], encoding="utf-8")
+        run("gh", "release", "edit", tag(), "--notes-file", str(notes), "--target", os.environ["RELEASE_COMMIT"], "--draft=false")
+    print(f"已替换 {tag()} 的 {len(files)} 个附件，原 Tag 保留")
 
 
 def signing():
@@ -146,6 +197,9 @@ def release_notes():
 def publish():
     value = tag()
     current = release()
+    if os.environ.get("RELEASE_REPLACE_ID"):
+        replace_release(current)
+        return
     if current and not current["draft"]:
         print("Release 已发布，跳过上传。")
         return
@@ -185,7 +239,7 @@ def publish():
 
 if __name__ == "__main__":
     try:
-        {"probe": probe, "signing": signing, "collect": collect, "publish": publish}[sys.argv[1]]()
+        {"probe": probe, "signing": signing, "collect": collect, "backup": backup, "publish": publish}[sys.argv[1]]()
     except Exception as error:
         # 外部命令的完整输出可能包含敏感信息，仅显示异常类型
         if isinstance(error, ValueError):

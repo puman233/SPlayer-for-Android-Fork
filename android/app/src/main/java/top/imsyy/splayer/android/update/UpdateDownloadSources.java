@@ -20,7 +20,12 @@ final class UpdateDownloadSources {
       throw new IllegalArgumentException("Only official GitHub Release APK URLs are allowed");
     }
     return PROXY_ENABLED
-        ? Arrays.asList(PROXY_BASE_URL + "/" + original, original)
+        ? Arrays.asList(PROXY_BASE_URL + "/" + original, "https://ghfast.top/" + original, original)
         : Collections.singletonList(original);
+  }
+
+  static List<String> resolve(String original, String digest) {
+    if (!digest.matches("[a-fA-F0-9]{64}")) throw new IllegalArgumentException("Invalid APK digest");
+    return resolve(original + (original.contains("?") ? "&" : "?") + "splayer_sha256=" + digest);
   }
 }

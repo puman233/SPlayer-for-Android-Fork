@@ -107,17 +107,49 @@ App 图标换新后，用同样的方式从新的 `ic_launcher.png` 重新导出
 
 ## 下载数据
 
-- 接口：`https://api.github.com/repos/puman233/SPlayer-for-Android-Fork/releases/latest`
-- 只读取 `tag_name`、`published_at`、`html_url`、`assets[].name`、`assets[].size`、
-  `assets[].browser_download_url`
-- **不读取也不展示 `download_count`** 或任何下载量统计
-- 请求超时 7 秒，结果在 `sessionStorage` 缓存 30 分钟，失败不重试
-- 失败时 `index.html` 里的静态 fallback（架构说明 + 前往 Releases 的入口）原样保留
+Release 数据有两层，职责分开：
+
+**1. 静态 metadata（首选来源）**
+
+构建阶段由 `scripts/generate-release-metadata.mjs` 读取 GitHub API，生成
+`public/latest-release.json`，随站点一起发布：
+
+```bash
+pnpm metadata   # 本地手动重新生成
+```
+
+只写入 `tag`、`publishedAt`、`updatedAt`、`htmlUrl`、`generatedAt` 和
+`assets[].name / size / downloadUrl`；**不写入 token、download_count、author、uploader**。
+
+**2. 浏览器读取顺序**（`src/services/github.ts`）
+
+1. 本次页面会话的请求备忘
+2. 本站 `latest-release.json`（约 1KB、同源、`cache: "no-store"`，因此同一个 tag
+   下重新上传 APK 后能立刻拿到新数据）
+3. `sessionStorage` 缓存（两个来源都失败时的兜底）
+4. GitHub API `releases/latest`
+5. 都失败 → `index.html` 里的静态 fallback
+
+之所以不让浏览器直接依赖 GitHub API：用户不一定能稳定访问 `api.github.com`，
+而且未认证的 API 每个 IP 每小时只有 60 次。
+
+**下载线路**（`src/services/downloadRoutes.ts`）只负责「从哪条线路下载」，
+先取 `assets[].downloadUrl`，再按当前线路拼 URL；代理全部失败时回落到 GitHub 原始地址，
+下载按钮不会消失。
 
 ## 部署
 
-`.github/workflows/pages.yml` 只负责这个站点：`dev` 分支上 `website/**` 或该工作流文件变化时触发，
-构建 `website/` 并发布到 GitHub Pages。它与 `android-ci.yml`、`release.yml` 完全独立。
+`.github/workflows/pages.yml` 只负责这个站点，与 `android-ci.yml`、`release.yml` 完全独立。
+触发方式：
+
+- push 到 `dev` 且变更命中 `website/**` 或该工作流文件
+- `workflow_run`：`Android Release` 运行结束后（**这是 Release 更新后能自动同步的主路径**）
+- `release`：`published` / `released` / `edited`，覆盖人工在网页上编辑 Release
+- `workflow_dispatch`：手动触发
+
+> 为什么必须挂 `workflow_run`：`release.yml` 用 `GITHUB_TOKEN` 创建/更新 Release，
+> 而 `GITHUB_TOKEN` 触发的事件不会再启动新的 workflow；并且「替换已发布 Release 的附件」
+> 本身不产生任何 `release` 事件。只监听 `release` 会漏掉重新上传 APK 的情况。
 
 ## 许可
 

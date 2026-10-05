@@ -3,3 +3,8 @@
 # 避免在 website/ 里执行 pnpm install 时误操作 Android 项目的依赖。
 packages:
   - "."
+
+# pnpm 10 默认不执行依赖的构建脚本，esbuild 需要它来准备平台二进制。
+# 不放开这一项时 pnpm install 会以 ERR_PNPM_IGNORED_BUILDS 退出 1，CI 会失败。
+allowBuilds:
+  esbuild: true

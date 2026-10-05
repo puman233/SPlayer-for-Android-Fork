@@ -20,4 +20,21 @@ export default [
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // 构建阶段运行的 Node 脚本（scripts/*.mjs），需要显式声明 Node 全局变量
+    files: ["**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: {
+        process: "readonly",
+        fetch: "readonly",
+        AbortController: "readonly",
+        URL: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+      },
+    },
+  },
 ];

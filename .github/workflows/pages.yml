@@ -10,6 +10,23 @@ on:
     paths:
       - "website/**"
       - ".github/workflows/pages.yml"
+
+  # Release 更新后自动重新生成 metadata 并重新部署。
+  #
+  # 这里刻意同时挂 workflow_run 和 release 两类事件，原因：
+  #   1. release.yml 通过 GITHUB_TOKEN 创建 / 更新 Release，
+  #      而 GITHUB_TOKEN 触发的事件不会再启动新的 workflow（GitHub 防递归机制），
+  #      所以 release 事件实际上不会为自动发布触发本工作流。
+  #   2. 「替换已发布 Release 的附件」不产生任何 release 事件，
+  #      只监听 release 事件会漏掉重新上传 APK 的情况。
+  # 监听 Android Release 运行结束才是可靠路径，release 事件用于覆盖人工编辑。
+  workflow_run:
+    workflows: ["Android Release"]
+    types: [completed]
+
+  release:
+    types: [published, released, edited]
+
   workflow_dispatch:
 
 permissions:
@@ -28,6 +45,8 @@ jobs:
     name: 构建站点
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Android Release 失败时不重新部署官网
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,12 +60,20 @@ jobs:
         with:
           node-version: "24"
 
+      - name: 生成 Release metadata
+        working-directory: website
+        env:
+          # 只用于提高 API 速率上限，不会写入 latest-release.json
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/generate-release-metadata.mjs
+
       - name: 安装依赖
         working-directory: website
         shell: bash
         run: |
           if [ -f pnpm-lock.yaml ]; then
-            pnpm install --frozen-lockfile
+            # 锁文件与 CI 的 pnpm 版本不一致时不要让整条流水线失败
+            pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
           else
             pnpm install --no-frozen-lockfile
           fi

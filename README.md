@@ -1,7 +1,7 @@
 # 🎵 SPlayer for Android Fork
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.14-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-3.0.13-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/platform-Android%2010%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="platform">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-red?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white" alt="vue">
@@ -46,7 +46,7 @@
 | 🧩 **内置 API**    | `nodejs-mobile-cordova` 嵌入网易云 API，离线可用                                      |
 | 📦 **分架构打包**  | `arm64-v8a` / `armeabi-v7a` / `x86_64` / `x86` 独立 APK                               |
 
-手机横屏采用封面与歌词双栏布局，评论展开时使用完整内容宽度；按钮分组随内容收紧，减少底部预留空白并保留系统安全区域。播放控件支持自动隐藏，点击空白恢复；手机竖屏各页保持一致布局，歌词隐藏控件后显示更多内容，当前行位置保持稳定，封面与控件同步渐隐。窄屏主页推荐卡片纵向排列。桌面歌词支持触摸切换控制显隐，无操作后控件与背景自动淡出，锁定后可通过独立按钮解锁。
+手机横屏采用封面与歌词双栏布局，播放控件支持自动隐藏，点击空白恢复；隐藏后歌词扩展至安全区域。桌面歌词支持触摸切换控制显隐，无操作后控件与背景自动淡出，锁定后可通过独立按钮解锁。
 
 ---
 
@@ -76,8 +76,6 @@
 > 💡 不清楚自己设备架构？装个 **CPU-Z**，或者无脑选 `arm64-v8a`——99% 都是它。
 
 也可以在「设置 → 关于软件 → 检查更新」中由应用自动选择匹配 ABI。应用会显示包体大小和下载进度，校验 GitHub Release 提供的文件摘要，并在包名、版本和签名证书均可升级后调用 Android 系统安装器。首次使用需按系统提示允许此来源安装，最终安装仍须由用户确认。
-
-APK 下载优先使用 [GH-Proxy](https://gh-proxy.com/) 加速入口，失败后依次尝试备用源和 GitHub 原地址。版本与文件摘要仍读取 GitHub 官方接口；按摘要区分同版本替换后的附件，下载后继续严格校验完整性与签名。
 
 ---
 
@@ -210,13 +208,9 @@ pnpm exec cap open android      # Android Studio 打开
 
 推送到 `dev` 或向 `dev` 提交 PR 时，[Android CI](./.github/workflows/android-ci.yml) 自动构建 Web/嵌入资源，并执行 `:app:assembleDebug :app:testDebugUnitTest :app:lintDebug`，不会创建 Release。
 
-推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如版本 `3.0.14` 对应 Tag `v3.0.14`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
+推送 `v*` Tag 时，[Android Release](./.github/workflows/release.yml) 校验版本与正式签名，执行 `:app:assembleRelease` 并发布所有 ABI 的 APK。Tag 去掉 `v` 后必须与 Android `versionName`、`package.json.version` 完全一致，例如版本 `3.0.13` 对应 Tag `v3.0.13`。包含 `alpha`、`beta` 或 `rc` 的 Tag 自动标记为预发布，其余默认正式发布。
 
 附件沿用 `app-arm64-v8a-release.apk` 等 Gradle 最终文件名。发布正文使用下载与安装表格、当前版本的分类更新日志和 Full Changelog 链接，另保留 GitHub 自动生成记录。已发布的 Tag 自动跳过；失败留下的草稿可安全重跑，不会重复上传相同附件。
-
-同版本修复通过手动运行该工作流，填写现有 Tag、`repair_ref` 完整提交 SHA 和 `replace_release_id`。校验目标身份后先备份旧附件到 Actions artifact，再替换现有 Release；原 Tag 保留，Android 构建号递增以支持覆盖安装。
-
-MuMu 手机与平板使用隔离 debug 包测试，后续版本使用 `adb install -r` 覆盖安装并保留数据，不卸载测试应用。必要时可利用已开放的 root 做诊断，正式应用数据不参与破坏性测试。
 
 签名所需 Secrets：
 

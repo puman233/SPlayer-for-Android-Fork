@@ -14,12 +14,15 @@ let savedPageType: MobilePageType = "info";
         'controls-hidden': !controlsVisible,
         'lyric-active': currentPageType === 'lyric',
         'comment-active': currentPageType === 'comment',
+        'page-moving': isPhoneDevice && (isHorizontalSwipe || pageSettling),
       },
     ]"
     :style="{
       '--lyric-h-offset': lyricHeaderHorizontalPadding,
       '--cover-size': `${Math.max(0, Math.min(coverWidth, coverHeight / (settingStore.playerType === 'record' ? 1.45 : 1), 380))}px`,
       '--top-bar-height': `${topBarHeight}px`,
+      '--top-bar-flow-height': `${topBarFlowHeight}px`,
+      '--player-height': `${playerViewportHeight}px`,
       '--lyric-header-height': `${lyricHeaderHeight}px`,
       '--lyric-footer-height': `${lyricFooterHeight}px`,
       '--cover-bottom': `${coverBottom}px`,
@@ -76,6 +79,7 @@ let savedPageType: MobilePageType = "info";
         { swiping: isHorizontalSwipe, 'no-transition': pageTransitionDisabled },
       ]"
       :style="{ transform: contentTransform, '--page-count': totalPages }"
+      @transitionend.self="finishPageTransition"
       @click.stop
     >
       <div v-if="hasComment" class="page comment-page">
@@ -237,8 +241,8 @@ let savedPageType: MobilePageType = "info";
         v-if="currentPageType !== 'comment'"
         v-show="controlsVisible || isPhoneDevice"
         :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
-        :inert="isPhoneDevice && !controlsVisible"
-        :aria-hidden="isPhoneDevice && !controlsVisible"
+        :inert="isPhoneDevice && (!controlsVisible || isHorizontalSwipe || pageSettling)"
+        :aria-hidden="isPhoneDevice && (!controlsVisible || isHorizontalSwipe || pageSettling)"
         :page-count="totalPages"
         :page-index="pageIndex"
         :large="isPadDevice"
@@ -314,8 +318,9 @@ const { height: lyricFooterHeight } = useElementBounding(lyricFooterRef);
 const dragHandleRef = ref<HTMLElement | null>(null);
 const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
 const { height: topBarHeight } = useElementSize(topBarRef);
+const { height: topBarFlowHeight } = useElementBounding(topBarRef);
 const { bottom: coverViewportBottom } = useElementBounding(coverSectionRef);
-const { top: playerViewportTop } = useElementBounding(mobileStart);
+const { top: playerViewportTop, height: playerViewportHeight } = useElementBounding(mobileStart);
 const coverBottom = computed(() => coverViewportBottom.value - playerViewportTop.value);
 
 // 歌词/评论可用性
@@ -350,6 +355,13 @@ const pageIndex = ref(resolveSavedPageIndex(savedPageType));
 const pageTransitionDisabled = ref(false);
 const pageSwipeBlocked = ref(false);
 let pageTransitionTimer = 0;
+const pageSettling = ref(false);
+let pageSettleTimer = 0;
+const finishPageTransition = () => {
+  pageSettling.value = false;
+  if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
+  pageSettleTimer = 0;
+};
 let lastLyricCoverTapAt = 0;
 let lastLyricCoverTapX = 0;
 let lastLyricCoverTapY = 0;
@@ -643,6 +655,7 @@ const { lengthX: topLengthX, lengthY: topLengthY } = useSwipe(dragHandleRef, {
 onBeforeUnmount(() => {
   if (rafId) cancelAnimationFrame(rafId);
   if (pageTransitionTimer) window.clearTimeout(pageTransitionTimer);
+  if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
   resetInlineStyles();
 });
 
@@ -701,6 +714,10 @@ const { direction, isSwiping, lengthX, lengthY } = useSwipe(mobileStart, {
     if (totalPages.value <= 1) return;
     // 仅在主方向为水平时触发翻页，避免上下滑动歌词/评论误触
     if (Math.abs(lengthX.value) <= Math.abs(lengthY.value)) return;
+    pageSettling.value = true;
+    if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
+    // 包含未越过翻页阈值时的回弹；无 transitionend 时也能恢复控件。
+    pageSettleTimer = window.setTimeout(finishPageTransition, 350);
 
     if (direction.value === "left" && lengthX.value > 100) {
       pageIndex.value = Math.min(pageIndex.value + 1, totalPages.value - 1);
@@ -747,6 +764,13 @@ const contentTransform = computed(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
+  &.page-moving .mobile-player-bottom-controls {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none;
+    transition: none !important;
+  }
 
   // 频谱贴底浮层：absolute 锚定容器底部，避开 PlayerSpectrum 默认 fixed + z-index:-1
   :deep(.mobile-spectrum) {
@@ -1185,6 +1209,29 @@ const contentTransform = computed(() => {
   }
 
   &.phone-portrait {
+    // 两个页面滑动时，歌词保持与全屏歌词页相同的纵向坐标和高度。
+    // 播放页仍保留原有流式布局，避免改变封面及歌曲信息的排版。
+    .lyric-page {
+      height: calc(var(--player-height) - var(--mobile-safe-top) - var(--mobile-safe-bottom));
+      top: calc(var(--mobile-safe-top) - var(--top-bar-flow-height));
+      .lyric-header {
+        position: absolute;
+        top: var(--top-bar-height);
+        left: 0;
+        width: 100%;
+        padding-inline: calc(16px + var(--lyric-h-offset, 0px));
+        z-index: 11;
+      }
+      .lyric-main {
+        clip-path: inset(
+          calc(var(--top-bar-height) + var(--lyric-header-height) + 20px) 0
+            max(0px, calc(var(--lyric-footer-height) - var(--mobile-safe-bottom)))
+        );
+      }
+    }
+    &.lyric-active .lyric-page {
+      top: 0;
+    }
     &.controls-hidden {
       padding-bottom: var(--mobile-safe-bottom);
       padding-top: var(--mobile-safe-top);

@@ -29,11 +29,12 @@ public class ApkDownloadTest {
     java.util.List<String> attempted = new java.util.ArrayList<>();
     long size = Long.parseLong(args.getString("apkSize"));
     try {
-      long bytes = ApkDownload.fetchSources(UpdateDownloadSources.resolve(args.getString("apkUrl"), args.getString("apkSha")),
+      long bytes = ApkDownload.fetchSources(ApkDownload.rankSources(
+          UpdateDownloadSources.resolve(args.getString("apkUrl"), args.getString("apkSha")), size, cancelled),
           file, args.getString("apkSha"), size, cancelled, new ApkDownload.Observer() {
             public void connection(HttpURLConnection connection) { if (connection != null) attempted.add(connection.getURL().toString()); }
             public void progress(long bytes, long total) { if (bytes > 0) progressEvents.incrementAndGet(); }
-          }, apk -> {}, error -> android.util.Log.w("UpdateNetworkTest", error.getClass().getSimpleName()));
+          }, apk -> {}, error -> android.util.Log.w("UpdateNetworkTest", error.toString()));
       assertEquals(size, bytes);
       assertTrue("必须产生真实下载进度", progressEvents.get() > 0);
       android.util.Log.i("UpdateNetworkTest", "verified bytes=" + bytes + " progress=" + progressEvents.get());
@@ -71,6 +72,9 @@ public class ApkDownloadTest {
     final AtomicInteger requests = new AtomicInteger();
     final Thread thread;
     Server(int status, byte[] payload, String type, int length) throws IOException {
+      this(status, payload, type, length, "");
+    }
+    Server(int status, byte[] payload, String type, int length, String headers) throws IOException {
       thread = new Thread(() -> {
         while (!socket.isClosed()) {
           try (Socket client = socket.accept()) {
@@ -80,7 +84,7 @@ public class ApkDownloadTest {
             requests.incrementAndGet();
             OutputStream output = client.getOutputStream();
             output.write(("HTTP/1.1 " + status + " Test\r\nContent-Type: " + type
-                + "\r\nContent-Length: " + length + "\r\nConnection: close\r\n\r\n")
+                + "\r\nContent-Length: " + length + "\r\n" + headers + "Connection: close\r\n\r\n")
                 .getBytes(StandardCharsets.US_ASCII));
             output.write(payload);
             output.flush();
@@ -110,6 +114,32 @@ public class ApkDownloadTest {
         assertEquals(1, failures.get());
         assertArrayEquals(apk, java.nio.file.Files.readAllBytes(partial.toPath()));
       } finally { partial.delete(); }
+    }
+  }
+
+  @Test public void probeRanksRealApkResponseAndRejectsHtml() throws Exception {
+    byte[] apk = fixture();
+    try (Server bad = new Server(200, "<html>error</html>".getBytes(StandardCharsets.UTF_8), "text/html", 18);
+         Server good = new Server(200, apk, "application/octet-stream", apk.length)) {
+      List<String> sources = Arrays.asList(bad.url(), good.url(), "http://127.0.0.1:1/original.apk");
+      List<String> ranked = ApkDownload.rankSources(sources, apk.length, cancelled);
+      assertEquals(Arrays.asList(good.url(), bad.url(), sources.get(2)), ranked);
+      assertEquals(1, bad.requests.get());
+      assertEquals(1, good.requests.get());
+      cancelled.set(true);
+      try { ApkDownload.rankSources(sources, apk.length, cancelled); fail("取消后不得探测"); }
+      catch (IOException expected) {}
+      assertEquals(1, good.requests.get());
+    }
+  }
+
+  @Test public void rangeProbeRequiresMatchingAssetSize() throws Exception {
+    try (Server wrong = new Server(206, new byte[]{'P'}, "application/octet-stream", 1,
+             "Content-Range: bytes 0-0/999\r\n");
+         Server valid = new Server(206, new byte[]{'P'}, "application/octet-stream", 1,
+             "Content-Range: bytes 0-0/123\r\n")) {
+      List<String> sources = Arrays.asList(wrong.url(), valid.url(), "http://127.0.0.1:1/original.apk");
+      assertEquals(valid.url(), ApkDownload.rankSources(sources, 123, cancelled).get(0));
     }
   }
 
@@ -143,7 +173,7 @@ public class ApkDownloadTest {
 
   @Test public void sourceUrlsAndPackageValidation() throws Exception {
     String url = "https://github.com/puman233/SPlayer-for-Android-Fork/releases/download/v3.0.12/app-arm64-v8a-release.apk";
-    assertEquals(Arrays.asList("https://gh-proxy.com/" + url, "https://gh.llkk.cc/" + url, "https://ghfast.top/" + url, url), UpdateDownloadSources.resolve(url));
+    assertEquals(Arrays.asList("https://gh-proxy.org/" + url, "https://gh.monlor.com/" + url, "https://ghproxy.imciel.com/" + url, url), UpdateDownloadSources.resolve(url));
     for (String invalid : new String[]{"https://api.github.com/releases", "http://github.com/a/b/releases/download/v1/app.apk", "https://github.com.evil/a/b/releases/download/v1/app.apk"}) {
       try { UpdateDownloadSources.resolve(invalid); fail("必须拒绝非官方 APK 地址"); }
       catch (IllegalArgumentException expected) {}

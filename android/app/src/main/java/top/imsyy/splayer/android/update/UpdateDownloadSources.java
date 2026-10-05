@@ -8,7 +8,8 @@ import java.util.List;
 /** APK 下载配置；版本信息仍直接读取 GitHub。 */
 final class UpdateDownloadSources {
   static final boolean PROXY_ENABLED = true;
-  static final String PROXY_BASE_URL = "https://gh-proxy.com";
+  // 与 website/src/data/downloadRoutes.ts 的自动探测池保持一致。
+  static final String PROXY_BASE_URL = "https://gh-proxy.org";
 
   static List<String> resolve(String original) {
     URI uri = URI.create(original);
@@ -20,8 +21,8 @@ final class UpdateDownloadSources {
       throw new IllegalArgumentException("Only official GitHub Release APK URLs are allowed");
     }
     return PROXY_ENABLED
-        ? Arrays.asList(PROXY_BASE_URL + "/" + original, "https://gh.llkk.cc/" + original,
-            "https://ghfast.top/" + original, original)
+        ? Arrays.asList(PROXY_BASE_URL + "/" + original, "https://gh.monlor.com/" + original,
+            "https://ghproxy.imciel.com/" + original, original)
         : Collections.singletonList(original);
   }
 

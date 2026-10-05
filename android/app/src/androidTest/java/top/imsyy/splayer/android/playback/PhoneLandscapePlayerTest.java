@@ -287,11 +287,32 @@ public class PhoneLandscapePlayerTest {
           SystemClock.sleep(20);
         }
         capture("portrait-swipe-mid");
+        assertEquals("横滑期间底部控件隐藏且不可点击", "true", js("(()=>{const e=document.querySelector('.mobile-player-bottom-controls');return e.inert&&getComputedStyle(e).visibility==='hidden'&&Number(getComputedStyle(e).opacity)===0})()"));
         event(MotionEvent.ACTION_UP, 276, swipeY);
+        SystemClock.sleep(80);
+        assertEquals("切页回弹期间底部控件仍隐藏", "true", js("getComputedStyle(document.querySelector('.mobile-player-bottom-controls')).visibility==='hidden'"));
         SystemClock.sleep(450);
         assertEquals("真实横滑应返回播放页", "false", js("document.querySelector('.full-player-mobile').classList.contains('lyric-active')"));
         assertPortraitMetadata();
         capture("portrait-swipe-info");
+        double lyricY = bounds(".lyric-main").getDouble("y");
+        double lyricHeight = bounds(".lyric-main").getDouble("height");
+        String linePosition = "Array.from(document.querySelectorAll('.lyric-page [lang]')).find(e=>e.textContent.includes('決めつけばかり')).getBoundingClientRect().y";
+        double lineY = Double.parseDouble(js(linePosition));
+        event(MotionEvent.ACTION_DOWN, 290, swipeY);
+        for (int i=1;i<=12;i++) {
+          event(MotionEvent.ACTION_MOVE, 290 - i * 18, swipeY);
+          assertEquals("进入歌词页时歌词区域不得上下移动", lyricY, bounds(".lyric-main").getDouble("y"), 1);
+          assertEquals("进入歌词页时当前歌词不得下移动画", lineY, Double.parseDouble(js(linePosition)), 1);
+        }
+        event(MotionEvent.ACTION_UP, 74, swipeY);
+        for (int i=0;i<12;i++) {
+          SystemClock.sleep(45);
+          assertEquals("进入歌词页时歌词区域不得上下移动", lyricY, bounds(".lyric-main").getDouble("y"), 1);
+          assertEquals("进入歌词页时歌词区域高度不变", lyricHeight, bounds(".lyric-main").getDouble("height"), 1);
+          assertEquals("切页完成期间当前歌词不得下移动画", lineY, Double.parseDouble(js(linePosition)), 1);
+        }
+        capture("portrait-swipe-lyric");
         JSONObject returnDot = bounds(".pagination .dot:last-child");
         tap((float)(returnDot.getDouble("x")+returnDot.getDouble("width")/2), (float)(returnDot.getDouble("y")+returnDot.getDouble("height")/2));
         save("portrait-lyric-dom", json("(()=>{const q=s=>{const e=document.querySelector(s),r=e.getBoundingClientRect(),c=getComputedStyle(e);return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,display:c.display,opacity:c.opacity,zIndex:c.zIndex,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.className}};return {height:innerHeight,footer:q('.mobile-player-bottom-controls'),progress:q('.mobile-player-bottom-controls .progress-section'),controls:q('.mobile-player-bottom-controls .control-section'),play:q('.mobile-player-bottom-controls .play-btn'),html:document.querySelector('.mobile-player-bottom-controls').outerHTML}})()"));

@@ -287,10 +287,12 @@ public class PhoneLandscapePlayerTest {
           SystemClock.sleep(20);
         }
         capture("portrait-swipe-mid");
-        assertEquals("横滑期间底部控件隐藏且不可点击", "true", js("(()=>{const e=document.querySelector('.mobile-player-bottom-controls');return e.inert&&getComputedStyle(e).visibility==='hidden'&&Number(getComputedStyle(e).opacity)===0})()"));
+        assertEquals("横滑期间底部控件持续可见且可点击", "true", js("(()=>{const e=document.querySelector('.mobile-player-bottom-controls');return !e.inert&&getComputedStyle(e).visibility==='visible'&&Number(getComputedStyle(e).opacity)===1})()"));
+        assertTrue("横滑播放页操作区不与共享控件重叠", bounds(".info-page").getDouble("bottom") <= bounds(".mobile-player-bottom-controls").getDouble("y") + 1);
         event(MotionEvent.ACTION_UP, 276, swipeY);
         SystemClock.sleep(80);
-        assertEquals("切页回弹期间底部控件仍隐藏", "true", js("getComputedStyle(document.querySelector('.mobile-player-bottom-controls')).visibility==='hidden'"));
+        assertEquals("切页回弹期间底部控件持续可见", "true", js("getComputedStyle(document.querySelector('.mobile-player-bottom-controls')).visibility==='visible'"));
+        assertTrue("回弹播放页不与共享控件重叠", bounds(".info-page").getDouble("bottom") <= bounds(".mobile-player-bottom-controls").getDouble("y") + 1);
         SystemClock.sleep(450);
         assertEquals("真实横滑应返回播放页", "false", js("document.querySelector('.full-player-mobile').classList.contains('lyric-active')"));
         assertPortraitMetadata();
@@ -304,6 +306,8 @@ public class PhoneLandscapePlayerTest {
           event(MotionEvent.ACTION_MOVE, 290 - i * 18, swipeY);
           assertEquals("进入歌词页时歌词区域不得上下移动", lyricY, bounds(".lyric-main").getDouble("y"), 1);
           assertEquals("进入歌词页时当前歌词不得下移动画", lineY, Double.parseDouble(js(linePosition)), 1);
+          assertEquals("滑向歌词页时播放按钮持续显现", "true", js("getComputedStyle(document.querySelector('.mobile-player-bottom-controls')).opacity==='1'"));
+          assertTrue("滑向歌词页时播放页不与共享控件重叠", bounds(".info-page").getDouble("bottom") <= bounds(".mobile-player-bottom-controls").getDouble("y") + 1);
         }
         event(MotionEvent.ACTION_UP, 74, swipeY);
         for (int i=0;i<12;i++) {

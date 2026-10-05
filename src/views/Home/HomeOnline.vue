@@ -97,6 +97,15 @@ const router = useRouter();
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
+const recommendationScope = computed(() =>
+  !isLogin()
+    ? "guest"
+    : dataStore.userData.userId
+      ? `user:${dataStore.loginType}:${dataStore.userData.userId}`
+      : "pending",
+);
+let playlistRequestId = 0;
+let playlistFlight: { scope: string; promise: Promise<void> } | null = null;
 
 const dailySongsTitle = computed(() => {
   if (settingStore.hiddenCovers.home) return "每日推荐";
@@ -154,23 +163,49 @@ const sortedRecData = computed(() => {
     .filter(Boolean);
 });
 
+const loadPlaylistRecommendations = (force = false): Promise<void> => {
+  const scope = recommendationScope.value;
+  if (scope === "pending") return Promise.resolve();
+  if (!force && playlistFlight?.scope === scope) return playlistFlight.promise;
+  const requestId = ++playlistRequestId;
+  const promise: Promise<void> = (async () => {
+    try {
+      const result = await getCacheData(
+        personalized,
+        { key: `playlistRec:v2:${scope}`, time: 10, useCache: !force },
+        "playlist",
+        scope === "guest" ? 20 : 21,
+        true,
+      );
+      // 登录/切账号期间晚到的旧请求不得覆盖当前推荐。
+      if (scope !== recommendationScope.value || requestId !== playlistRequestId) return;
+      if (!Array.isArray(result?.result)) return;
+      recData.value.playlist.list = formatCoverList(
+        result.result.filter((pl: any) => !pl.name.includes("私人雷达")),
+      );
+    } catch (error) {
+      console.error("Error getting playlist:", error);
+    } finally {
+      if (playlistFlight?.promise === promise) playlistFlight = null;
+    }
+  })();
+  playlistFlight = { scope, promise };
+  return promise;
+};
+
+watch(recommendationScope, () => {
+  playlistRequestId++;
+  recData.value.playlist.name = isLogin() ? "专属歌单" : "推荐歌单";
+  recData.value.playlist.list = [];
+  void loadPlaylistRecommendations(true);
+});
+onBeforeUnmount(() => { playlistRequestId++; });
+
 const getAllRecData = async () => {
   try {
     await sleep(300);
 
-    try {
-      const playlistRes = await getCacheData(
-        personalized,
-        { key: "playlistRec", time: 10 },
-        "playlist",
-        isLogin() ? 21 : 20,
-      );
-      recData.value.playlist.list = formatCoverList(
-        playlistRes.result?.filter((pl: any) => !pl.name.includes("私人雷达")),
-      );
-    } catch (error) {
-      console.error("Error getting playlist:", error);
-    }
+    await loadPlaylistRecommendations();
 
     try {
       const radarRes = await getCacheData(radarPlaylist, { key: "radarRec", time: 30 });

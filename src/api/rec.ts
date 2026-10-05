@@ -30,12 +30,14 @@ export const dailyRecommendDislike = (id: number) => {
 export const personalized = (
   type: "playlist" | "mv" | "newsong" | "djprogram" | "privatecontent" = "playlist",
   limit: number = 50,
+  fresh: boolean = false,
 ) => {
   const url = type === "playlist" ? "/personalized" : `/personalized/${type}`;
   return request({
     url,
     params: {
       limit,
+      ...(fresh ? { timestamp: Date.now() } : {}),
     },
   });
 };

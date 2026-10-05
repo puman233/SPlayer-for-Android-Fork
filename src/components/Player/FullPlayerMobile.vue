@@ -14,7 +14,6 @@ let savedPageType: MobilePageType = "info";
         'controls-hidden': !controlsVisible,
         'lyric-active': currentPageType === 'lyric',
         'comment-active': currentPageType === 'comment',
-        'page-moving': isPhoneDevice && (isHorizontalSwipe || pageSettling),
       },
     ]"
     :style="{
@@ -79,7 +78,6 @@ let savedPageType: MobilePageType = "info";
         { swiping: isHorizontalSwipe, 'no-transition': pageTransitionDisabled },
       ]"
       :style="{ transform: contentTransform, '--page-count': totalPages }"
-      @transitionend.self="finishPageTransition"
       @click.stop
     >
       <div v-if="hasComment" class="page comment-page">
@@ -241,8 +239,8 @@ let savedPageType: MobilePageType = "info";
         v-if="currentPageType !== 'comment'"
         v-show="controlsVisible || isPhoneDevice"
         :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
-        :inert="isPhoneDevice && (!controlsVisible || isHorizontalSwipe || pageSettling)"
-        :aria-hidden="isPhoneDevice && (!controlsVisible || isHorizontalSwipe || pageSettling)"
+        :inert="isPhoneDevice && !controlsVisible"
+        :aria-hidden="isPhoneDevice && !controlsVisible"
         :page-count="totalPages"
         :page-index="pageIndex"
         :large="isPadDevice"
@@ -355,13 +353,6 @@ const pageIndex = ref(resolveSavedPageIndex(savedPageType));
 const pageTransitionDisabled = ref(false);
 const pageSwipeBlocked = ref(false);
 let pageTransitionTimer = 0;
-const pageSettling = ref(false);
-let pageSettleTimer = 0;
-const finishPageTransition = () => {
-  pageSettling.value = false;
-  if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
-  pageSettleTimer = 0;
-};
 let lastLyricCoverTapAt = 0;
 let lastLyricCoverTapX = 0;
 let lastLyricCoverTapY = 0;
@@ -655,7 +646,6 @@ const { lengthX: topLengthX, lengthY: topLengthY } = useSwipe(dragHandleRef, {
 onBeforeUnmount(() => {
   if (rafId) cancelAnimationFrame(rafId);
   if (pageTransitionTimer) window.clearTimeout(pageTransitionTimer);
-  if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
   resetInlineStyles();
 });
 
@@ -714,10 +704,6 @@ const { direction, isSwiping, lengthX, lengthY } = useSwipe(mobileStart, {
     if (totalPages.value <= 1) return;
     // 仅在主方向为水平时触发翻页，避免上下滑动歌词/评论误触
     if (Math.abs(lengthX.value) <= Math.abs(lengthY.value)) return;
-    pageSettling.value = true;
-    if (pageSettleTimer) window.clearTimeout(pageSettleTimer);
-    // 包含未越过翻页阈值时的回弹；无 transitionend 时也能恢复控件。
-    pageSettleTimer = window.setTimeout(finishPageTransition, 350);
 
     if (direction.value === "left" && lengthX.value > 100) {
       pageIndex.value = Math.min(pageIndex.value + 1, totalPages.value - 1);
@@ -732,6 +718,10 @@ const isHorizontalSwipe = computed(
   () =>
     !pageSwipeBlocked.value && isSwiping.value && Math.abs(lengthX.value) > Math.abs(lengthY.value),
 );
+
+watch(isHorizontalSwipe, (swiping) => {
+  if (isPhoneDevice.value && swiping && currentPageType.value !== "comment") interact();
+});
 
 const contentTransform = computed(() => {
   const pageWidthPct = 100 / totalPages.value;
@@ -765,12 +755,6 @@ const contentTransform = computed(() => {
   display: flex;
   flex-direction: column;
 
-  &.page-moving .mobile-player-bottom-controls {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none;
-    transition: none !important;
-  }
 
   // 频谱贴底浮层：absolute 锚定容器底部，避开 PlayerSpectrum 默认 fixed + z-index:-1
   :deep(.mobile-spectrum) {
@@ -1209,6 +1193,13 @@ const contentTransform = computed(() => {
   }
 
   &.phone-portrait {
+    // 两页共用固定的控制区，播放页始终为它预留相同空间。
+    .info-page {
+      height: calc(var(--player-height) - var(--top-bar-flow-height) - var(--lyric-footer-height));
+    }
+    &.lyric-active .info-page {
+      top: calc(var(--top-bar-flow-height) - var(--mobile-safe-top));
+    }
     // 两个页面滑动时，歌词保持与全屏歌词页相同的纵向坐标和高度。
     // 播放页仍保留原有流式布局，避免改变封面及歌曲信息的排版。
     .lyric-page {

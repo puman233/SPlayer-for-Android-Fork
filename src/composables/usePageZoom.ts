@@ -19,10 +19,11 @@ export const usePageZoom = () => {
     return 100;
   });
 
-  // 全面屏底部留白：所有 Android 形态（手机/平板、横/竖）都需避免被系统手势条遮挡
+  // 手机横屏使用系统真实安全区，避免额外固定留白挤压内容。
   const fullscreenSafeBottom = computed(() => {
     if (!isCapacitorAndroid) return 0;
-    return settingStore.androidFullscreenSafeAreaOptimize ? 32 : 0;
+    if (!settingStore.androidFullscreenSafeAreaOptimize) return 0;
+    return isPhone.value && !isPhonePortrait.value ? 0 : 32;
   });
 
   const fullscreenSafeTop = computed(() => {

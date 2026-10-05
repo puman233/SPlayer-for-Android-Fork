@@ -596,7 +596,7 @@ const jumpSeek = (time: number) => {
 
 // 监听歌词滚动
 useResizeObserver(lyricScrollContainer, () => {
-  // 手机控件显隐会改变歌词高度，重新定位当前行。
+  // 仅在真实视窗尺寸变化时重新定位，控件显隐不改变视窗。
   if (lyricScrollContainer.value?.closest(".phone-portrait")) {
     lyricsScroll(firstActiveIndex.value);
   }

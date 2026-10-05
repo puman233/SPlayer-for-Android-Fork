@@ -12,6 +12,7 @@ let savedPageType: MobilePageType = "info";
         'pad-portrait': isPadDevice,
         'phone-portrait': isPhoneDevice,
         'controls-hidden': !controlsVisible,
+        'lyric-active': currentPageType === 'lyric',
         'comment-active': currentPageType === 'comment',
       },
     ]"
@@ -19,6 +20,8 @@ let savedPageType: MobilePageType = "info";
       '--lyric-h-offset': lyricHeaderHorizontalPadding,
       '--cover-size': `${Math.max(0, Math.min(coverWidth, coverHeight / (settingStore.playerType === 'record' ? 1.45 : 1), 380))}px`,
       '--top-bar-height': `${topBarHeight}px`,
+      '--lyric-header-height': `${lyricHeaderHeight}px`,
+      '--lyric-footer-height': `${lyricFooterHeight}px`,
       '--cover-bottom': `${coverBottom}px`,
       '--pad-portrait-lrc-size': padPortraitLyricSize,
       '--pad-portrait-lrc-tran-size': padPortraitLyricTranSize,
@@ -178,6 +181,7 @@ let savedPageType: MobilePageType = "info";
       <div v-if="hasLyric" class="page lyric-page">
         <Transition name="mobile-controls">
           <div
+            ref="lyricHeaderRef"
             v-show="controlsVisible || isPhoneDevice"
             class="lyric-header"
             :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
@@ -229,6 +233,7 @@ let savedPageType: MobilePageType = "info";
 
     <Transition name="mobile-controls">
       <MobilePlayerBottomControls
+        ref="lyricFooterRef"
         v-if="currentPageType !== 'comment'"
         v-show="controlsVisible || isPhoneDevice"
         :class="{ 'portrait-controls-hidden': isPhoneDevice && !controlsVisible }"
@@ -254,6 +259,7 @@ let savedPageType: MobilePageType = "info";
 
 <script setup lang="ts">
 import { useMobilePlayerControls } from "@/composables/useMobilePlayerControls";
+import type { ComponentPublicInstance } from "vue";
 import { PLAYER_META_HOLD_KEY } from "@/composables/usePlayerMetaHold";
 import { useSwipe, useElementSize, useElementBounding, useEventListener } from "@vueuse/core";
 import { useMusicStore, useStatusStore, useDataStore, useSettingStore } from "@/stores";
@@ -301,6 +307,10 @@ onBeforeUnmount(() => orientationTransition.setCoverEl(null, "portrait"));
 
 const mobileStart = ref<HTMLElement | null>(null);
 const topBarRef = ref<HTMLElement | null>(null);
+const lyricHeaderRef = ref<HTMLElement | null>(null);
+const lyricFooterRef = ref<ComponentPublicInstance | null>(null);
+const { height: lyricHeaderHeight } = useElementBounding(lyricHeaderRef);
+const { height: lyricFooterHeight } = useElementBounding(lyricFooterRef);
 const dragHandleRef = ref<HTMLElement | null>(null);
 const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
 const { height: topBarHeight } = useElementSize(topBarRef);
@@ -1195,6 +1205,41 @@ const contentTransform = computed(() => {
     .portrait-controls-hidden {
       visibility: hidden;
       pointer-events: none;
+    }
+    // 歌词视窗始终占满安全区，控件只覆盖和裁切，不参与显隐重排。
+    &.lyric-active {
+      padding-top: var(--mobile-safe-top);
+      padding-bottom: var(--mobile-safe-bottom);
+      .top-bar,
+      .mobile-player-bottom-controls {
+        position: absolute;
+        left: 0;
+        width: 100%;
+      }
+      .top-bar {
+        top: 0;
+      }
+      .mobile-player-bottom-controls {
+        bottom: 0;
+        z-index: 12;
+      }
+      .lyric-page .lyric-header {
+        position: absolute;
+        top: var(--top-bar-height);
+        left: 0;
+        width: 100%;
+        padding-inline: calc(16px + var(--lyric-h-offset, 0px));
+        z-index: 11;
+      }
+      .lyric-main {
+        clip-path: inset(
+          calc(var(--top-bar-height) + var(--lyric-header-height) + 20px) 0
+            max(0px, calc(var(--lyric-footer-height) - var(--mobile-safe-bottom)))
+        );
+      }
+      &.controls-hidden .lyric-main {
+        clip-path: none;
+      }
     }
     .info-page .song-info-bar .info-section :deep(.mobile-data) {
       .meta-actions-row {

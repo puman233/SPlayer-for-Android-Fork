@@ -374,7 +374,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
   }
   .landscape-controls {
     min-height: 0;
-    padding: 0 12px 12px;
+    padding: 0 12px 4px;
   }
   :deep(.player-control) {
     --play-control-touch-size: 48px;
@@ -382,7 +382,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
     height: 100%;
     overflow: visible;
     .control-content {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr) minmax(0, 1fr);
+      grid-template-columns: max-content minmax(0, 1fr) max-content;
       gap: 8px;
       align-items: center;
     }
@@ -423,6 +423,8 @@ useResizeObserver([leftRef, infoRef], measureCover);
     }
     .left,
     .right {
+      width: max-content;
+      max-width: 100%;
       align-self: start;
       margin-top: 4px;
       padding: 0 4px;
@@ -435,6 +437,9 @@ useResizeObserver([leftRef, infoRef], measureCover);
       overflow-x: auto;
       overflow-y: hidden;
       justify-content: center;
+    }
+    .right {
+      justify-self: end;
     }
     .left > .menu-icon:first-child {
       display: none;
@@ -474,7 +479,6 @@ useResizeObserver([leftRef, infoRef], measureCover);
   }
   @container landscape-player (max-width: 600px) {
     :deep(.player-control .control-content) {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 2.8fr) minmax(0, 1fr);
       gap: 4px;
     }
     :deep(.player-control .menu-icon) {

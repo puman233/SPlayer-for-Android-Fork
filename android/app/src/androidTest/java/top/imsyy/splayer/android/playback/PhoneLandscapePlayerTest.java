@@ -135,6 +135,40 @@ public class PhoneLandscapePlayerTest {
     assertTrue("歌词不得越界", lyrics.getDouble("right") <= root.getDouble("right") + 1);
   }
 
+  private void assertStableLyrics(String engine) throws Exception {
+    // 引擎首次排版完成后，再测试显隐本身的位移。
+    SystemClock.sleep(2500);
+    for (int cycle = 0; cycle < 2; cycle++) {
+      tap(5, 40);
+      SystemClock.sleep(800);
+      assertEquals("控件应恢复", "false", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
+      String anchor = "(()=>{const e=Array.from(document.querySelectorAll('.lyric-page [lang], .lyric-page [class*=lyricMainLine]')).find(e=>e.textContent.includes('決めつけばかり'));if(!e)throw Error('缺少测试歌词行');const r=e.getBoundingClientRect(),v=document.querySelector('.lyric-main').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewportY:v.y,viewportHeight:v.height,hidden:document.querySelector('.full-player-mobile').classList.contains('controls-hidden'),pure:t.pureLyricMode,playing:t.playStatus,time:t.currentTime,spring:s.useAMSpring}})()";
+      JSONObject before = json(anchor);
+      capture("stable-" + engine + "-visible-" + cycle);
+      org.json.JSONArray samples = new org.json.JSONArray();
+      for (int frame = 0; frame < 12; frame++) {
+        SystemClock.sleep(180);
+        JSONObject position = json(anchor);
+        samples.put(position);
+        save("stable-" + engine + "-" + cycle, new JSONObject().put("before", before).put("frames", samples));
+        assertEquals("显隐全过程当前歌词行不跳动：" + engine, before.getDouble("y"), position.getDouble("y"), 1);
+      }
+      assertEquals("两秒后控件隐藏", "true", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
+      save("stable-" + engine + "-" + cycle, new JSONObject().put("before", before).put("frames", samples));
+      capture("stable-" + engine + "-hidden-" + cycle);
+    }
+  }
+
+  private void assertCompactActionGroups() throws Exception {
+    for (String side : new String[] {"left", "right"}) {
+      JSONObject geometry = json("(()=>{const e=document.querySelector('.landscape-controls ." + side + "'),r=e.getBoundingClientRect();const widths=Array.from(e.children).map(c=>c.getBoundingClientRect().width).reduce((a,b)=>a+b,0);return {width:r.width,content:widths}})()");
+      assertTrue("侧组不得在按钮旁边保留大量空白：" + side,
+          geometry.getDouble("width") - geometry.getDouble("content") <= 14);
+    }
+    JSONObject slider = bounds(".landscape-controls .slider"), root = bounds(".full-player-mobile-landscape");
+    assertTrue("进度条下方仅保留系统安全区和小间距", root.getDouble("bottom") - slider.getDouble("bottom") <= 12);
+  }
+
   private File audio() throws Exception {
     File file = new File(inst.getTargetContext().getFilesDir(), "phase1-silence.wav");
     int bytes = 120 * 16000 * 2;
@@ -221,7 +255,7 @@ public class PhoneLandscapePlayerTest {
         assertEquals("桌面歌词应可关闭", "false", js("t.showDesktopLyric"));
 
         JSONObject lyricDot = bounds(".pagination .dot:last-child");
-        js("m.songLyric={lrcData:Array.from({length:20},(_,i)=>({startTime:(i-8)*5000,endTime:(i-7)*5000,romanLyric:'',translatedLyric:'这是第 '+(i+1)+' 行翻译',words:[{word:'Lyric line '+(i+1)+' — keep the music playing',startTime:(i-8)*5000,endTime:(i-7)*5000}]})),yrcData:[]}");
+        js("m.songLyric={lrcData:Array.from({length:20},(_,i)=>({startTime:(i-8)*5000,endTime:(i-7)*5000,romanLyric:'ki me tsu ke ba ka ri u nu bo re wo ki ta chi pu na ho ko ri de',translatedLyric:'一味的固执己见，充满着傲慢，就算是自负且虚假的自尊',words:[{word:i===8?'決めつけばかり 自惚れを着た チープなhokoriで 音荒げても':'Lyric line '+(i+1)+' — keep the music playing',startTime:(i-8)*5000,endTime:(i-7)*5000}]})),yrcData:[]}");
         tap((float)(lyricDot.getDouble("x") + lyricDot.getDouble("width") / 2), (float)(lyricDot.getDouble("y") + lyricDot.getDouble("height") / 2));
         capture("portrait-lyric-controls");
         JSONObject visibleLyric = bounds(".lyric-page .lyric-main");
@@ -230,12 +264,14 @@ public class PhoneLandscapePlayerTest {
         assertEquals("隐藏控件禁用触摸", "true", js("document.querySelector('.mobile-player-bottom-controls').inert"));
         capture("portrait-lyric-idle");
         JSONObject hiddenLyric = bounds(".lyric-page .lyric-main");
-        assertTrue("隐藏后歌词向顶部扩展", hiddenLyric.getDouble("y") < visibleLyric.getDouble("y") - 40);
-        assertTrue("隐藏后歌词向底部扩展", hiddenLyric.getDouble("bottom") > visibleLyric.getDouble("bottom") + 80);
+        assertEquals("隐藏时歌词视窗顶部不移位", visibleLyric.getDouble("y"), hiddenLyric.getDouble("y"), 1);
+        assertEquals("隐藏时歌词视窗底部不移位", visibleLyric.getDouble("bottom"), hiddenLyric.getDouble("bottom"), 1);
         assertTrue("隐藏后歌词接近完整可用高度", hiddenLyric.getDouble("height") > json("({height:innerHeight})").getDouble("height") * 0.85);
+        assertStableLyrics("default");
         js("s.useAMLyrics=true"); SystemClock.sleep(500);
         assertEquals("扩展状态第二歌词引擎可达", "true", js("!!document.querySelector('.lyric-page .am-lyric')"));
         capture("portrait-lyric-expanded-amll");
+        assertStableLyrics("amll");
         js("s.useAMLyrics=false"); SystemClock.sleep(500);
         tap(5, 40);
         assertEquals("空白点击恢复歌词页控件", "false", js("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')"));
@@ -272,12 +308,22 @@ public class PhoneLandscapePlayerTest {
       capture("idle-1.0");
       JSONObject before = bounds(".landscape-content");
       reveal();
+      js("t.personalFmMode=false");
+      SystemClock.sleep(150);
+      assertEquals("普通播放保留两个模式按钮", "2", js("document.querySelectorAll('.landscape-controls .mode-icon').length"));
       assertMainBounds();
       JSONObject after = bounds(".landscape-content");
       assertTrue("隐藏控制层应释放底部歌词空间", before.getDouble("height") >= after.getDouble("height") + 80);
       JSONObject overlay = bounds(".landscape-controls"), root = bounds(".full-player-mobile-landscape");
       save("debug-layout", json("(()=>{const r=document.querySelector('.full-player-mobile-landscape'),l=r.querySelector('.left-section'),i=l.querySelector('.info');return {root:" + root + ",left:" + bounds(".left-section") + ",cover:" + bounds(".landscape-cover") + ",info:" + bounds(".left-section .info") + ",play:" + bounds(".landscape-controls .play-pause") + ",padding:getComputedStyle(r).padding,infoScroll:i.scrollHeight,infoOffset:i.offsetHeight,leftHeight:l.clientHeight,coverSize:getComputedStyle(r).getPropertyValue('--landscape-cover-size'),zoom:getComputedStyle(document.body).zoom}})()"));
       capture("controls-1.0");
+      assertCompactActionGroups();
+      js("t.personalFmMode=true");
+      SystemClock.sleep(150);
+      assertEquals("私人FM不显示模式按钮", "0", js("document.querySelectorAll('.landscape-controls .mode-icon').length"));
+      assertCompactActionGroups();
+      capture("controls-fm-compact");
+      js("t.personalFmMode=false");
       assertTrue(overlay.getDouble("y") >= root.getDouble("y"));
       assertTrue(overlay.getDouble("bottom") <= root.getDouble("bottom") + 1);
       assertTrue(overlay.getDouble("right") <= root.getDouble("right") + 1);

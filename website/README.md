@@ -37,7 +37,7 @@ pnpm preview    # 预览构建结果，端口 4174
 ```text
 website/
 ├─ public/
-│  ├─ icons/          复用仓库现有的 App Icon 与 favicon（不重新设计 Logo）
+│  ├─ icons/          由 Android App 图标生成，见下方说明
 │  └─ screenshots/    真机截图目录，见下方说明
 ├─ src/
 │  ├─ components/     导航、下载区块、界面预览
@@ -85,6 +85,25 @@ export const SCREENSHOTS: readonly ScreenshotEntry[] = [
 `category` 决定排版：`mobile` 占一列，`desktop` 占两列，`landscape` 独占一行。
 `hero: true` 的手机截图会出现在首页右侧，宽屏位置自动取第一张 `desktop` 截图。
 数组顺序同时是展示顺序。清单为空时整个「界面预览」区块会收起，不会出现占位文案。
+
+## 站点图标
+
+`public/icons/` 里的图标全部由 **Android App 的 launcher 图标**生成，不另外设计 Logo：
+
+- 源文件：`android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png`
+- 处理：只裁掉自适应图标的透明留白并等比例缩放，不改动图形本身
+- `apple-touch-icon.png` 用 App 图标的背景色 `#dcefdf` 补满方形，避免 iOS 二次圆角
+
+| 文件                   | 尺寸     | 用途                      |
+| ---------------------- | -------- | ------------------------- |
+| `app-icon-512.png`     | 512      | 首页 Hero、`og:image`     |
+| `app-icon-96.png`      | 96       | 页头品牌标记（显示 28px） |
+| `favicon-192x192.png`  | 192      | favicon、webmanifest      |
+| `favicon-32x32.png`    | 32       | favicon                   |
+| `apple-touch-icon.png` | 180      | iOS 主屏图标              |
+| `favicon.ico`          | 16/32/48 | 浏览器标签页              |
+
+App 图标换新后，用同样的方式从新的 `ic_launcher.png` 重新导出即可。
 
 ## 下载数据
 

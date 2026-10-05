@@ -33,7 +33,7 @@ android {
         applicationId "top.imsyy.splayer.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 30019
+        versionCode 30020
         versionName "3.0.13"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

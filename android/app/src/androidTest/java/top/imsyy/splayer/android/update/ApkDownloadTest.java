@@ -18,6 +18,29 @@ import org.junit.runner.RunWith;
 /** 用本机 HTTP 服务制造失败，执行真实 Android 网络和文件下载。 */
 @RunWith(AndroidJUnit4.class)
 public class ApkDownloadTest {
+  @Test public void realAcceleratedDownloadWithoutSystemProxy() throws Exception {
+    android.os.Bundle args = InstrumentationRegistry.getArguments();
+    org.junit.Assume.assumeTrue(args.containsKey("apkUrl"));
+    assertTrue(context.getPackageName().endsWith(".phase1verify"));
+    String proxy = android.provider.Settings.Global.getString(context.getContentResolver(), "http_proxy");
+    assertTrue("测试不得使用系统代理", proxy == null || proxy.isEmpty() || ":0".equals(proxy));
+    File file = new File(context.getCacheDir(), "real-update-test.part");
+    AtomicInteger progressEvents = new AtomicInteger();
+    java.util.List<String> attempted = new java.util.ArrayList<>();
+    long size = Long.parseLong(args.getString("apkSize"));
+    try {
+      long bytes = ApkDownload.fetchSources(UpdateDownloadSources.resolve(args.getString("apkUrl"), args.getString("apkSha")),
+          file, args.getString("apkSha"), size, cancelled, new ApkDownload.Observer() {
+            public void connection(HttpURLConnection connection) { if (connection != null) attempted.add(connection.getURL().toString()); }
+            public void progress(long bytes, long total) { if (bytes > 0) progressEvents.incrementAndGet(); }
+          }, apk -> {}, error -> android.util.Log.w("UpdateNetworkTest", error.toString()));
+      assertEquals(size, bytes);
+      assertTrue("必须产生真实下载进度", progressEvents.get() > 0);
+      android.util.Log.i("UpdateNetworkTest", "verified bytes=" + bytes + " progress=" + progressEvents.get());
+      org.json.JSONObject evidence = new org.json.JSONObject().put("bytes", bytes).put("sha256", args.getString("apkSha")).put("progressEvents", progressEvents.get()).put("systemProxy", proxy).put("attempted", new org.json.JSONArray(attempted));
+      java.nio.file.Files.write(new File(context.getExternalFilesDir(null), "network-hotfix.json").toPath(), evidence.toString(2).getBytes(StandardCharsets.UTF_8));
+    } finally { file.delete(); }
+  }
   private final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
   private final AtomicBoolean cancelled = new AtomicBoolean();
   private final ApkDownload.Observer observer = new ApkDownload.Observer() {
@@ -120,7 +143,7 @@ public class ApkDownloadTest {
 
   @Test public void sourceUrlsAndPackageValidation() throws Exception {
     String url = "https://github.com/puman233/SPlayer-for-Android-Fork/releases/download/v3.0.12/app-arm64-v8a-release.apk";
-    assertEquals(Arrays.asList("https://gh.llkk.cc/" + url, url), UpdateDownloadSources.resolve(url));
+    assertEquals(Arrays.asList("https://gh-proxy.com/" + url, "https://gh.llkk.cc/" + url, "https://ghfast.top/" + url, url), UpdateDownloadSources.resolve(url));
     for (String invalid : new String[]{"https://api.github.com/releases", "http://github.com/a/b/releases/download/v1/app.apk", "https://github.com.evil/a/b/releases/download/v1/app.apk"}) {
       try { UpdateDownloadSources.resolve(invalid); fail("必须拒绝非官方 APK 地址"); }
       catch (IllegalArgumentException expected) {}

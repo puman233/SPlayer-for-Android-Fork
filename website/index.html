@@ -233,6 +233,12 @@
               <span class="release-value release-date">Android 10+</span>
             </p>
 
+            <div class="route-picker" id="route-picker" hidden>
+              <label class="route-label" for="route-select">下载线路</label>
+              <select class="route-select" id="route-select"></select>
+              <p class="route-status" id="route-status" role="status" aria-live="polite"></p>
+            </div>
+
             <table class="dl-table">
               <caption class="sr-only">
                 按 CPU 架构选择对应的 APK 安装包
@@ -289,6 +295,10 @@
                 rel="noopener"
                 >查看全部版本</a
               >
+            </p>
+
+            <p class="route-note" id="route-note" hidden>
+              加速线路由第三方公共代理提供，如不可用可切换为 GitHub 原始线路。
             </p>
           </div>
         </div>

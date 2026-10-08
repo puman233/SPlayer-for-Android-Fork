@@ -51,7 +51,6 @@ public class FloatingLyricOverlayTest {
       // 等主线程处理当前帧，避免模拟器负载造成固定 sleep 的误判
       main(() -> {});
       if (Math.abs((float) field(service, "controlsAlpha") - expected) < 0.001f) {
-        instrumentation.waitForIdleSync();
         SystemClock.sleep(150); // WindowManager 的窗口尺寸提交晚于动画最后一帧。
         return;
       }
@@ -322,6 +321,7 @@ public class FloatingLyricOverlayTest {
       assertEquals(0xFF123456, service.colorPlayed);
     } finally {
       main(manager::hideFloatingLyric);
+      main(activity::finish);
       main(() -> {
         android.content.SharedPreferences.Editor restore = preferences.edit().clear();
         for (java.util.Map.Entry<String, ?> entry : savedPreferences.entrySet()) {

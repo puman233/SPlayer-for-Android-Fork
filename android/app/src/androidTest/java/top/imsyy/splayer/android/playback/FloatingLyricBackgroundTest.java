@@ -125,7 +125,7 @@ public class FloatingLyricBackgroundTest {
       awaitPlaying(recovered, true);
       main(() -> { assertTrue(recovered.baseMs >= 20000); assertEquals(60, recovered.lrcLines.size()); });
     } finally {
-      main(() -> { manager.cleanup(); manager.hideFloatingLyric(); });
+      main(() -> { manager.cleanup(); manager.hideFloatingLyric(); activity.finish(); });
       assertTrue(audio.delete());
     }
   }

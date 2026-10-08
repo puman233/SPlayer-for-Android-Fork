@@ -50,7 +50,11 @@ public class FloatingLyricOverlayTest {
     do {
       // 等主线程处理当前帧，避免模拟器负载造成固定 sleep 的误判
       main(() -> {});
-      if (Math.abs((float) field(service, "controlsAlpha") - expected) < 0.001f) return;
+      if (Math.abs((float) field(service, "controlsAlpha") - expected) < 0.001f) {
+        instrumentation.waitForIdleSync();
+        SystemClock.sleep(150); // WindowManager 的窗口尺寸提交晚于动画最后一帧。
+        return;
+      }
       SystemClock.sleep(30);
     } while (SystemClock.uptimeMillis() < deadline);
     assertEquals(expected, (float) field(service, "controlsAlpha"), 0.001f);
@@ -139,9 +143,14 @@ public class FloatingLyricOverlayTest {
     context = instrumentation.getTargetContext();
     assertTrue("必须使用隔离验证包", context.getPackageName().endsWith(".lyricsverify")
         || context.getPackageName().endsWith(".phase1verify") || context.getPackageName().endsWith(".debug"));
-    Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
-    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-    SystemClock.sleep(2000);
+    Intent launch = new Intent(context, top.imsyy.splayer.android.MainActivity.class);
+    top.imsyy.splayer.android.MainActivity activity =
+        (top.imsyy.splayer.android.MainActivity) instrumentation.startActivitySync(
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    // 原生窗口测试不受首次启动弹窗及 JS 恢复桌面歌词配置影响。
+    main(() -> { activity.getBridge().getWebView().stopLoading();
+      activity.getBridge().getWebView().loadUrl("about:blank"); });
+    SystemClock.sleep(500);
     android.content.SharedPreferences preferences = context.getSharedPreferences("floating_lyric_prefs", Context.MODE_PRIVATE);
     java.util.Map<String, ?> savedPreferences = new java.util.HashMap<>(preferences.getAll());
     main(() -> preferences.edit().clear().commit());

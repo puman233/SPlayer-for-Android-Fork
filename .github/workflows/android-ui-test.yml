@@ -87,16 +87,19 @@ jobs:
             adb install -r apks/debug/app-x86_64-debug.apk
             adb install -r apks/androidTest/debug/app-debug-androidTest.apk
             adb shell appops set top.imsyy.splayer.android.debug SYSTEM_ALERT_WINDOW allow
+            adb logcat -c
             adb shell am instrument -w -r -e class top.imsyy.splayer.android.playback.FloatingLyricBackgroundTest,top.imsyy.splayer.android.playback.FloatingLyricOverlayTest,top.imsyy.splayer.android.playback.PlayerDeviceLayoutTest -e label '${{ matrix.device.name }}' top.imsyy.splayer.android.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-result.txt
             cat ui-result.txt
+            adb logcat -d > ui-logcat.txt
+            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/background-lyrics ui-screens || true
+            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/phase3 ui-screens || true
             grep -q 'OK (3 tests)' ui-result.txt
-            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/background-lyrics ui-screens
-            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/phase3 ui-screens
       - uses: actions/upload-artifact@v4
         if: always() && steps.source.outputs.available == 'true'
         with:
           name: android-ui-${{ steps.source.outputs.sha }}-${{ matrix.device.name }}
           path: |
             ui-result.txt
+            ui-logcat.txt
             ui-screens/
           retention-days: 7

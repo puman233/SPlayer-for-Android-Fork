@@ -47,6 +47,7 @@ public class PlayerDeviceLayoutTest {
     WebView[] holder = new WebView[1];
     instrumentation.runOnMainSync(() -> holder[0] = activity.getBridge().getWebView());
     WebView web = holder[0];
+    instrumentation.runOnMainSync(() -> web.loadUrl(activity.getBridge().getServerUrl()));
     boolean mounted = false;
     for (int i=0; i<60; i++) {
       if ("true".equals(js(web, "!!document.querySelector('#app')?.__vue_app__"))) { mounted=true; break; }
@@ -65,7 +66,7 @@ public class PlayerDeviceLayoutTest {
         SystemClock.sleep(1600);
         js(web, "verifyPinia._s.get('status').playerMetaShow=true;window.$modal?.destroyAll()");
         SystemClock.sleep(200);
-        String raw = js(web, "JSON.stringify((()=>{const root=document.querySelector('.full-player'),l=document.querySelector('.full-player-mobile-landscape'),p=document.querySelector('.full-player-mobile');const rect=e=>{if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};return {width:innerWidth,height:innerHeight,screenWidth:screen.width,screenHeight:screen.height,ua:navigator.userAgent,mobile:!!p,landscape:!!l,cover:l?rect(l.querySelector('.landscape-cover')):null,info:l?rect(l.querySelector('.info')):null,control:rect(root?.querySelector('.player-control,.mobile-player-bottom-controls')),buttons:[...(root?.querySelectorAll('.btn-icon,.play-pause')||[])].map(rect)}})())");
+        String raw = js(web, "JSON.stringify((()=>{const root=document.querySelector('.full-player'),l=document.querySelector('.full-player-mobile-landscape'),p=document.querySelector('.full-player-mobile');const rect=e=>{if(!e)return null;const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};return {width:innerWidth,height:innerHeight,screenWidth:screen.width,screenHeight:screen.height,ua:navigator.userAgent,mobile:!!p,landscape:!!l,cover:l?rect(l.querySelector('.landscape-cover')):null,info:l?rect(l.querySelector('.info')):null,control:rect([...(root?.querySelectorAll('.player-control,.mobile-player-bottom-controls')||[])].find(e=>e.getBoundingClientRect().height>0)),buttons:[...(root?.querySelectorAll('.btn-icon,.play-pause')||[])].map(rect)}})())");
         JSONObject g = new JSONObject((String)new JSONTokener(raw).nextValue());
         Log.i("PlayerDeviceVerify", g.toString());
         assertNotEquals("实际 WebView 应响应旋转", previousWidth, g.getInt("width"));

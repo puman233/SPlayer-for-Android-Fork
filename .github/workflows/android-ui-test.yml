@@ -67,6 +67,8 @@ jobs:
           run-id: ${{ github.event.workflow_run.id || inputs.run_id }}
       - uses: android-actions/setup-android@v3
         if: steps.source.outputs.available == 'true'
+        with:
+          packages: platform-tools
       - name: 启用模拟器 KVM
         if: steps.source.outputs.available == 'true'
         run: |

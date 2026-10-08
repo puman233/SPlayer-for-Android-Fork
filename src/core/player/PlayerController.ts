@@ -2172,6 +2172,11 @@ class PlayerController {
         yrcData: JSON.stringify(yrcData),
       }).catch(() => {});
     };
+    // 后台没有可靠的空闲帧，歌词已解析完成后立即交给原生悬浮窗。
+    if (document.hidden) {
+      run();
+      return;
+    }
     const ric = (window as Window & { requestIdleCallback?: typeof requestIdleCallback })
       .requestIdleCallback;
     if (typeof ric === "function") {

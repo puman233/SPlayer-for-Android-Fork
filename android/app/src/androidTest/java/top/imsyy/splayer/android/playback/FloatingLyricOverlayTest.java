@@ -138,7 +138,7 @@ public class FloatingLyricOverlayTest {
   @Test public void overlayKeepsFontLocksCleanlyAndRestoresPreferences() throws Exception {
     context = instrumentation.getTargetContext();
     assertTrue("必须使用隔离验证包", context.getPackageName().endsWith(".lyricsverify")
-        || context.getPackageName().endsWith(".phase1verify"));
+        || context.getPackageName().endsWith(".phase1verify") || context.getPackageName().endsWith(".debug"));
     Intent launch = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
     context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     SystemClock.sleep(2000);

@@ -28,6 +28,7 @@ import java.util.Set;
  *
  * <p>持久化：SharedPreferences 文件 audio_prefetch_index，仅存 cacheKey → lastAccessAtMs 映射。
  */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class AudioPrefetchTtlIndex {
 
   private static final String TAG = "AudioPrefetchTtl";

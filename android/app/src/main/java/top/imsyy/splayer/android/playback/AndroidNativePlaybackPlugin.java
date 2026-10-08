@@ -27,6 +27,7 @@ import org.json.JSONObject;
 import top.imsyy.splayer.android.MainActivity;
 import top.imsyy.splayer.android.cache.AudioCacheProvider;
 
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 @CapacitorPlugin(
     name = "AndroidNativePlayback",
     permissions = {

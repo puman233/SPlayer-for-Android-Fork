@@ -13,6 +13,16 @@ signingEnv.each { property, variable ->
     }
 }
 def hasReleaseSigning = signingEnv.keySet().every { keystoreProperties[it] }
+def previewName = providers.gradleProperty('previewVersion')
+def previewCode = providers.gradleProperty('previewVersionCode')
+if (previewName.isPresent() || previewCode.isPresent()) {
+    if (!previewName.isPresent() || !previewCode.isPresent()
+        || !(previewName.get() ==~ /[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]*/)
+        || !(previewCode.get() ==~ /[0-9]+/) || previewCode.get().toLong() <= 30023
+        || previewCode.get().toLong() > 2100000000L) {
+        throw new GradleException('测试构建需要 beta.N 版本和大于当前正式构建号的有效 previewVersionCode')
+    }
+}
 
 android {
     namespace = "top.imsyy.splayer.android"
@@ -33,8 +43,8 @@ android {
         applicationId "top.imsyy.splayer.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 30023
-        versionName "3.0.15"
+        versionCode providers.gradleProperty('previewVersionCode').map { it.toInteger() }.getOrElse(30023)
+        versionName providers.gradleProperty('previewVersion').getOrElse("3.0.15")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -72,6 +82,15 @@ repositories {
     }
 }
 
+// Instrumentation 的旧 JDK 扩展依赖需与已合并扩展的 stdlib 保持一致，避免重复类。
+configurations.configureEach {
+    if (name.toLowerCase().contains('androidtest')) {
+        resolutionStrategy.force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22',
+            'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22',
+            'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}
+
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
@@ -90,9 +109,15 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
+// Cordova 脚本会设置 abortOnError=false；应用 CI 必须真实阻断 Lint 错误。
+android.lint.abortOnError = true
+
 // 正式发布读取 Gradle 已解析的变体，签名前检查版本与配置
 tasks.register('verifyReleaseConfiguration') {
     doLast {
+        if (providers.gradleProperty('previewVersion').isPresent() || providers.gradleProperty('previewVersionCode').isPresent()) {
+            throw new GradleException('测试版本参数禁止用于正式发布')
+        }
         def tag = System.getenv('RELEASE_TAG')
         if (!tag || !(tag ==~ /v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?/)) {
             throw new GradleException('RELEASE_TAG 必须为 v<versionName>，例如 v3.0.8 或 v3.0.9-rc.1')

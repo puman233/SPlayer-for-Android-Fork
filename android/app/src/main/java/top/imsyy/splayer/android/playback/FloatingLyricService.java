@@ -70,6 +70,7 @@ public class FloatingLyricService extends Service {
   String songName = "", artistName = "";
   long baseMs, anchorNano = System.nanoTime();
   boolean playing;
+  float playbackSpeed = 1f;
   int colorPlayed = FloatingLyricPolicy.DEFAULT_COLOR;
   int colorUnplayed = 0xFFCCCCCC, colorShadow = 0x80000000;
   float fontSizeSp = 24f;
@@ -475,7 +476,8 @@ public class FloatingLyricService extends Service {
   }
 
   private void postRedraw() { if (!destroyed && view != null) view.postInvalidateOnAnimation(); }
-  long seekMs() { return baseMs + 300 + (playing ? (System.nanoTime() - anchorNano) / 1_000_000L : 0); }
+  long seekMs() { return baseMs + 300 + (playing
+      ? (long) ((System.nanoTime() - anchorNano) / 1_000_000L * playbackSpeed) : 0); }
   List<Line> activeLines() { return wordMode && !yrcLines.isEmpty() ? yrcLines : lrcLines; }
   int findIndex(List<Line> lines, long ms) {
     int low = 0, high = lines.size() - 1, result = -1;

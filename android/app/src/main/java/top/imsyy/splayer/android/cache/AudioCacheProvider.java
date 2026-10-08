@@ -42,6 +42,7 @@ import java.util.regex.Pattern;
  *   <li>{@link DataSource.Factory} 链：HTTP upstream → CacheDataSource。
  * </ul>
  */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class AudioCacheProvider {
 
   /**

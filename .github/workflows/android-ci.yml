@@ -4,13 +4,63 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
+  workflow_call:
+    inputs:
+      preview_version:
+        type: string
+        default: 3.0.16-beta.1
+      preview_code:
+        type: string
+        default: '30024'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: android-ci-${{ github.ref }}
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    outputs:
+      review: ${{ steps.audit.outputs.review }}
+      build: ${{ steps.audit.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 检出基准版本检查工具
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'dev' }}
+          path: .trusted-checks
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - id: audit
+        name: 审核变更及版本
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          # 首次引入检查器时使用当前版本；启用后的 PR 必须使用基准分支版本。
+          checker=.trusted-checks/.github/scripts/development-checks.py
+          if [[ ! -f "$checker" ]]; then checker=.github/scripts/development-checks.py; fi
+          python3 -B "$checker" audit --base "$BASE_SHA"
+      - name: 检查工作流语法
+        env:
+          ACTIONLINT_VERSION: '1.7.7'
+        run: |
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o "$RUNNER_TEMP/actionlint.tar.gz"
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= -pyflakes=
+  review:
+    needs: audit
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.audit.outputs.review == 'true' && 'change-review' || 'development' }}
+    steps:
+      - run: echo '变更门禁已通过；受保护路径需要配置 change-review required reviewers。'
   check:
+    needs: [audit, review]
+    if: ${{ needs.audit.outputs.build == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -18,14 +68,35 @@ jobs:
         with:
           persist-credentials: false
       - name: 检查发布保护逻辑
-        run: python3 -B .github/scripts/test_android_release.py
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'
       - uses: ./.github/actions/setup-android
       - name: 检查代码
         run: pnpm lint
-      - name: 检查播放页类型与交互状态
+      - name: 检查全部类型与相关单元测试
         run: |
-          pnpm typecheck:web
-          pnpm exec tsx --test src/composables/useMobilePlayerControls.test.ts src/core/layout/viewport.test.ts src/core/player/androidLyricScheduler.test.ts src/core/player/floatingLyricSettings.test.ts
+          pnpm typecheck
+          python3 -B .github/scripts/development-checks.py tests
       - name: 编译 APK、单元测试及 Android Lint
         working-directory: android
-        run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+        env:
+          PREVIEW_VERSION: ${{ inputs.preview_version || '3.0.16-beta.1' }}
+          PREVIEW_CODE: ${{ inputs.preview_code || '30024' }}
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug "-PpreviewVersion=$PREVIEW_VERSION" "-PpreviewVersionCode=$PREVIEW_CODE"
+      - name: 生成测试构建元数据
+        run: python3 -B .github/scripts/development-checks.py preview
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-preview-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            android/app/build/outputs/apk/debug/
+            android/app/build/outputs/apk/androidTest/debug/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-check-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 7

@@ -1,0 +1,100 @@
+name: Android UI Test
+on:
+  workflow_run:
+    workflows: [Android CI]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 已成功的 dev Android CI Run ID（复用其 APK，不重复构建）
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: android-ui-${{ github.event.workflow_run.head_sha || inputs.run_id }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: >-
+      github.ref == 'refs/heads/dev' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        device:
+          - {name: phone, size: '1080x1920', density: '420'}
+          - {name: tablet, size: '1920x1200', density: '240'}
+          - {name: small, size: '720x1280', density: '360'}
+    steps:
+      - name: 验证来源及产物身份
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: |
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID" > "$RUNNER_TEMP/source.json"
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" > "$RUNNER_TEMP/artifacts.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          run = json.loads((Path(os.environ['RUNNER_TEMP']) / 'source.json').read_text())
+          assert run['conclusion'] == 'success' and run['event'] == 'push'
+          assert run['head_branch'] == 'dev' and run['path'] == '.github/workflows/android-ci.yml'
+          assert run['head_repository']['full_name'] == os.environ['GH_REPO']
+          name = 'android-preview-' + run['head_sha'] + '-' + str(run['id']) + '-' + str(run['run_attempt'])
+          artifacts = json.loads((Path(os.environ['RUNNER_TEMP']) / 'artifacts.json').read_text())['artifacts']
+          available = any(a['name'] == name and not a['expired'] for a in artifacts)
+          if not available and '${{ github.event_name }}' == 'workflow_dispatch':
+              raise ValueError('指定 CI 没有可用测试 APK；请重新构建')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('artifact=' + name + '\nsha=' + run['head_sha'] + '\navailable=' + str(available).lower() + '\n')
+          PY
+      - uses: actions/download-artifact@v4
+        if: steps.source.outputs.available == 'true'
+        with:
+          name: ${{ steps.source.outputs.artifact }}
+          path: apks
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id || inputs.run_id }}
+      - uses: android-actions/setup-android@v3
+        if: steps.source.outputs.available == 'true'
+      - name: 启用模拟器 KVM
+        if: steps.source.outputs.available == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        if: steps.source.outputs.available == 'true'
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: false
+          script: |
+            adb shell wm size '${{ matrix.device.size }}'
+            adb shell wm density '${{ matrix.device.density }}'
+            adb install -r apks/debug/app-x86_64-debug.apk
+            adb install -r apks/androidTest/debug/app-debug-androidTest.apk
+            adb shell appops set top.imsyy.splayer.android.debug SYSTEM_ALERT_WINDOW allow
+            adb shell am instrument -w -r -e class top.imsyy.splayer.android.playback.FloatingLyricBackgroundTest,top.imsyy.splayer.android.playback.FloatingLyricOverlayTest,top.imsyy.splayer.android.playback.PlayerDeviceLayoutTest -e label '${{ matrix.device.name }}' top.imsyy.splayer.android.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-result.txt
+            cat ui-result.txt
+            grep -q 'OK (3 tests)' ui-result.txt
+            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/background-lyrics ui-screens
+            adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/phase3 ui-screens
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.source.outputs.available == 'true'
+        with:
+          name: android-ui-${{ steps.source.outputs.sha }}-${{ matrix.device.name }}
+          path: |
+            ui-result.txt
+            ui-screens/
+          retention-days: 7

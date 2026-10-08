@@ -49,6 +49,7 @@ import androidx.media3.session.MediaSession;
 import androidx.media3.session.SessionCommand;
 import androidx.media3.session.SessionCommands;
 import androidx.media3.session.SessionResult;
+import androidx.media3.session.SessionError;
 import com.getcapacitor.JSObject;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -311,6 +312,8 @@ public final class PlaybackManager {
           // 仅在真正播放时 emit；callback 链常驻，BUFFERING→READY 后下一拍立即续传
           if (player != null && player.isPlaying()) {
             emitProgressChanged();
+          } else {
+            syncNativeFloatingLyricProgress();
           }
           if (player != null && player.getCurrentMediaItem() != null) {
             mainHandler.postDelayed(this, 250L);
@@ -890,12 +893,12 @@ public final class PlaybackManager {
 
   private SessionResult handleCustomCommand(SessionCommand customCommand) {
     if (customCommand == null || customCommand.customAction == null) {
-      return new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED);
+      return new SessionResult(SessionError.ERROR_NOT_SUPPORTED);
     }
 
     return handleSessionAction(customCommand.customAction)
         ? new SessionResult(SessionResult.RESULT_SUCCESS)
-        : new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED);
+        : new SessionResult(SessionError.ERROR_NOT_SUPPORTED);
   }
 
   private synchronized void ensureInitialized() {
@@ -2011,6 +2014,10 @@ public final class PlaybackManager {
   }
 
   private void emitPlaybackState(boolean retain) {
+    if (!syncNativeFloatingLyricProgress() && !remoteMode && player != null
+        && player.getCurrentMediaItem() == null) {
+      updateFloatingLyricProgress(0L, false);
+    }
     AndroidNativePlaybackPlugin currentPlugin = plugin;
     if (currentPlugin != null) {
       currentPlugin.emitEvent("playbackStateChanged", buildState(), retain);
@@ -2035,6 +2042,7 @@ public final class PlaybackManager {
     } else {
       lastKnownPositionMs = safePositionMs;
     }
+    syncNativeFloatingLyricProgress();
     if (currentPlugin == null) {
       return;
     }
@@ -2540,7 +2548,9 @@ public final class PlaybackManager {
     if (bufferedSongName != null) {
       service.pushSongInfo(bufferedSongName, bufferedArtist);
     }
-    service.pushProgress(bufferedTimeMs, bufferedPlaying);
+    if (!syncNativeFloatingLyricProgress()) {
+      service.pushProgress(bufferedTimeMs, bufferedPlaying);
+    }
   }
 
   public synchronized void detachFloatingLyricService(FloatingLyricService service) {
@@ -2556,9 +2566,25 @@ public final class PlaybackManager {
 
   /** 推送进度 */
   public synchronized void updateFloatingLyricProgress(long timeMs, boolean playing) {
+    // 原生播放期间不接受延迟到达的 WebView 进度/暂停消息。
+    if (syncNativeFloatingLyricProgress()) return;
     bufferedTimeMs = timeMs;
     bufferedPlaying = playing;
-    if (floatingLyricService != null) floatingLyricService.pushProgress(timeMs, playing);
+    if (floatingLyricService != null) {
+      floatingLyricService.playbackSpeed = 1f;
+      floatingLyricService.pushProgress(timeMs, playing);
+    }
+  }
+
+  private synchronized boolean syncNativeFloatingLyricProgress() {
+    if (remoteMode || player == null || player.getCurrentMediaItem() == null) return false;
+    bufferedTimeMs = getPositionMs();
+    bufferedPlaying = player.isPlaying();
+    if (floatingLyricService != null) {
+      floatingLyricService.playbackSpeed = player.getPlaybackParameters().speed;
+      floatingLyricService.pushProgress(bufferedTimeMs, bufferedPlaying);
+    }
+    return true;
   }
 
   /** 推送歌曲信息 */

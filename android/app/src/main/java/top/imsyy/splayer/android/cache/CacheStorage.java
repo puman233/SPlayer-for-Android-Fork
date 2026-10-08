@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>maxBytes 由用户在 setting 设置严格生效；运行期不擅自下调。
  * </ul>
  */
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class CacheStorage {
 
   private static final String TAG = "CacheStorage";

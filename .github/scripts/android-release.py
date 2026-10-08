@@ -137,6 +137,9 @@ def collect():
         "-storepass:env", "ANDROID_KEYSTORE_PASSWORD", "-alias", os.environ["ANDROID_KEY_ALIAS"],
         "-file", str(certificate))
     fingerprint = hashlib.sha256(certificate.read_bytes()).hexdigest()
+    expected = os.environ.get("EXPECTED_ANDROID_CERT_SHA256")
+    if expected is not None and (not re.fullmatch(r"[0-9a-fA-F]{64}", expected) or fingerprint != expected.lower()):
+        raise ValueError("正式证书与受保护 Environment 中的预期 SHA256 不一致或未配置")
     # 拒绝 Android 标准调试证书，即使误将其配置为正式 Secrets
     details = run("keytool", "-printcert", "-file", str(certificate))
     if re.search(r"CN\s*=\s*Android Debug", details, re.IGNORECASE):

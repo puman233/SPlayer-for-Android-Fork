@@ -16,6 +16,11 @@ on:
         description: 明确要替换的 Release ID（修复时必填）
         required: false
         type: string
+      authorize_publish:
+        description: 明确授权正式发布或指定历史版本修复（仍需 Environment 审核）
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -25,13 +30,17 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    environment: android-release
     permissions:
       contents: write
+      actions: read
     env:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       RELEASE_REPAIR_REF: ${{ inputs.repair_ref }}
       RELEASE_REPLACE_ID: ${{ inputs.replace_release_id }}
+      RELEASE_AUTHORIZED: ${{ github.event_name == 'workflow_dispatch' && inputs.authorize_publish && 'true' || 'false' }}
+      REQUIRE_ANDROID_UI: ${{ vars.ANDROID_UI_REQUIRED || 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +55,10 @@ jobs:
           persist-credentials: false
       - name: 确认 Tag 提交
         run: echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: 验证人工发布授权和提交 CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .release-tools/.github/scripts/development-checks.py release-gate
       - name: 检查已存在的 Release
         id: existing
         env:
@@ -81,7 +94,17 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/splayer-release.keystore
+          EXPECTED_ANDROID_CERT_SHA256: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
         run: python3 .release-tools/.github/scripts/android-release.py collect
+      - name: 验证四架构发布契约并记录摘要
+        if: steps.existing.outputs.exists == 'false'
+        run: python3 -B .release-tools/.github/scripts/release-contract.py local
+      - uses: actions/upload-artifact@v4
+        if: steps.existing.outputs.exists == 'false'
+        with:
+          name: release-verified-${{ inputs.tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release/
+          retention-days: 30
       - name: 备份被替换的发行版
         if: steps.existing.outputs.exists == 'false' && inputs.replace_release_id != ''
         env:
@@ -99,6 +122,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .release-tools/.github/scripts/android-release.py publish
+      - name: 校验发布附件完整性
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .release-tools/.github/scripts/release-contract.py remote
       - name: 清理签名材料
         if: always()
         run: rm -f "$RUNNER_TEMP/splayer-release.keystore" "$RUNNER_TEMP/splayer-release-cert.der"

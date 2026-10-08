@@ -1,0 +1,23 @@
+name: Android Preview
+on:
+  workflow_dispatch:
+    inputs:
+      preview_version:
+        description: 测试版本；后续修改递增 beta 序号
+        default: 3.0.16-beta.1
+        required: true
+        type: string
+      preview_code:
+        description: Android 升级构建号，每次递增
+        default: '30024'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  preview:
+    if: github.ref == 'refs/heads/dev'
+    uses: ./.github/workflows/android-ci.yml
+    with:
+      preview_version: ${{ inputs.preview_version }}
+      preview_code: ${{ inputs.preview_code }}

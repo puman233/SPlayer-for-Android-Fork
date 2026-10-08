@@ -40,7 +40,7 @@ public class PlayerDeviceLayoutTest {
   }
   @Test public void playerRemainsReachableAcrossRealRotations() throws Exception {
     String pkg = instrumentation.getTargetContext().getPackageName();
-    assertTrue(pkg.endsWith(".lyricsverify") || pkg.endsWith(".phase1verify"));
+    assertTrue(pkg.endsWith(".lyricsverify") || pkg.endsWith(".phase1verify") || pkg.endsWith(".debug"));
     Intent intent = new Intent(instrumentation.getTargetContext(), MainActivity.class);
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     MainActivity activity = (MainActivity) instrumentation.startActivitySync(intent);

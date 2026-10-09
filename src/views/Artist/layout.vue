@@ -508,12 +508,15 @@ watch(
       .data {
         display: contents;
         .name {
+          display: block;
           grid-column: 2;
           height: auto;
           min-height: 28px;
           font-size: 20px;
           line-height: 1.4;
           overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
           .name-text { word-break: break-word; }
         }
         .collapse {
@@ -554,8 +557,16 @@ watch(
     }
     .router-view.artist-songs,
     &.small .router-view.artist-songs {
-      padding-top: calc(var(--artist-header-height, 196px) + 40px);
+      position: relative;
+      height: auto;
+      padding-top: 0;
+      :deep(.list-header) {
+        height: auto;
+        min-height: 40px;
+        .n-text { white-space: nowrap; }
+      }
     }
+    .tabs { height: auto; min-height: 40px; }
   }
 }
 </style>

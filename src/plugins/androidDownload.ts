@@ -7,7 +7,8 @@ export interface AndroidDownloadPickResult {
 }
 
 export interface AndroidDownloadResult {
-  status: "success" | "skipped" | "failed";
+  status: "success" | "skipped" | "failed" | "cancelled";
+  taskId: string;
   path?: string;
   fileName?: string;
 }
@@ -24,6 +25,7 @@ export interface AndroidDownloadDirectoryInfo {
 }
 
 export interface AndroidDownloadProgressEvent {
+  taskId: string;
   bytesRead: number;
   contentLength: number;
   percent: number;
@@ -67,11 +69,16 @@ export interface AndroidLocalMusicDirectoryRef {
 export interface AndroidDownloadPlugin {
   pickDownloadDirectory(): Promise<AndroidDownloadPickResult>;
   downloadFile(options: {
+    taskId: string;
     url: string;
     fileName: string;
     directoryUri: string;
     subPath?: string;
   }): Promise<AndroidDownloadResult>;
+  /** Acknowledges cancellation; downloadFile settles only after IO and cleanup finish. */
+  cancelDownload(options: { taskId: string }): Promise<{ status: "cancelling" | "finished" }>;
+  /** Cancels stale workers and resolves only after every captured worker has settled. */
+  resetDownloads(): Promise<void>;
   writeTextFile(options: {
     fileName: string;
     content: string;

@@ -22,10 +22,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,12 +43,26 @@ public class AndroidDownloadPlugin extends Plugin {
           | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION;
 
   private final ExecutorService executor = Executors.newFixedThreadPool(2);
-  private final ConcurrentHashMap<Long, PluginCall> activeDownloads = new ConcurrentHashMap<>();
+  // Activity recreation creates a new plugin before old provider IO necessarily settles.
+  // The startup barrier must see those workers across plugin instances in this process.
+  private static final ConcurrentHashMap<String, DownloadTransfer.Control> activeDownloads = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, DownloadTransfer.Control> ownedDownloads = new ConcurrentHashMap<>();
+  private final ExecutorService cancellationExecutor = Executors.newFixedThreadPool(2);
+  private static final Object[] DOWNLOAD_LOCKS = new Object[32];
+  static {
+    for (int i = 0; i < DOWNLOAD_LOCKS.length; i++) DOWNLOAD_LOCKS[i] = new Object();
+  }
   private final ConcurrentHashMap<String, Object> coverWriteLocks = new ConcurrentHashMap<>();
 
   @Override
   protected void handleOnDestroy() {
-    executor.shutdownNow();
+    for (DownloadTransfer.Control control : ownedDownloads.values()) {
+      java.net.HttpURLConnection connection = control.requestCancel();
+      if (connection != null) cancellationExecutor.execute(connection::disconnect);
+    }
+    // Drain queued calls as cancelled, rather than abandoning their promises and slots.
+    executor.shutdown();
+    cancellationExecutor.shutdown();
   }
 
   @PluginMethod
@@ -100,142 +114,184 @@ public class AndroidDownloadPlugin extends Plugin {
 
   @PluginMethod
   public void downloadFile(PluginCall call) {
+    String taskId = call.getString("taskId", "");
     String fileUrl = call.getString("url", "");
     String fileName = call.getString("fileName", "");
     String directoryUri = call.getString("directoryUri", "");
     String subPath = call.getString("subPath", "");
 
-    if (fileUrl.isEmpty() || fileName.isEmpty() || directoryUri.isEmpty()) {
-      call.reject("url, fileName, and directoryUri are required");
+    if (!taskId.matches("[a-zA-Z0-9-]{1,80}") || fileUrl.isEmpty() || fileName.isEmpty() || directoryUri.isEmpty()
+        || fileName.contains("/") || fileName.contains("\\") || fileName.equals(".") || fileName.equals("..")) {
+      call.reject("Valid taskId, url, fileName, and directoryUri are required");
       return;
     }
 
-    executor.execute(
-        () -> {
-          try {
-            Uri dirUri = Uri.parse(directoryUri);
-            DocumentFile directory = DocumentFile.fromTreeUri(getContext(), dirUri);
-            if (directory == null || !directory.exists() || !directory.canWrite()) {
-              call.reject("DOWNLOAD_DIRECTORY_NOT_WRITABLE");
-              return;
-            }
-
-            // 处理子目录
-            DocumentFile targetDir = directory;
-            if (!subPath.isEmpty()) {
-              String[] parts = subPath.split("/");
-              for (String part : parts) {
-                if (part.isEmpty()) continue;
-                DocumentFile existing = findChild(targetDir, part);
-                if (existing != null && existing.isDirectory()) {
-                  targetDir = existing;
-                } else {
-                  targetDir = targetDir.createDirectory(part);
-                  if (targetDir == null) {
-                    call.reject("FAILED_TO_CREATE_SUBDIRECTORY: " + part);
-                    return;
-                  }
-                }
-              }
-            }
-
-            // 检查文件是否已存在
-            String extension = getFileExtension(fileName);
-            String baseName = getBaseName(fileName);
-            DocumentFile existingFile = findChild(targetDir, fileName);
-            if (existingFile != null && existingFile.exists()) {
-              JSObject skipResult = new JSObject();
-              skipResult.put("status", "skipped");
-              skipResult.put("path", existingFile.getUri().toString());
-              call.resolve(skipResult);
-              return;
-            }
-
-            // 创建目标文件
-            String mimeType = guessMimeType(extension);
-            DocumentFile targetFile = targetDir.createFile(mimeType, fileName);
-            if (targetFile == null) {
-              call.reject("FAILED_TO_CREATE_FILE");
-              return;
-            }
-
-            // 下载文件
-            HttpURLConnection connection = null;
-            InputStream input = null;
-            OutputStream output = null;
+    DownloadTransfer.Control control = new DownloadTransfer.Control();
+    if (activeDownloads.putIfAbsent(taskId, control) != null) {
+      call.reject("DOWNLOAD_TASK_ID_ALREADY_ACTIVE");
+      return;
+    }
+    ownedDownloads.put(taskId, control);
+    try {
+      executor.execute(
+          () -> {
             try {
-              URL url = new URL(fileUrl);
-              connection = (HttpURLConnection) url.openConnection();
-              connection.setConnectTimeout(30000);
-              connection.setReadTimeout(60000);
-              connection.setRequestProperty("User-Agent", "SPlayer-for-Android");
-              connection.connect();
-
-              int responseCode = connection.getResponseCode();
-              if (responseCode != HttpURLConnection.HTTP_OK
-                  && responseCode != HttpURLConnection.HTTP_PARTIAL) {
-                targetFile.delete();
-                call.reject("HTTP_ERROR_" + responseCode);
+              control.check();
+              Uri dirUri = Uri.parse(directoryUri);
+              DocumentFile directory = DocumentFile.fromTreeUri(getContext(), dirUri);
+              if (directory == null || !directory.exists() || !directory.canWrite()) {
+                call.reject("DOWNLOAD_DIRECTORY_NOT_WRITABLE");
                 return;
               }
 
-              int contentLength = connection.getContentLength();
-              input = connection.getInputStream();
-              output = getContext().getContentResolver().openOutputStream(targetFile.getUri());
-
-              if (output == null) {
-                targetFile.delete();
-                call.reject("FAILED_TO_OPEN_OUTPUT_STREAM");
-                return;
-              }
-
-              byte[] buffer = new byte[8192];
-              int bytesRead;
-              long totalRead = 0;
-              int lastReportedPercent = -1;
-
-              while ((bytesRead = input.read(buffer)) != -1) {
-                output.write(buffer, 0, bytesRead);
-                totalRead += bytesRead;
-
-                if (contentLength > 0) {
-                  int percent = (int) ((totalRead * 100) / contentLength);
-                  if (percent != lastReportedPercent && percent % 5 == 0) {
-                    lastReportedPercent = percent;
-                    JSObject progress = new JSObject();
-                    progress.put("bytesRead", totalRead);
-                    progress.put("contentLength", contentLength);
-                    progress.put("percent", percent / 100.0);
-                    notifyListeners("downloadProgress", progress);
+              // 处理子目录
+              DocumentFile targetDir = directory;
+              if (!subPath.isEmpty()) {
+                String[] parts = subPath.split("/");
+                for (String part : parts) {
+                  if (part.isEmpty()) continue;
+                  if (part.equals(".") || part.equals("..")) throw new IOException("INVALID_DOWNLOAD_SUBPATH");
+                  control.check();
+                  DocumentFile existing = findChild(targetDir, part);
+                  if (existing != null && existing.isDirectory()) {
+                    targetDir = existing;
+                  } else {
+                    targetDir = targetDir.createDirectory(part);
+                    if (targetDir == null) {
+                      call.reject("FAILED_TO_CREATE_SUBDIRECTORY: " + part);
+                      return;
+                    }
                   }
                 }
               }
 
-              output.flush();
-
+              String key = directoryUri + "/" + subPath + "/" + fileName;
+              Object lock = DOWNLOAD_LOCKS[(key.hashCode() & 0x7fffffff) % DOWNLOAD_LOCKS.length];
+              DownloadTransfer.Result transferred;
+              synchronized (lock) {
+                control.check();
+                final int[] lastPercent = {-1};
+                transferred = DownloadTransfer.download(
+                    taskId, fileUrl, fileName, new SafDownloadStorage(targetDir), control,
+                    (read, total) -> {
+                      int percent = total > 0 ? (int) (read * 100 / total) : -1;
+                      if (!control.cancelled && percent >= 0 && percent / 5 != lastPercent[0] / 5) {
+                        lastPercent[0] = percent;
+                        JSObject progress = new JSObject();
+                        progress.put("taskId", taskId);
+                        progress.put("bytesRead", read);
+                        progress.put("contentLength", total);
+                        progress.put("percent", percent / 100.0);
+                        notifyListeners("downloadProgress", progress);
+                      }
+                    });
+              }
               JSObject result = new JSObject();
-              result.put("status", "success");
-              result.put("path", targetFile.getUri().toString());
+              result.put("taskId", taskId);
+              result.put("status", transferred.status);
+              result.put("path", transferred.path);
               result.put("fileName", fileName);
               call.resolve(result);
-
+            } catch (Exception error) {
+              if (control.cancelled) {
+                JSObject cancelled = new JSObject();
+                cancelled.put("taskId", taskId);
+                cancelled.put("status", "cancelled");
+                call.resolve(cancelled);
+              } else {
+                call.reject("DOWNLOAD_FAILED: " + error.getMessage(), error);
+              }
             } finally {
-              if (input != null)
-                try {
-                  input.close();
-                } catch (IOException ignored) {
-                }
-              if (output != null)
-                try {
-                  output.close();
-                } catch (IOException ignored) {
-                }
-              if (connection != null) connection.disconnect();
+              activeDownloads.remove(taskId, control);
+              ownedDownloads.remove(taskId, control);
+              control.settled.countDown();
             }
-          } catch (Exception error) {
-            call.reject("DOWNLOAD_FAILED", error);
+          });
+    } catch (java.util.concurrent.RejectedExecutionException error) {
+      activeDownloads.remove(taskId, control);
+      ownedDownloads.remove(taskId, control);
+      control.settled.countDown();
+      call.reject("DOWNLOAD_EXECUTOR_UNAVAILABLE", error);
+    }
+  }
+
+  @PluginMethod
+  public void resetDownloads(PluginCall call) {
+    DownloadTransfer.Control[] stale = activeDownloads.values().toArray(new DownloadTransfer.Control[0]);
+    for (DownloadTransfer.Control control : stale) control.requestCancel();
+    try {
+      cancellationExecutor.execute(() -> {
+        try {
+          for (DownloadTransfer.Control control : stale) {
+            java.net.HttpURLConnection connection = control.connection;
+            if (connection != null) connection.disconnect();
           }
-        });
+          for (DownloadTransfer.Control control : stale) control.settled.await();
+          call.resolve();
+        } catch (InterruptedException error) {
+          Thread.currentThread().interrupt();
+          call.reject("DOWNLOAD_SESSION_RESET_INTERRUPTED", error);
+        }
+      });
+    } catch (java.util.concurrent.RejectedExecutionException error) {
+      call.reject("DOWNLOAD_EXECUTOR_UNAVAILABLE", error);
+    }
+  }
+
+  @PluginMethod
+  public void cancelDownload(PluginCall call) {
+    String taskId = call.getString("taskId", "");
+    DownloadTransfer.Control control = activeDownloads.get(taskId);
+    if (control == null || control.completed) {
+      JSObject result = new JSObject();
+      result.put("status", "finished");
+      call.resolve(result);
+      return;
+    }
+    java.net.HttpURLConnection connection = control.requestCancel();
+    if (connection != null) {
+      try { cancellationExecutor.execute(connection::disconnect); }
+      catch (java.util.concurrent.RejectedExecutionException error) {
+        // Cooperative checks and bounded socket timeouts still stop the worker.
+        call.reject("DOWNLOAD_CANCELLATION_EXECUTOR_UNAVAILABLE", error);
+        return;
+      }
+    }
+    JSObject result = new JSObject();
+    result.put("status", "cancelling");
+    call.resolve(result);
+  }
+
+  private final class SafDownloadStorage implements DownloadTransfer.Storage {
+    private final DocumentFile directory;
+    SafDownloadStorage(DocumentFile directory) { this.directory = directory; }
+    private DocumentFile document(String path) throws IOException {
+      DocumentFile file = DocumentFile.fromSingleUri(getContext(), Uri.parse(path));
+      if (file == null) throw new IOException("DOCUMENT_UNAVAILABLE");
+      return file;
+    }
+    public String find(String name) {
+      DocumentFile file = findChild(directory, name);
+      return file != null && file.exists() ? file.getUri().toString() : null;
+    }
+    public String create(String name) throws IOException {
+      DocumentFile file = directory.createFile(
+          name.endsWith(".part") ? "application/octet-stream" : guessMimeType(getFileExtension(name)), name);
+      if (file == null) throw new IOException("FAILED_TO_CREATE_FILE");
+      return file.getUri().toString();
+    }
+    public InputStream read(String path) throws IOException {
+      InputStream stream = getContext().getContentResolver().openInputStream(Uri.parse(path));
+      if (stream == null) throw new IOException("FAILED_TO_OPEN_INPUT_STREAM");
+      return stream;
+    }
+    public OutputStream write(String path) throws IOException {
+      OutputStream stream = getContext().getContentResolver().openOutputStream(Uri.parse(path), "wt");
+      if (stream == null) throw new IOException("FAILED_TO_OPEN_OUTPUT_STREAM");
+      return stream;
+    }
+    public boolean delete(String path) throws IOException { return document(path).delete(); }
+    public String name(String path) throws IOException { return document(path).getName(); }
   }
 
   @PluginMethod
@@ -390,6 +446,18 @@ public class AndroidDownloadPlugin extends Plugin {
       return;
     }
 
+    Set<String> unfinished = new HashSet<>();
+    Set<String> unfinishedUris = new HashSet<>();
+    boolean ambiguousCreation = false;
+    SafDownloadStorage scanStorage = new SafDownloadStorage(directory);
+    for (DocumentFile child : children) {
+      String childName = child == null ? null : child.getName();
+      if (childName != null && childName.startsWith(".splayer-") && childName.endsWith(".pending")) {
+        unfinished.add(childName);
+        try { unfinishedUris.add(DownloadTransfer.readScanMarker(scanStorage, child.getUri().toString())); }
+        catch (IOException | RuntimeException ignored) { ambiguousCreation = true; }
+      }
+    }
     for (DocumentFile child : children) {
       if (child == null) continue;
       if (child.isDirectory()) {
@@ -400,6 +468,9 @@ public class AndroidDownloadPlugin extends Plugin {
 
       String name = child.getName();
       if (name == null || !isAudioFile(name)) continue;
+      // Both download-history and local-library scans exclude an unfinished SAF commit.
+      if (ambiguousCreation || unfinished.contains(DownloadTransfer.pendingName(name))
+          || unfinishedUris.contains(child.getUri().toString())) continue;
 
       JSObject song = buildSongMetadata(child, name);
       if (song != null) output.put(song);

@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Only in the test APK; all documents are synthetic files in its private cache. -->
+    <provider android:name="top.imsyy.splayer.android.download.DownloadFixtureProvider"
+      android:authorities="top.imsyy.splayer.android.debug.test.downloadfixture"
+      android:permission="android.permission.MANAGE_DOCUMENTS"
+      android:exported="true" android:grantUriPermissions="true" />
+  </application>
+</manifest>

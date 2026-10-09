@@ -417,16 +417,45 @@ class SongDownloadStrategy implements DownloadStrategy {
   }
 }
 
+interface DownloadTask {
+  taskId: string;
+  strategy: DownloadStrategy;
+  cancelled: boolean;
+  nativeStarted: boolean;
+}
+
+const createDownloadTaskId = () => {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
 // 下载管理器核心类
 
 class DownloadManager {
-  private queue: DownloadStrategy[] = [];
-  private activeDownloads: Set<number> = new Set();
+  private queue: DownloadTask[] = [];
+  private tasks = new Map<number, DownloadTask>();
+  private activeDownloads = new Map<string, DownloadTask>();
   private maxConcurrent: number = 1;
   private initialized: boolean = false;
+  private nativeReady: Promise<void> | null = null;
 
   constructor() {
     this.setupIpcListeners();
+    if (isCapacitorAndroid) {
+      void AndroidDownload.addListener("downloadProgress", (progress) => {
+        const task = this.activeDownloads.get(progress.taskId);
+        if (!task || !this.isCurrent(task)) return;
+        useDataStore().updateDownloadProgress(
+          task.strategy.id, Number((progress.percent * 100).toFixed(1)),
+          (progress.bytesRead / 1024 / 1024).toFixed(2) + "MB",
+          progress.contentLength > 0 ? (progress.contentLength / 1024 / 1024).toFixed(2) + "MB" : "0MB",
+        );
+      }).catch((error) => console.error("Download progress listener failed:", error));
+    }
   }
 
   public init() {
@@ -447,11 +476,11 @@ class DownloadManager {
     // 重新加入等待中的任务
     dataStore.downloadingSongs.forEach((item) => {
       if (item.status === "waiting") {
-        const isQueued = this.queue.some((s) => s.id === item.song.id);
-        const isActive = this.activeDownloads.has(item.song.id);
+        const isQueued = this.queue.some((s) => s.strategy.id === item.song.id);
+        const isActive = this.tasks.has(item.song.id);
         if (!isQueued && !isActive) {
           // 常规歌曲下载
-          this.queue.push(new SongDownloadStrategy(item.song as SongType, item.quality));
+          this.enqueue(new SongDownloadStrategy(item.song as SongType, item.quality));
         }
       }
     });
@@ -513,7 +542,7 @@ class DownloadManager {
     if (this.checkExisting(song.id)) return;
     dataStore.addDownloadingSong(song, quality);
     const strategy = new SongDownloadStrategy(song, quality);
-    this.queue.push(strategy);
+    this.enqueue(strategy);
     this.processQueue();
   }
   /**
@@ -522,14 +551,19 @@ class DownloadManager {
    */
   public removeDownload(id: number) {
     const dataStore = useDataStore();
-    // 如果正在下载，尝试取消（目前仅移除任务）
-    if (this.activeDownloads.has(id)) {
-      // TODO: 实现取消正在进行的下载任务
-      // 暂时先从活动集合中移除，以释放下载槽位
-      this.activeDownloads.delete(id);
+    const task = this.tasks.get(id);
+    if (task) {
+      task.cancelled = true;
+      this.tasks.delete(id);
+      if (isCapacitorAndroid && task.nativeStarted) {
+        // An acknowledgement does not release the slot: await downloadFile's final settlement.
+        void AndroidDownload.cancelDownload({ taskId: task.taskId }).catch((error) => {
+          console.error("Native download cancellation failed:", error);
+          window.$message.error("取消请求失败，正在等待下载资源释放");
+        });
+      }
     }
-    // 从队列中移除
-    this.queue = this.queue.filter((task) => task.id !== id);
+    this.queue = this.queue.filter((entry) => entry !== task);
     // 从 store 移除
     dataStore.removeDownloadingSong(id);
     // 尝试处理下一个任务
@@ -542,10 +576,10 @@ class DownloadManager {
   public retryDownload(id: number) {
     const dataStore = useDataStore();
     const task = dataStore.downloadingSongs.find((s) => s.song.id === id);
-    if (task) {
+    if (task && !this.tasks.has(id)) {
       dataStore.updateDownloadStatus(id, "waiting");
       // 重新加入队列
-      this.queue.push(new SongDownloadStrategy(task.song as SongType, task.quality));
+      this.enqueue(new SongDownloadStrategy(task.song as SongType, task.quality));
       this.processQueue();
     }
   }
@@ -574,8 +608,8 @@ class DownloadManager {
         this.retryDownload(id);
         return true;
       }
-      const isQueued = this.queue.some((s) => s.id === id);
-      const isActive = this.activeDownloads.has(id);
+      const isQueued = this.queue.some((s) => s.strategy.id === id);
+      const isActive = this.tasks.has(id);
       if (
         isQueued ||
         isActive ||
@@ -590,23 +624,46 @@ class DownloadManager {
   /**
    * 处理下载队列
    */
+  private enqueue(strategy: DownloadStrategy) {
+    const task: DownloadTask = {
+      taskId: createDownloadTaskId(), strategy, cancelled: false, nativeStarted: false,
+    };
+    this.tasks.set(strategy.id, task);
+    this.queue.push(task);
+  }
+
+  private isCurrent(task: DownloadTask) {
+    return !task.cancelled && this.tasks.get(task.strategy.id) === task;
+  }
+
   private processQueue() {
     while (this.activeDownloads.size < this.maxConcurrent && this.queue.length > 0) {
       const strategy = this.queue.shift();
-      if (strategy) this.startTask(strategy);
+      if (strategy && this.isCurrent(strategy)) void this.startTask(strategy);
     }
   }
   /**
    * 开始下载任务
    * @param strategy 下载策略
    */
-  private async startTask(strategy: DownloadStrategy) {
-    this.activeDownloads.add(strategy.id);
+  private async startTask(task: DownloadTask) {
+    const { strategy } = task;
+    this.activeDownloads.set(task.taskId, task);
     const dataStore = useDataStore();
     dataStore.updateDownloadStatus(strategy.id, "downloading");
 
     try {
+      if (isCapacitorAndroid) {
+        // A WebView reload may leave the native plugin alive. Drain that session first.
+        this.nativeReady ??= AndroidDownload.resetDownloads().then(() => {}).catch((error) => {
+          this.nativeReady = null;
+          throw error;
+        });
+        await this.nativeReady;
+        if (!this.isCurrent(task)) return;
+      }
       await strategy.prepare();
+      if (!this.isCurrent(task)) return;
       const config = strategy.getDownloadConfig();
 
       if (isElectron) {
@@ -618,8 +675,10 @@ class DownloadManager {
           config,
         );
 
+        if (!this.isCurrent(task)) return;
         if (downloadResult.status === "success" || downloadResult.status === "skipped") {
           await strategy.postProcess(downloadResult.path || config.path); // IPC 返回结果通常包含路径
+          if (!this.isCurrent(task)) return;
           dataStore.removeDownloadingSong(strategy.id);
           window.$message.success(`${strategy.name} 下载完成`);
         } else {
@@ -639,15 +698,19 @@ class DownloadManager {
         }
 
         const fileName = `${config.fileName}.${config.fileType}`;
+        task.nativeStarted = true;
         const downloadResult = await AndroidDownload.downloadFile({
+          taskId: task.taskId,
           url: strategy.downloadUrl,
           fileName,
           directoryUri,
           subPath: getAndroidDownloadSubPath(config.path, settingStore.downloadPath),
         });
 
+        if (!this.isCurrent(task)) return;
         if (downloadResult.status === "success" || downloadResult.status === "skipped") {
           await strategy.postProcess(downloadResult.path || config.path);
+          if (!this.isCurrent(task)) return;
           dataStore.removeDownloadingSong(strategy.id);
           window.$message.success(`${strategy.name} 下载完成`);
         } else {
@@ -660,13 +723,15 @@ class DownloadManager {
         dataStore.removeDownloadingSong(strategy.id);
       }
     } catch (error: any) {
+      if (!this.isCurrent(task)) return;
       console.error(`Error processing task ${strategy.name} (ID: ${strategy.id}):`, error);
       if (error?.message) console.error("Error message:", error.message);
 
       dataStore.markDownloadFailed(strategy.id);
       window.$message.error(error.message || "下载出错");
     } finally {
-      this.activeDownloads.delete(strategy.id);
+      this.activeDownloads.delete(task.taskId);
+      if (this.tasks.get(strategy.id) === task) this.tasks.delete(strategy.id);
       this.processQueue();
     }
   }

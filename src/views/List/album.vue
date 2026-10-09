@@ -2,6 +2,7 @@
 <template>
   <div class="album-list">
     <ListDetail
+      @header-height="headerHeight = $event"
       :detail-data="detailData?.id === albumId ? detailData : null"
       :list-data="detailData?.id === albumId ? listData : []"
       :loading="showLoading"
@@ -89,6 +90,7 @@ const {
   detailData,
   listData,
   loading,
+  headerHeight,
   getSongListHeight,
   resetData,
   setDetailData,

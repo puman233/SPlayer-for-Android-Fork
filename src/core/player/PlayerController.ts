@@ -1,4 +1,5 @@
 import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
+import { ensureFloatingLyricVisible } from "./floatingLyricLifecycle";
 import { toRaw } from "vue";
 import { App as CapacitorApp } from "@capacitor/app";
 import { AudioErrorCode } from "@/core/audio-player/BaseAudioPlayer";
@@ -66,6 +67,7 @@ class PlayerController {
   private rateResetTimer: ReturnType<typeof setTimeout> | undefined;
   /** 速率渐变动画帧 */
   private rateRampFrame: number | undefined;
+  private floatingLyricOperation: Promise<void> = Promise.resolve();
 
   constructor() {
     // 初始化 AudioManager（会根据设置自动选择引擎）
@@ -2057,7 +2059,48 @@ class PlayerController {
    */
   public async setDesktopLyricShow(show: boolean) {
     const statusStore = useStatusStore();
+    if (isCapacitorAndroid) {
+      const operation = this.floatingLyricOperation.then(() => this.setAndroidDesktopLyricShow(show));
+      this.floatingLyricOperation = operation.catch(() => {});
+      return operation;
+    }
     if (statusStore.showDesktopLyric === show) return;
+
+    statusStore.showDesktopLyric = show;
+    void this.syncAndroidPlaybackContext();
+    playerIpc.toggleDesktopLyric(show);
+    window.$message.success(`${show ? "已开启" : "已关闭"}桌面歌词`);
+  }
+
+  /** 冷启动/回前台时恢复已开启的窗口，并用真实状态校正按钮。 */
+  public restoreAndroidDesktopLyric(): Promise<void> {
+    if (!isCapacitorAndroid) return Promise.resolve();
+    const operation = this.floatingLyricOperation.then(async () => {
+      const statusStore = useStatusStore();
+      const state = await AndroidNativePlayback.getFloatingLyricState();
+      if (statusStore.showDesktopLyric && !state.visible && state.granted) {
+        await this.setAndroidDesktopLyricShow(true, false);
+      } else {
+        statusStore.showDesktopLyric = state.visible;
+        if (state.visible) this.pushFloatingLyricState();
+        void this.syncAndroidPlaybackContext();
+      }
+    });
+    this.floatingLyricOperation = operation.catch((error) => {
+      console.warn("恢复桌面歌词状态失败:", error);
+    });
+    return this.floatingLyricOperation;
+  }
+
+  private pushFloatingLyricState() {
+    this.syncFloatingLyricSongInfo();
+    this.syncFloatingLyricData();
+    this.syncFloatingLyricProgress(this.getSeek(), useStatusStore().playStatus);
+    this.syncFloatingLyricConfig();
+  }
+
+  private async setAndroidDesktopLyricShow(show: boolean, notify = true) {
+    const statusStore = useStatusStore();
 
     // Android 端使用悬浮歌词（需要悬浮窗权限，按需动态申请）
     if (isCapacitorAndroid) {
@@ -2069,13 +2112,17 @@ class PlayerController {
           console.error("悬浮歌词操作失败:", e);
         }
         void this.syncAndroidPlaybackContext();
-        window.$message.success("已关闭桌面歌词");
+        if (notify) window.$message.success("已关闭桌面歌词");
         return;
       }
       // 开启：先检查悬浮窗权限，未授权则弹自定义确认框并引导授权
       try {
         const overlay = await AndroidNativePlayback.checkOverlayPermission();
         if (!overlay.granted) {
+          if (!notify) {
+            statusStore.showDesktopLyric = false;
+            return;
+          }
           const ok = await this.confirmOverlayPermission();
           if (!ok) return;
           // 跳转系统悬浮窗权限设置页
@@ -2088,26 +2135,22 @@ class PlayerController {
             return;
           }
         }
-        await AndroidNativePlayback.showFloatingLyric();
-        statusStore.showDesktopLyric = true;
+        statusStore.showDesktopLyric = await ensureFloatingLyricVisible(AndroidNativePlayback);
         void this.syncAndroidPlaybackContext();
+        if (!statusStore.showDesktopLyric) {
+          if (notify) window.$message.error("桌面歌词窗口未能显示，请检查悬浮窗权限");
+          return;
+        }
         // 立即推送当前歌曲信息/歌词/进度/配置，避免悬浮窗短暂显示占位符
-        this.syncFloatingLyricSongInfo();
-        this.syncFloatingLyricData();
-        this.syncFloatingLyricProgress(this.getSeek(), statusStore.playStatus);
-        this.syncFloatingLyricConfig();
-        window.$message.success("已开启桌面歌词");
+        this.pushFloatingLyricState();
+        if (notify) window.$message.success("已开启桌面歌词");
       } catch (e) {
         console.error("开启悬浮歌词失败:", e);
-        window.$message.error("开启桌面歌词失败");
+        statusStore.showDesktopLyric = false;
+        if (notify) window.$message.error("开启桌面歌词失败");
       }
       return;
     }
-
-    statusStore.showDesktopLyric = show;
-    void this.syncAndroidPlaybackContext();
-    playerIpc.toggleDesktopLyric(show);
-    window.$message.success(`${show ? "已开启" : "已关闭"}桌面歌词`);
   }
 
   /** 弹出自定义样式悬浮窗权限确认框 */

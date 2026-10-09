@@ -2,6 +2,7 @@
 <template>
   <div class="liked-list">
     <ListDetail
+      @header-height="headerHeight = $event"
       :detail-data="detailData"
       :list-data="listData"
       :loading="showLoading"
@@ -92,6 +93,7 @@ const {
   detailData,
   listData,
   loading,
+  headerHeight,
   getSongListHeight,
   setDetailData,
   setListData,

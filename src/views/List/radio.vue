@@ -2,6 +2,7 @@
 <template>
   <div class="radio-list">
     <ListDetail
+      @header-height="headerHeight = $event"
       :detail-data="detailData?.id === radioId ? detailData : null"
       :list-data="detailData?.id === radioId ? listData : []"
       :loading="showLoading"
@@ -83,6 +84,7 @@ const {
   detailData,
   listData,
   loading,
+  headerHeight,
   getSongListHeight,
   setDetailData,
   setListData,

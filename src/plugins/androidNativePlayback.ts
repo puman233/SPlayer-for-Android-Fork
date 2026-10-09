@@ -240,6 +240,7 @@ export interface AndroidNativePlaybackPlugin {
   getState(): Promise<AndroidNativePlaybackState>;
   requestNotificationPermission(): Promise<AndroidNativePermissionResult>;
   showFloatingLyric(): Promise<void>;
+  getFloatingLyricState(): Promise<{ visible: boolean; granted: boolean }>;
   hideFloatingLyric(): Promise<void>;
   updateFloatingLyricData(options: AndroidNativeFloatingLyricDataPayload): Promise<void>;
   updateFloatingLyricProgress(options: AndroidNativeFloatingLyricProgressPayload): Promise<void>;

@@ -280,6 +280,7 @@ const getListData = async (id: number | string): Promise<SongType[]> => {
   }
   .cover-item {
     position: relative;
+    min-width: 0;
     height: auto;
     border-radius: 16px;
     z-index: 0;

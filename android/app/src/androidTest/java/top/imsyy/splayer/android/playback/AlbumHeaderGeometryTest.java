@@ -45,7 +45,8 @@ public class AlbumHeaderGeometryTest {
   }
   @Test public void albumTextActionsAndFloatingButtonsFit() throws Exception {
     android.app.Instrumentation inst = InstrumentationRegistry.getInstrumentation();
-    assertTrue(inst.getTargetContext().getPackageName().endsWith(".phase1verify"));
+    assertTrue(inst.getTargetContext().getPackageName().endsWith(".phase1verify")
+        || inst.getTargetContext().getPackageName().endsWith(".debug"));
     org.json.JSONObject detail = new org.json.JSONObject("{\"id\":999999999,\"name\":\"いますぐ輪廻 — 长标题显示边界测试\",\"cover\":\"/images/album.jpg\",\"artists\":[{\"id\":1,\"name\":\"なきそ / 初音ミク — 超长艺术家名称\"}],\"count\":100,\"description\":\"带简介的长文本专辑，点击可查看完整简介\"}");
     org.json.JSONArray songs = new org.json.JSONArray();
     for (int i=0;i<100;i++) songs.put(new org.json.JSONObject("{\"id\":"+(999+i)+",\"name\":\"测试歌曲\",\"artists\":[{\"id\":1,\"name\":\"测试歌手\"}],\"album\":{\"id\":999999999,\"name\":\"测试专辑\"},\"cover\":\"/images/album.jpg\",\"duration\":120000}"));
@@ -61,7 +62,7 @@ public class AlbumHeaderGeometryTest {
       assertEquals("true", js("!!document.querySelector('.album-list .list-detail')"));
       js("m.playSong={...m.playSong,id:999,name:'测试歌曲',artists:[{id:1,name:'测试歌手'}],album:{id:999999999,name:'测试专辑'},duration:120000}");
       for(int i=0;i<60&&!"true".equals(js("!!document.querySelector('.list-detail .menu .left .n-button')"));i++) SystemClock.sleep(200);
-      for (int zoom : new int[]{100,130}) {
+      for (int zoom : new int[]{100,130,160}) {
         inst.runOnMainSync(() -> web.getSettings().setTextZoom(zoom));
         SystemClock.sleep(900);
         for (boolean small : new boolean[]{false,true}) {
@@ -76,7 +77,7 @@ public class AlbumHeaderGeometryTest {
       assertEquals("定位按钮在迷你播放栏上方", "true", js("(()=>{const b=document.querySelector('.list-menu .n-float-button'),p=document.querySelector('.main-player.phone-floating.show');return !b||!p||b.getBoundingClientRect().bottom<p.getBoundingClientRect().top})()"));
     } finally {
       storage.remove("list-data", "album-999999999.json");
-      inst.runOnMainSync(() -> {web.getSettings().setTextZoom(100); activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);});
+      inst.runOnMainSync(() -> {web.getSettings().setTextZoom(100); activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED); activity.finish();});
     }
   }
 }

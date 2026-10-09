@@ -2520,6 +2520,10 @@ public final class PlaybackManager {
   private JSONObject bufferedLyricConfig = null;
 
   /** 开启悬浮歌词服务 */
+  public synchronized boolean isFloatingLyricVisible() {
+    return floatingLyricService != null && floatingLyricService.isOverlayVisible();
+  }
+
   public synchronized void showFloatingLyric() {
     Intent intent = new Intent(appContext, FloatingLyricService.class);
     appContext.startService(intent);

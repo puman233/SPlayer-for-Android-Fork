@@ -459,7 +459,7 @@ audio {
     .list-comment,
     .loading,
     .n-empty {
-      padding-top: 180px;
+      padding-top: var(--list-detail-height, 180px);
     }
     .list-detail.small {
       & ~ .song-list,
@@ -467,7 +467,7 @@ audio {
       & ~ .list-comment,
       & ~ .loading,
       & ~ .n-empty {
-        padding-top: 132px;
+        padding-top: var(--list-detail-height, 132px);
       }
     }
     &:has(.list-detail:not(.small) .description) {
@@ -476,7 +476,7 @@ audio {
       .list-comment,
       .loading,
       .n-empty {
-        padding-top: 204px;
+        padding-top: var(--list-detail-height, 204px);
       }
     }
   }

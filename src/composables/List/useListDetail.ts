@@ -6,17 +6,21 @@ import { prefetchListCovers } from "@/composables/useCoverCache";
 export const useListDetail = () => {
   const statusStore = useStatusStore();
   const settingStore = useSettingStore();
-  const { isPhone } = useDevice();
+  const { width } = useDevice();
 
   const detailData = ref<CoverType | null>(null);
   const listData = shallowRef<SongType[]>([]);
   const loading = ref<boolean>(true);
+  const headerHeight = ref<number>(0);
 
   /** 进入详情页 / 缓存命中时预热前 N 首歌曲封面，避免滚动时逐张走 IPC 抖动。 */
   const PREFETCH_SONG_COVER_LIMIT = 20;
 
   const getSongListHeight = (listScrolling: boolean) => {
-    if (isPhone.value) {
+    if (width.value <= 768) {
+      if (headerHeight.value > 0) {
+        return Math.max(statusStore.mainContentHeight - headerHeight.value, 120);
+      }
       const hasDescription =
         !!detailData.value?.description && settingStore.playlistPageElements.description;
       const phoneHeaderHeight = listScrolling ? 132 : hasDescription ? 204 : 180;
@@ -66,6 +70,7 @@ export const useListDetail = () => {
     detailData,
     listData,
     loading,
+    headerHeight,
     getSongListHeight,
     resetData,
     setDetailData,

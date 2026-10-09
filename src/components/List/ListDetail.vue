@@ -2,7 +2,7 @@
 <template>
   <div :class="['list-detail', { small: listScrolling }]">
     <Transition name="fade">
-      <div v-if="detailData" class="detail">
+      <div v-if="detailData" ref="headerRef" class="detail">
         <div class="cover" v-if="!settingStore.hiddenCovers.list">
           <n-image
             :src="resolvedHeaderCover"
@@ -221,8 +221,8 @@
           </n-flex>
         </div>
       </div>
-      <div v-else class="detail">
-        <n-skeleton class="cover" />
+      <div v-else ref="headerRef" class="detail">
+        <n-skeleton v-if="!settingStore.hiddenCovers.list" class="cover" />
         <div class="data">
           <n-skeleton :repeat="4" text />
         </div>
@@ -241,6 +241,7 @@ import { renderToolbar } from "@/utils/meta";
 import { formatTimestamp } from "@/utils/time";
 import { openDescModal, openJumpArtist } from "@/utils/modal";
 import { useSettingStore } from "@/stores";
+import { useResizeObserver } from "@vueuse/core";
 
 interface ListDetailConfig {
   // 标题类型
@@ -281,7 +282,19 @@ const emit = defineEmits<{
   "update:searchValue": [value: string];
   "play-all": [];
   "tab-change": [value: "songs" | "comments"];
+  "header-height": [value: number];
 }>();
+
+const headerRef = ref<HTMLElement>();
+useResizeObserver(headerRef, () => {
+  const header = headerRef.value;
+  if (!header) return;
+  const height = Math.ceil(header.getBoundingClientRect().height) + 12;
+  header.closest<HTMLElement>(".album-list,.playlist-list,.liked-list,.radio-list")?.style.setProperty(
+    "--list-detail-height", `${height}px`,
+  );
+  emit("header-height", height);
+});
 
 const router = useRouter();
 const settingStore = useSettingStore();
@@ -613,10 +626,11 @@ const handleTabChange = (value: "songs" | "comments") => {
   @media (max-width: 768px) {
     .detail,
     &.small .detail {
-      height: 168px;
+      min-height: 168px;
+      height: auto;
       display: grid;
       grid-template-columns: 96px minmax(0, 1fr);
-      grid-template-rows: auto minmax(24px, 1fr) 32px;
+      grid-template-rows: auto minmax(24px, auto) auto;
       gap: 6px 12px;
       padding: 10px 16px 16px 0;
       box-sizing: border-box;
@@ -637,11 +651,11 @@ const handleTabChange = (value: "songs" | "comments") => {
         .collapse {
           grid-column: 2;
           margin: 0;
-          overflow: auto;
+          overflow: hidden;
           min-height: 24px;
         }
         .meta {
-          flex-wrap: nowrap !important;
+          flex-wrap: wrap !important;
           gap: 4px 8px !important;
           line-height: 24px;
         }
@@ -679,7 +693,7 @@ const handleTabChange = (value: "songs" | "comments") => {
           flex-wrap: nowrap !important;
           .left {
             width: 100%;
-            flex-wrap: nowrap !important;
+            flex-wrap: wrap !important;
             gap: 6px !important;
           }
           :deep(.n-button) {
@@ -695,15 +709,21 @@ const handleTabChange = (value: "songs" | "comments") => {
       }
     }
     &:not(.small) .detail:has(.description) {
-      height: 192px;
+      min-height: 192px;
     }
     &.small .detail {
-      height: 120px;
+      min-height: 120px;
+      height: auto;
       grid-template-columns: 56px minmax(0, 1fr);
     }
     &.small .detail .cover {
       width: 56px;
       height: 56px;
+    }
+    .detail:not(:has(> .cover)) {
+      grid-template-columns: minmax(0, 1fr);
+      .data .name,
+      .data .collapse { grid-column: 1; }
     }
   }
 }

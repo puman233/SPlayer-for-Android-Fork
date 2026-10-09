@@ -160,6 +160,10 @@ public class FloatingLyricService extends Service {
   @Override public int onStartCommand(Intent intent, int flags, int id) { return START_STICKY; }
   @Nullable @Override public IBinder onBind(Intent intent) { return null; }
 
+  boolean isOverlayVisible() {
+    return attached && !destroyed && view != null && view.isAttachedToWindow();
+  }
+
   @Override
   public void onConfigurationChanged(Configuration config) {
     super.onConfigurationChanged(config);

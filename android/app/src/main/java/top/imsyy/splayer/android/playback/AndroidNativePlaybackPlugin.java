@@ -406,6 +406,16 @@ public class AndroidNativePlaybackPlugin extends Plugin {
   // ========== 悬浮歌词相关 ==========
 
   @PluginMethod
+  public void getFloatingLyricState(PluginCall call) {
+    runOnMainThread(call, () -> {
+      JSObject state = new JSObject();
+      state.put("visible", PlaybackManager.getInstance(getContext()).isFloatingLyricVisible());
+      state.put("granted", Settings.canDrawOverlays(getContext()));
+      call.resolve(state);
+    });
+  }
+
+  @PluginMethod
   public void showFloatingLyric(PluginCall call) {
     if (!Settings.canDrawOverlays(getContext())) {
       call.reject("OVERLAY_PERMISSION_DENIED");

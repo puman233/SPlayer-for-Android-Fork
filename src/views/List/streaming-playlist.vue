@@ -2,6 +2,7 @@
 <template>
   <div class="playlist-list">
     <ListDetail
+      @header-height="headerHeight = $event"
       :detail-data="detailData"
       :list-data="listData"
       :loading="showLoading"
@@ -50,7 +51,7 @@ import { useListDataCache } from "@/composables/List/useListDataCache";
 const router = useRouter();
 const streamingStore = useStreamingStore();
 
-const { detailData, listData, loading, getSongListHeight, setDetailData, setListData, setLoading } =
+const { detailData, listData, loading, headerHeight, getSongListHeight, setDetailData, setListData, setLoading } =
   useListDetail();
 const { searchValue, searchData, displayData, clearSearch, performSearch } =
   useListSearch(listData);

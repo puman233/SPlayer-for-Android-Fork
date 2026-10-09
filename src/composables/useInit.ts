@@ -1,4 +1,5 @@
 import { mediaSessionManager } from "@/core/player/MediaSessionManager";
+import { App as CapacitorApp } from "@capacitor/app";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
 import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
@@ -8,7 +9,7 @@ import { printVersion } from "@/utils/log";
 import { openUserAgreement } from "@/utils/modal";
 import { useEventListener } from "@vueuse/core";
 import { debounce } from "lodash-es";
-import { onMounted, watch } from "vue";
+import { onMounted, onUnmounted, watch } from "vue";
 
 /** 最终聚焦主窗口的延迟时间（毫秒） */
 const FINAL_FOCUS_DELAY_MS = 500;
@@ -33,6 +34,12 @@ export const useInit = () => {
 
   const player = usePlayerController();
   const downloadManager = useDownloadManager();
+  let removeAppStateListener: (() => void) | undefined;
+  let disposed = false;
+  onUnmounted(() => {
+    disposed = true;
+    removeAppStateListener?.();
+  });
 
   // 事件监听
   initEventListener();
@@ -43,6 +50,14 @@ export const useInit = () => {
     // 加载本地持久化数据：必须在 player.playSong 之前完成，
     // 让 IDB 连接早建立、读取早开始；后续 playSong 走网络分支与 UI 渲染天然并行。
     await dataStore.loadData();
+    if (isCapacitorAndroid) {
+      const listener = await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive) void player.restoreAndroidDesktopLyric();
+      });
+      if (disposed) void listener.remove();
+      else removeAppStateListener = () => void listener.remove();
+      await player.restoreAndroidDesktopLyric();
+    }
     // 初始化 MediaSession
     mediaSessionManager.init();
     // 初始化播放器

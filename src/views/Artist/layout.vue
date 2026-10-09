@@ -1,7 +1,7 @@
 <template>
   <div :key="artistId" :class="['artist', { small: listScrolling }]">
     <Transition name="fade" mode="out-in">
-      <div v-if="artistDetailData" class="detail">
+      <div v-if="artistDetailData" ref="headerRef" class="detail">
         <div v-if="!settingStore.hiddenCovers.artistDetail" class="cover">
           <n-image
             :src="artistDetailData.coverSize?.m || artistDetailData.cover"
@@ -113,7 +113,7 @@
           </n-flex>
         </div>
       </div>
-      <div v-else class="detail">
+      <div v-else ref="headerRef" class="detail">
         <n-skeleton v-if="!settingStore.hiddenCovers.artistDetail" class="cover" />
         <div class="data">
           <n-skeleton :repeat="4" text />
@@ -154,6 +154,7 @@
 <script setup lang="ts">
 import type { DropdownOption } from "naive-ui";
 import type { ArtistType } from "@/types/main";
+import { useResizeObserver } from "@vueuse/core";
 import { coverLoaded, renderIcon, copyData, getShareUrl } from "@/utils/helper";
 import { renderToolbar } from "@/utils/meta";
 import { openDescModal, openBatchList } from "@/utils/modal";
@@ -182,6 +183,14 @@ const artistDetailData = ref<ArtistType | null>(null);
 
 // 列表是否滚动
 const listScrolling = ref<boolean>(false);
+const headerRef = ref<HTMLElement>();
+useResizeObserver(headerRef, () => {
+  const header = headerRef.value;
+  if (!header) return;
+  header.closest<HTMLElement>(".artist")?.style.setProperty(
+    "--artist-header-height", `${Math.ceil(header.getBoundingClientRect().height)}px`,
+  );
+});
 
 // 更多操作
 const moreOptions = computed<DropdownOption[]>(() => [
@@ -292,6 +301,7 @@ watch(
   height: 100%;
   .detail {
     display: flex;
+    flex-shrink: 0;
     height: 240px;
     width: 100%;
     padding: 12px 0 30px 0;
@@ -424,11 +434,17 @@ watch(
   }
   .tabs {
     height: 40px;
+    flex-shrink: 0;
     z-index: 1;
   }
   .router-view {
     flex: 1;
+    min-height: 0;
     overflow: hidden;
+    &.artist-type {
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
     &.artist-songs {
       position: absolute;
       width: 100%;
@@ -471,83 +487,74 @@ watch(
       }
     }
   }
-  // 窄屏幕下缩小封面、减少右侧留白，避免歌手名被截断成两个字
+  // 手机头部使用自然行布局，操作占整行，列表跟随实测高度。
   @media (max-width: 768px) {
-    .detail {
-      height: 196px;
-      // 减小上下留白，为下方信息/菜单腾出内容区，避免 meta 与菜单重叠
-      padding: 8px 0 8px 0;
+    .detail,
+    &.small .detail {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      grid-template-rows: auto minmax(24px, auto) auto;
+      gap: 6px 12px;
+      height: auto;
+      min-height: 196px;
+      padding: 8px 0;
+      box-sizing: border-box;
       .cover {
-        // 固定尺寸避免依赖父容器高度，左上对齐不参与拉伸
-        width: 120px;
-        height: 120px;
-        margin-right: 14px;
-        flex-shrink: 0;
-        align-self: flex-start;
+        grid-row: 1 / 3;
+        width: 96px;
+        height: 96px;
+        margin: 0;
       }
       .data {
-        // 移动端：歌手名强制单行，恢复绝对定位布局，避免 name 换行导致下方 meta/菜单错位
-        align-self: stretch;
-        overflow: hidden;
-        padding-right: 12px;
-        min-width: 0;
+        display: contents;
         .name {
-          // 固定单行高度，保证下方绝对定位参考点稳定
-          height: 30px;
-          min-height: 30px;
-          line-height: 30px;
+          grid-column: 2;
+          height: auto;
+          min-height: 28px;
+          font-size: 20px;
+          line-height: 1.4;
           overflow: hidden;
-          &.text-hidden {
-            -webkit-line-clamp: 1;
-            line-clamp: 1;
-          }
-          .name-text {
-            word-break: break-word;
-          }
-        }
-        .identify {
-          font-size: 13px;
+          .name-text { word-break: break-word; }
         }
         .collapse {
-          position: absolute;
-          top: 32px;
-          left: 0;
-          right: 0;
-          overflow: hidden;
+          position: static;
+          grid-column: 2;
           margin: 0;
+          min-width: 0;
+          overflow: hidden;
         }
-        .meta {
-          gap: 8px !important;
-          .item {
-            .n-icon {
-              font-size: 16px;
-            }
-          }
-        }
+        .identify { font-size: 13px; }
+        .meta { gap: 4px 8px !important; }
+        .meta .item { min-width: 0; }
+        .description { margin-bottom: 0; }
         .menu {
-          position: absolute;
-          left: 0;
-          bottom: 0;
-          width: 100%;
+          position: static;
+          grid-column: 1 / -1;
+          min-width: 0;
+          .left { width: 100%; gap: 6px !important; }
           .n-button {
             height: 32px;
             --n-font-size: 13px;
-            --n-padding: 0 12px;
+            --n-padding: 0 10px;
             --n-icon-size: 16px;
           }
-          .more {
-            width: 32px;
-          }
+          .more { width: 32px; margin-left: auto; }
         }
       }
     }
-    .router-view.artist-songs {
-      padding-top: 216px;
+    &.small .detail {
+      min-height: 120px;
+      grid-template-columns: 56px minmax(0, 1fr);
+      .cover { width: 56px; height: 56px; }
     }
-    &.small {
-      .router-view.artist-songs {
-        padding-top: 150px;
-      }
+    .detail:not(:has(> .cover)) {
+      grid-template-columns: minmax(0, 1fr);
+      .data .name,
+      .data .collapse { grid-column: 1; }
+    }
+    .router-view.artist-songs,
+    &.small .router-view.artist-songs {
+      padding-top: calc(var(--artist-header-height, 196px) + 40px);
     }
   }
 }

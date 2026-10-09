@@ -32,4 +32,6 @@
 
 本地检查：`python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'`；actionlint 检查 Actions YAML；`pnpm lint`、`pnpm typecheck`、`python3 -B .github/scripts/development-checks.py tests`、`pnpm build:android` 后在 android 执行 `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`。设备测试必须断言实际行为，不把模拟器启动当验收；相关截图与报告仅临时保存。
 
-后台歌词通过原生 ExoPlayer 进度和状态直接驱动，WebView 延迟消息不得覆盖原生时钟；远程 JS 播放模式仍使用既有回传。设备测试使用生成的测试音频，不依赖真实账号。
+后台歌词通过原生 ExoPlayer 进度和状态直接驱动，WebView 延迟消息不得覆盖原生时钟；远程 JS 播放模式仍使用既有回传。冷启动和回前台查询实际窗口状态，恢复已开启但丢失的悬浮窗；按钮在窗口实际附着后才显示开启。设备测试使用生成的测试音频与同目录 LRC，连续五分钟留在后台，验证两次自动切歌、进度与歌词数据，无需真实账号。
+
+手机详情头部使用自然高度和实测列表偏移，覆盖长标题、放大字体、隐藏封面、折叠与滚动。UI 工作流执行七项测试，保存详情页和播放器截图；歌手专辑网格同时检查实际滚动与卡片宽度。当前测试迭代为 `3.0.16-beta.2`，构建号 `30025`。

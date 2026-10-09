@@ -123,7 +123,7 @@ class DevelopmentChecksTests(unittest.TestCase):
             self.assertNotIn("tags:", text)
         self.assertEqual(ci.count(":app:assembleDebug "), 1)
         self.assertNotIn("assembleDebug", ui)
-        self.assertIn("grep -q 'OK (7 tests)'", ui)
+        self.assertIn("grep -q 'OK (8 tests)'", ui)
         self.assertIn("change-review", ci)
         release_workflow = (workflows / "release.yml").read_text(encoding="utf-8")
         self.assertIn("environment: android-release", release_workflow)

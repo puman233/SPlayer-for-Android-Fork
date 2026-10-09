@@ -8,10 +8,10 @@ on:
     inputs:
       preview_version:
         type: string
-        default: 3.0.16-beta.4
+        default: 3.0.16-beta.5
       preview_code:
         type: string
-        default: '30027'
+        default: '30028'
   workflow_dispatch:
 permissions:
   contents: read
@@ -79,8 +79,8 @@ jobs:
       - name: 编译 APK、单元测试及 Android Lint
         working-directory: android
         env:
-          PREVIEW_VERSION: ${{ inputs.preview_version || '3.0.16-beta.4' }}
-          PREVIEW_CODE: ${{ inputs.preview_code || '30027' }}
+          PREVIEW_VERSION: ${{ inputs.preview_version || '3.0.16-beta.5' }}
+          PREVIEW_CODE: ${{ inputs.preview_code || '30028' }}
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug "-PpreviewVersion=$PREVIEW_VERSION" "-PpreviewVersionCode=$PREVIEW_CODE"
       - name: 生成测试构建元数据
         run: python3 -B .github/scripts/development-checks.py preview

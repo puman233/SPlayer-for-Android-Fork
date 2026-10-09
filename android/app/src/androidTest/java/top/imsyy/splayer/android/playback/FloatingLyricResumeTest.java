@@ -9,6 +9,33 @@ import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public class FloatingLyricResumeTest {
+  @Test public void failedCloseKeepsWindowEnabledAndReportsFailure() throws Exception {
+    try(DeviceWebFixture f=new DeviceWebFixture()) {
+      PlaybackManager manager=PlaybackManager.getInstance(f.activity);
+      String saved=f.js("fixtureStatus.showDesktopLyric");
+      try {
+        f.js("window.closeReady=false;window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(true).then(()=>window.closeReady=true)");
+        f.await("window.closeReady===true&&fixtureStatus.showDesktopLyric===true");
+        awaitVisible(manager,true);
+        // 只替换原生桥边界的关闭响应，其余调用和实际窗口保持真实。
+        f.js("window.$message.destroyAll()");
+        f.await("!document.querySelector('.n-message-wrapper')");
+        f.js("window.savedNativePromise=Capacitor.nativePromise;window.closeFailureInjected=false;Capacitor.nativePromise=function(plugin,method,...args){if(plugin==='AndroidNativePlayback'&&method==='hideFloatingLyric'){window.closeFailureInjected=true;return Promise.reject(new Error('test native close failure'))}return savedNativePromise.call(this,plugin,method,...args)};window.closeDone=false;window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(false).then(()=>window.closeDone=true)");
+        f.await("window.closeDone===true&&window.closeFailureInjected===true");
+        SystemClock.sleep(200);
+        assertTrue("关闭失败时实际窗口仍存在",manager.isFloatingLyricVisible());
+        assertEquals("关闭失败不能错误熄灭按钮","true",f.js("fixtureStatus.showDesktopLyric"));
+        assertEquals("关闭失败不得提示已关闭","false",f.js("document.body.textContent.includes('已关闭桌面歌词')"));
+        f.capture("close-failure-feedback");
+        assertEquals("用户应看到关闭失败反馈 "+f.js("JSON.stringify([...document.querySelectorAll('.n-message')].map(e=>e.textContent))"),"true",f.js("document.body.textContent.includes('关闭桌面歌词失败')"));
+      } finally {
+        f.js("if(window.savedNativePromise)Capacitor.nativePromise=savedNativePromise;window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(false)");
+        awaitVisible(manager,false);
+        f.js("fixtureStatus.showDesktopLyric="+saved);
+      }
+    }
+  }
+
   @Test public void missingWindowRestoresOnResumeAndWebViewReload() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture()) {
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);

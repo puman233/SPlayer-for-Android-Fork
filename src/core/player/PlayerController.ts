@@ -2110,6 +2110,8 @@ class PlayerController {
           statusStore.showDesktopLyric = false;
         } catch (e) {
           console.error("悬浮歌词操作失败:", e);
+          if (notify) window.$message.error("关闭桌面歌词失败，请重试");
+          return;
         }
         void this.syncAndroidPlaybackContext();
         if (notify) window.$message.success("已关闭桌面歌词");

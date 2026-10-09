@@ -97,7 +97,7 @@ jobs:
             adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/phase3 ui-screens || true
             adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/detail-regression ui-screens || true
             adb pull /sdcard/Android/data/top.imsyy.splayer.android.debug/files/update-layout ui-screens || true
-            grep -q 'OK (7 tests)' ui-result.txt
+            grep -q 'OK (8 tests)' ui-result.txt
       - uses: actions/upload-artifact@v4
         if: always() && steps.source.outputs.available == 'true'
         with:

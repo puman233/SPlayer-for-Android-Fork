@@ -14,7 +14,8 @@ public class FloatingLyricResumeTest {
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       String saved=f.js("fixtureStatus.showDesktopLyric");
       try {
-        f.js("window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(true)");
+        f.js("window.resumeEnabled=false;window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(true).then(()=>window.resumeEnabled=true)");
+        f.await("window.resumeEnabled===true");
         awaitVisible(manager,true);
         f.await("fixtureStatus.showDesktopLyric===true");
         f.inst.runOnMainSync(()->f.activity.stopService(new Intent(f.activity,FloatingLyricService.class)));

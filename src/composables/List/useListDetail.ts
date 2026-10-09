@@ -17,7 +17,7 @@ export const useListDetail = () => {
   const PREFETCH_SONG_COVER_LIMIT = 20;
 
   const getSongListHeight = (listScrolling: boolean) => {
-    if (width.value <= 768) {
+    if (width.value <= 1024) {
       if (headerHeight.value > 0) {
         return Math.max(statusStore.mainContentHeight - headerHeight.value, 120);
       }

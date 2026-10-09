@@ -4,12 +4,12 @@ on:
     inputs:
       preview_version:
         description: 测试版本；后续修改递增 beta 序号
-        default: 3.0.16-beta.3
+        default: 3.0.16-beta.4
         required: true
         type: string
       preview_code:
         description: Android 升级构建号，每次递增
-        default: '30026'
+        default: '30027'
         required: true
         type: string
 permissions:

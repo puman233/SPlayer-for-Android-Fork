@@ -623,7 +623,7 @@ const handleTabChange = (value: "songs" | "comments") => {
     }
   }
   // 手机头部：封面与信息两列，操作独占完整的一行。
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     .detail,
     &.small .detail {
       min-height: 168px;

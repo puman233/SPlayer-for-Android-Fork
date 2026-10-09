@@ -87,6 +87,8 @@ jobs:
             adb install -r apks/debug/app-x86_64-debug.apk
             adb install -r apks/androidTest/debug/app-debug-androidTest.apk
             adb shell appops set top.imsyy.splayer.android.debug SYSTEM_ALERT_WINDOW allow
+            # 跳过系统首次全屏引导层，避免它拦截悬浮窗的真实触摸。
+            adb shell settings put secure immersive_mode_confirmations confirmed
             adb logcat -c
             adb shell am instrument -w -r -e class top.imsyy.splayer.android.playback.FloatingLyricBackgroundTest,top.imsyy.splayer.android.playback.FloatingLyricOverlayTest,top.imsyy.splayer.android.playback.PlayerDeviceLayoutTest,top.imsyy.splayer.android.playback.AlbumHeaderGeometryTest,top.imsyy.splayer.android.playback.ArtistHeaderGeometryTest,top.imsyy.splayer.android.playback.FloatingLyricResumeTest,top.imsyy.splayer.android.playback.FloatingLyricLongPlaybackTest -e label '${{ matrix.device.name }}' top.imsyy.splayer.android.debug.test/androidx.test.runner.AndroidJUnitRunner > ui-result.txt
             cat ui-result.txt

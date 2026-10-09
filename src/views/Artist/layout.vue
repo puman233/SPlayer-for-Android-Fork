@@ -488,7 +488,7 @@ watch(
     }
   }
   // 手机头部使用自然行布局，操作占整行，列表跟随实测高度。
-  @media (max-width: 768px) {
+  @media (max-width: 1024px) {
     .detail,
     &.small .detail {
       display: grid;

@@ -1362,19 +1362,33 @@ class LyricManager {
     ) {
       return false;
     }
-    // 比较 lrcData 内容（比较每行的 startTime 和文本内容）
+    // 比较渲染语义；仅在请求提交时执行，避免未变数据重载或遗漏逐字信息。
     const compareLines = (oldLines: LyricLine[], newLines: LyricLine[]): boolean => {
       if (oldLines.length !== newLines.length) return false;
       for (let i = 0; i < oldLines.length; i++) {
         const oldLine = oldLines[i];
         const newLine = newLines[i];
-        const oldText = oldLine.words?.map((w) => w.word).join("") || "";
-        const newText = newLine.words?.map((w) => w.word).join("") || "";
-        if (oldLine.startTime !== newLine.startTime || oldText !== newText) {
+        if (
+          !Object.is(oldLine.startTime, newLine.startTime) ||
+          !Object.is(oldLine.endTime, newLine.endTime) ||
+          (oldLine.translatedLyric || "") !== (newLine.translatedLyric || "") ||
+          (oldLine.romanLyric || "") !== (newLine.romanLyric || "") ||
+          !!oldLine.isBG !== !!newLine.isBG ||
+          !!oldLine.isDuet !== !!newLine.isDuet ||
+          oldLine.words.length !== newLine.words.length
+        ) {
           return false;
         }
-        // ttml 特有属性
-        if (!!newLine.isBG !== !!oldLine.isBG) return false;
+        for (let wordIndex = 0; wordIndex < oldLine.words.length; wordIndex++) {
+          const oldWord = oldLine.words[wordIndex];
+          const newWord = newLine.words[wordIndex];
+          if (
+            oldWord.word !== newWord.word ||
+            !Object.is(oldWord.startTime, newWord.startTime) ||
+            !Object.is(oldWord.endTime, newWord.endTime) ||
+            (oldWord.romanWord || "") !== (newWord.romanWord || "")
+          ) return false;
+        }
       }
       return true;
     };

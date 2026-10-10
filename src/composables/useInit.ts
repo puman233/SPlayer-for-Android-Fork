@@ -1,6 +1,10 @@
 import { mediaSessionManager } from "@/core/player/MediaSessionManager";
 import { App as CapacitorApp } from "@capacitor/app";
 import { usePlayerController } from "@/core/player/PlayerController";
+import { useAudioManager } from "@/core/player/AudioManager";
+import { AndroidNativePlayback } from "@/plugins/androidNativePlayback";
+import { getPlaySongData } from "@/utils/format";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
 import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
 import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
@@ -33,6 +37,8 @@ export const useInit = () => {
   const shortcutStore = useShortcutStore();
 
   const player = usePlayerController();
+  const startupRequestToken = player.currentRequestToken;
+  const startupIntentRevision = player.playbackIntentRevision;
   const downloadManager = useDownloadManager();
   let removeAppStateListener: (() => void) | undefined;
   let disposed = false;
@@ -50,6 +56,7 @@ export const useInit = () => {
     // 加载本地持久化数据：必须在 player.playSong 之前完成，
     // 让 IDB 连接早建立、读取早开始；后续 playSong 走网络分支与 UI 渲染天然并行。
     await dataStore.loadData();
+    if (disposed) return;
     if (isCapacitorAndroid) {
       const listener = await CapacitorApp.addListener("appStateChange", ({ isActive }) => {
         if (isActive) void player.restoreAndroidDesktopLyric();
@@ -58,13 +65,44 @@ export const useInit = () => {
       else removeAppStateListener = () => void listener.remove();
       await player.restoreAndroidDesktopLyric();
     }
+    if (disposed) return;
     // 初始化 MediaSession
     mediaSessionManager.init();
     // 初始化播放器
-    player.playSong({
-      autoPlay: settingStore.autoPlay,
-      seek: settingStore.memoryLastSeek ? statusStore.currentTime : 0,
-    });
+    let restoredNativePlayback = false;
+    if (isCapacitorAndroid && useAudioManager().engineType === "android-native") {
+      try {
+        const nativeState = await AndroidNativePlayback.getState();
+        if (disposed) return;
+        const song = getPlaySongData();
+        const intentChanged = player.playbackIntentRevision !== startupIntentRevision;
+        if (player.currentRequestToken === startupRequestToken && (nativeState.playing || intentChanged) &&
+          nativeState.src && song && song.id === nativeState.songId) {
+          // Activity recreation must not reload a running track with cold-start autoPlay=false.
+          player.currentAudioSource = {
+            url: nativeState.src, quality: statusStore.songQuality, source: statusStore.audioSource,
+          };
+          player.setupSongUI(song, intentChanged ? statusStore.currentTime : Math.max(0, nativeState.positionMs));
+          if (!intentChanged) statusStore.playStatus = true;
+          statusStore.playLoading = false;
+          useAudioManager().init();
+          restoredNativePlayback = true;
+          // Preserve the existing metadata, queue and scrobbler setup without reloading audio.
+          await player.afterPlaySetup(song);
+        }
+      } catch (error) {
+        console.warn("[Player] native startup restoration failed:", requestFailureCategory(error));
+      }
+    }
+    if (disposed) return;
+    // A user command issued during startup owns playback; never overwrite it later.
+    if (!restoredNativePlayback && player.currentRequestToken === startupRequestToken) {
+      const intentChanged = player.playbackIntentRevision !== startupIntentRevision;
+      player.playSong({
+        autoPlay: intentChanged ? statusStore.playStatus : settingStore.autoPlay,
+        seek: intentChanged || settingStore.memoryLastSeek ? statusStore.currentTime : 0,
+      });
+    }
     // 同步播放模式
     player.playModeSyncIpc();
     // 同步 Android 媒体队列上下文（依赖 dataStore.userLikeData / playList，已加载完成）

@@ -45,6 +45,9 @@ class PlayerController {
   private retryInfo: { songId: number | string; count: number } = { songId: 0, count: 0 };
   /** 当前播放请求标识 */
   public currentRequestToken = 0;
+  /** Transport commands do not cancel pending quality/source preparation. */
+  public playbackIntentRevision = 0;
+  private seekRevision = 0;
   /** 连续跳过计数 */
   private failSkipCount = 0;
   /** 是否正在进行 Automix 过渡 */
@@ -281,6 +284,8 @@ class PlayerController {
     // 生成新的请求标识
     this.currentRequestToken++;
     const requestToken = this.currentRequestToken;
+    const intentRevision = this.playbackIntentRevision;
+    const seekRevision = this.seekRevision;
     const { autoPlay = true, seek = 0 } = options;
     // 要播放的歌曲对象
     const playSongData = options.song || getPlaySongData();
@@ -332,6 +337,8 @@ class PlayerController {
         initialRate = automixParams.initialRate;
       }
       if (requestToken !== this.currentRequestToken) return;
+      if (seekRevision !== this.seekRevision) startSeek = statusStore.currentTime;
+      const shouldAutoPlay = intentRevision === this.playbackIntentRevision ? autoPlay : statusStore.playStatus;
       // 更新音质和音源信息
       console.log(`🎧 [${playSongData.id}] 最终播放信息:`, "source resolved");
       statusStore.songQuality = audioSource.quality;
@@ -339,14 +346,15 @@ class PlayerController {
       // 执行底层播放
       await this.loadAndPlay(
         audioSource.url,
-        autoPlay,
+        shouldAutoPlay,
         startSeek,
-        options.crossfade ? { duration: options.crossfadeDuration ?? 5 } : undefined,
+        options.crossfade && shouldAutoPlay ? { duration: options.crossfadeDuration ?? 5 } : undefined,
         initialRate,
       );
       if (requestToken !== this.currentRequestToken) return;
       // 后置处理
       await this.afterPlaySetup(playSongData);
+      if (requestToken !== this.currentRequestToken) return;
       statusStore.playLoading = false;
     } catch (error) {
       if (requestToken === this.currentRequestToken) {
@@ -377,14 +385,16 @@ class PlayerController {
     const audioManager = useAudioManager();
     const playSongData = getPlaySongData();
     if (!playSongData || playSongData.path) return;
+    const requestToken = ++this.currentRequestToken;
     // 如果未指定 autoPlay，则保持当前播放状态
-    const shouldAutoPlay = autoPlay ?? statusStore.playStatus;
+    const seekRevision = this.seekRevision;
     try {
       statusStore.playLoading = true;
       // 清除预取缓存，强制重新获取
       songManager.clearPrefetch();
       // 获取新音频源
       const audioSource = await songManager.getAudioSource(playSongData);
+      if (requestToken !== this.currentRequestToken) return;
       if (!audioSource.url) {
         window.$message.error("切换音质失败");
         statusStore.playLoading = false;
@@ -395,11 +405,15 @@ class PlayerController {
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
       // 停止当前播放
+      const shouldAutoPlay = autoPlay ?? statusStore.playStatus;
+      const startSeek = seekRevision === this.seekRevision ? seek : statusStore.currentTime;
       audioManager.stop();
       // 执行底层播放，保持进度，保持原播放状态
-      await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
+      await this.loadAndPlay(audioSource.url, shouldAutoPlay, startSeek);
+      if (requestToken !== this.currentRequestToken) return;
       statusStore.playLoading = false;
     } catch (error) {
+      if (requestToken !== this.currentRequestToken) return;
       console.error("❌ 切换音质失败:", requestFailureCategory(error));
       statusStore.playLoading = false;
       window.$message.error("切换音质失败");
@@ -417,12 +431,14 @@ class PlayerController {
     const audioManager = useAudioManager();
     const playSongData = musicStore.playSong;
     if (!playSongData || playSongData.path) return;
+    const requestToken = ++this.currentRequestToken;
     try {
       statusStore.playLoading = true;
       // 清除预取缓存
       songManager.clearPrefetch();
       // 获取新音频源
       const audioSource = await songManager.getAudioSource(playSongData, source);
+      if (requestToken !== this.currentRequestToken) return;
       if (!audioSource.url) {
         window.$message.error("切换音频源失败：无法获取播放链接");
         statusStore.playLoading = false;
@@ -438,8 +454,10 @@ class PlayerController {
       // 停止当前播放
       audioManager.stop();
       await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
+      if (requestToken !== this.currentRequestToken) return;
       statusStore.playLoading = false;
     } catch (error) {
+      if (requestToken !== this.currentRequestToken) return;
       console.error("❌ 切换音频源失败:", requestFailureCategory(error));
       statusStore.playLoading = false;
       window.$message.error("切换音频源失败");
@@ -468,6 +486,8 @@ class PlayerController {
     },
     initialRate: number = 1.0,
   ) {
+    const requestToken = this.currentRequestToken;
+    const seekRevision = this.seekRevision;
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
     const audioManager = useAudioManager();
@@ -507,6 +527,9 @@ class PlayerController {
     // 播放新音频
     try {
       const updateSeekState = () => {
+        if (requestToken !== this.currentRequestToken || seekRevision !== this.seekRevision) {
+          return statusStore.duration;
+        }
         statusStore.currentTime = seek;
         const duration = this.getDuration() || statusStore.duration;
         if (duration > 0) {
@@ -520,7 +543,9 @@ class PlayerController {
       // 设置期望的 seek 位置（MPV 引擎特有）
       if (seek > 0) audioManager.setPendingSeek(seek / 1000);
       if (crossfadeOptions) {
-        const onSwitch = crossfadeOptions.onSwitch;
+        const onSwitch = () => {
+          if (requestToken === this.currentRequestToken) crossfadeOptions.onSwitch?.();
+        };
         const wrappedOnSwitch = shouldDeferStateSync
           ? () => {
               onSwitch?.();
@@ -550,6 +575,7 @@ class PlayerController {
         });
       }
 
+      if (requestToken !== this.currentRequestToken) return;
       // 更新进度到状态
       const duration = !crossfadeOptions || !shouldDeferStateSync ? updateSeekState() : 0;
 
@@ -1301,6 +1327,7 @@ class PlayerController {
    * @param currentSeek 当前播放位置 (用于恢复)
    */
   private async handlePlaybackError(errCode: number | undefined, currentSeek: number = 0) {
+    const requestToken = this.currentRequestToken;
     // 错误防抖
     const now = Date.now();
     if (now - this.lastErrorTime < 200) return;
@@ -1348,6 +1375,7 @@ class PlayerController {
     // 未超过重试次数 -> 尝试重新获取 URL（可能是过期）
     if (this.retryInfo.count <= this.MAX_RETRY_COUNT) {
       await sleep(1000);
+      if (requestToken !== this.currentRequestToken || this.retryInfo.count === 0) return;
       if (this.retryInfo.count === 1) {
         statusStore.playLoading = true;
         window.$message.warning("播放异常，正在尝试恢复...");
@@ -1366,6 +1394,7 @@ class PlayerController {
    * 带延迟的跳转下一首
    */
   private async skipToNextWithDelay() {
+    const requestToken = this.currentRequestToken;
     const dataStore = useDataStore();
     const statusStore = useStatusStore();
     this.failSkipCount++;
@@ -1386,11 +1415,13 @@ class PlayerController {
     }
     // 添加延迟，避免快速切歌导致卡死
     await sleep(500);
+    if (requestToken !== this.currentRequestToken) return;
     await this.nextOrPrev("next");
   }
 
   /** 播放 */
   async play() {
+    const intentRevision = ++this.playbackIntentRevision;
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
     const audioManager = useAudioManager();
@@ -1412,10 +1443,13 @@ class PlayerController {
       return;
     }
     const fadeTime = settingStore.getFadeTime ? settingStore.getFadeTime / 1000 : 0;
+    const requestToken = this.currentRequestToken;
     try {
       await audioManager.resume({ fadeIn: !!fadeTime, fadeDuration: fadeTime });
-      statusStore.playStatus = true;
+      if (requestToken !== this.currentRequestToken || intentRevision !== this.playbackIntentRevision) return;
+      statusStore.playStatus = !audioManager.paused;
     } catch (error) {
+      if (requestToken !== this.currentRequestToken || intentRevision !== this.playbackIntentRevision) return;
       console.error("❌ 播放失败:", requestFailureCategory(error));
       // 如果是 AbortError，尝试重新加载
       if (error instanceof Error && error.name === "AbortError") {
@@ -1426,6 +1460,9 @@ class PlayerController {
 
   /** 暂停 */
   async pause(changeStatus: boolean = true) {
+    this.playbackIntentRevision++;
+    // A user pause cancels a scheduled error retry without invalidating source preparation.
+    this.retryInfo.count = 0;
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
     const audioManager = useAudioManager();
@@ -1544,6 +1581,8 @@ class PlayerController {
    * @param time 时间 (ms)
    */
   public setSeek(time: number) {
+    this.playbackIntentRevision++;
+    this.seekRevision++;
     if (this.onTimeUpdate) {
       this.onTimeUpdate.cancel();
     }

@@ -1,6 +1,7 @@
 import { useSettingStore } from "@/stores";
 import { checkIsolationSupport, isCapacitorAndroid, isElectron } from "@/utils/env";
 import { TypedEventTarget } from "@/utils/TypedEventTarget";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { AndroidNativeAudioPlayer } from "../audio-player/AndroidNativeAudioPlayer";
 import { AudioElementPlayer } from "../audio-player/AudioElementPlayer";
 import { AUDIO_EVENTS, type AudioEventMap } from "../audio-player/BaseAudioPlayer";
@@ -111,6 +112,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
    * 初始化
    */
   public init(): void {
+    if (!this.cleanupListeners) this.bindEngineEvents();
     this.engine.init();
   }
 
@@ -130,6 +132,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
    * 加载并播放音频
    */
   public async play(url?: string, options?: PlayOptions): Promise<void> {
+    this.clearPendingSwitch();
     await this.engine.play(url, options);
   }
 
@@ -198,11 +201,20 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
     }
     const fadeCurve = options.fadeCurve ?? "equalPower";
     // 启动新引擎
-    await newEngine.play(url, {
-      autoPlay: true,
-      seek: options.seek,
-      fadeIn: false,
-    });
+    try {
+      await newEngine.play(url, {
+        autoPlay: true,
+        seek: options.seek,
+        fadeIn: false,
+      });
+    } catch (error) {
+      if (this.pendingEngine === newEngine) this.clearPendingSwitch();
+      throw error;
+    }
+    if (this.pendingEngine !== newEngine) {
+      newEngine.destroy();
+      return;
+    }
     // 新引擎逐渐增加音量
     if (newEngine.rampVolumeTo) {
       newEngine.rampVolumeTo(this._masterVolume, options.duration, fadeCurve);
@@ -249,6 +261,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
       keepContextRunning: true,
     });
     const commitSwitch = () => {
+      if (this.pendingEngine !== newEngine) return;
       console.log("🔀 [AudioManager] Committing Crossfade Switch");
       if (this.cleanupListeners) {
         this.cleanupListeners();
@@ -271,6 +284,9 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
       if (options.mixType !== "bassSwap") {
         this.engine.setHighPassFilter?.(0, 0);
       }
+      // Only a committed switch owns retirement of the old engine. Cancellation
+      // before commit may reuse it for the next song.
+      setTimeout(() => oldEngine.destroy(), options.duration * 1000 + 1000);
     };
     const switchDelay = options.uiSwitchDelay ?? 0;
     if (switchDelay > 0) {
@@ -281,8 +297,6 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
     } else {
       commitSwitch();
     }
-    // 销毁旧引擎
-    setTimeout(() => oldEngine.destroy(), options.duration * 1000 + 1000);
   }
 
   /**
@@ -296,6 +310,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
    * 暂停音频
    */
   public pause(options?: PauseOptions): void {
+    this.clearPendingSwitch();
     this.engine.pause(options);
   }
 
@@ -308,6 +323,7 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
   }
 
   private clearPendingSwitch() {
+    this.isCrossfading = false;
     if (this.pendingSwitchTimer) {
       clearTimeout(this.pendingSwitchTimer);
       this.pendingSwitchTimer = null;
@@ -510,7 +526,9 @@ class AudioManager extends TypedEventTarget<AudioEventMap> implements IPlaybackE
    */
   public togglePlayPause(): void {
     if (this.paused) {
-      this.resume();
+      void this.resume().catch(error => {
+        console.warn("[AudioManager] resume failed:", requestFailureCategory(error));
+      });
     } else {
       this.pause();
     }

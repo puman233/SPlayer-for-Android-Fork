@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 /**
  * WebDAV 流媒体客户端
  *
@@ -330,7 +331,7 @@ const fetchTagsForSong = async (
     tagCache.set(cacheKey, result);
     return result;
   } catch (e) {
-    console.warn("[WebDAV] parse tag error:", entry.path, e);
+    console.warn("[WebDAV] parse tag error:", entry.path, requestFailureCategory(e));
     // 解析失败也写入降级缓存，避免反复重试
     const fallback: CachedTag = {
       artist: "未知艺术家",
@@ -380,7 +381,7 @@ const scanLibrary = async (
     try {
       entries = await propfind(config, path);
     } catch (e) {
-      console.warn("[WebDAV] PROPFIND failed:", path, e);
+      console.warn("[WebDAV] PROPFIND failed:", requestFailureCategory(e));
       continue;
     }
     for (const entry of entries) {
@@ -408,7 +409,7 @@ const scanLibrary = async (
             if (song) songs.push(song);
             onProgress?.(songs.length);
           })
-          .catch((e) => console.warn("[WebDAV] tag scan failed:", entry.path, e))
+          .catch((e) => console.warn("[WebDAV] tag scan failed:", entry.path, requestFailureCategory(e)))
           .finally(() => {
             inFlight--;
             if (idx >= audioEntries.length && inFlight === 0) resolve();
@@ -663,7 +664,7 @@ export const getPlaylistItems = async (
         else if (isAudioFile(entry.name)) audioEntries.push(entry);
       }
     } catch (e) {
-      console.warn("[WebDAV] dir read failed:", p, e);
+      console.warn("[WebDAV] dir read failed:", p, requestFailureCategory(e));
     }
   }
   // 取 tag（并发 4）
@@ -684,7 +685,7 @@ export const getPlaylistItems = async (
           .then((tag) => {
             songs.push(entryToSong(config, entry, tag));
           })
-          .catch((e) => console.warn("[WebDAV] tag failed:", entry.path, e))
+          .catch((e) => console.warn("[WebDAV] tag failed:", entry.path, requestFailureCategory(e)))
           .finally(() => {
             inFlight--;
             if (idx >= audioEntries.length && inFlight === 0) resolve();

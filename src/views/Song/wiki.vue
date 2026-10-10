@@ -295,6 +295,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType } from "@/types/main";
 import type { WikiViewModel, UserRecord, SongWikiData, ListenData, SheetData } from "./types";
 import { usePlayerController } from "@/core/player/PlayerController";
@@ -460,11 +461,11 @@ const fetchData = async (id?: number) => {
         if (token !== currentRequestToken.value) return;
         if (sims.songs) similarSongsList.value = formatSongsList(sims.songs);
       } catch (e) {
-        console.warn("Failed to load similar songs", e);
+        console.warn("Failed to load similar songs", requestFailureCategory(e));
       }
     }
   } catch (error) {
-    console.error("Fetch wiki failed", error);
+    console.error("Fetch wiki failed", requestFailureCategory(error));
     window.$message.error("加载信息失败");
   } finally {
     if (token === currentRequestToken.value) {

@@ -20,8 +20,8 @@ export const setCookies = (cookieValue: string) => {
     if (cookieValue.includes("%")) {
       decodedCookie = decodeURIComponent(cookieValue);
     }
-  } catch (e) {
-    console.warn("Cookie URL解码失败，使用原始值:", e);
+  } catch {
+    console.warn("Cookie URL解码失败，使用原始值");
   }
   // 确保以分号结尾（用于正确分割）
   if (!decodedCookie.endsWith(";")) decodedCookie += ";";
@@ -40,7 +40,6 @@ export const setCookies = (cookieValue: string) => {
     const value = nameValuePair[1]?.trim();
     // 跳过无效的cookie
     if (!name || !value) return;
-    console.info(`name: ${name}, value: ${value}`);
     // 设置 cookie
     document.cookie = `${name}=${value}; ${expires}; path=/`;
     // 保存 cookie

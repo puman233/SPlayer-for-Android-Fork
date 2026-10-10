@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
 import { ensureFloatingLyricVisible } from "./floatingLyricLifecycle";
 import { toRaw } from "vue";
@@ -332,7 +333,7 @@ class PlayerController {
       }
       if (requestToken !== this.currentRequestToken) return;
       // 更新音质和音源信息
-      console.log(`🎧 [${playSongData.id}] 最终播放信息:`, audioSource);
+      console.log(`🎧 [${playSongData.id}] 最终播放信息:`, "source resolved");
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
       // 执行底层播放
@@ -350,7 +351,7 @@ class PlayerController {
     } catch (error) {
       if (requestToken === this.currentRequestToken) {
         if (audioManager.engineType === "android-native") audioManager.stop();
-        console.error("❌ 播放初始化失败:", error);
+        console.error("❌ 播放初始化失败:", requestFailureCategory(error));
         // 播放无权限，给出准确提示并跳过
         if (error instanceof Error && error.message === "AUDIO_SOURCE_EMPTY") {
           console.warn(`⚠️ 歌曲暂无权限播放，已跳过`);
@@ -389,7 +390,7 @@ class PlayerController {
         statusStore.playLoading = false;
         return;
       }
-      console.log(`🔄 [${playSongData.id}] 切换音质:`, audioSource);
+      console.log(`🔄 [${playSongData.id}] 切换音质:`, "source resolved");
       // 更新音质和解锁状态
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
@@ -399,7 +400,7 @@ class PlayerController {
       await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
       statusStore.playLoading = false;
     } catch (error) {
-      console.error("❌ 切换音质失败:", error);
+      console.error("❌ 切换音质失败:", requestFailureCategory(error));
       statusStore.playLoading = false;
       window.$message.error("切换音质失败");
     }
@@ -427,7 +428,7 @@ class PlayerController {
         statusStore.playLoading = false;
         return;
       }
-      console.log(`🔄 [${playSongData.id}] 切换音频源:`, audioSource);
+      console.log(`🔄 [${playSongData.id}] 切换音频源:`, "source resolved");
       // 更新状态
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
@@ -439,7 +440,7 @@ class PlayerController {
       await this.loadAndPlay(audioSource.url, shouldAutoPlay, seek);
       statusStore.playLoading = false;
     } catch (error) {
-      console.error("❌ 切换音频源失败:", error);
+      console.error("❌ 切换音频源失败:", requestFailureCategory(error));
       statusStore.playLoading = false;
       window.$message.error("切换音频源失败");
     }
@@ -566,7 +567,7 @@ class PlayerController {
         }
       }
     } catch (error) {
-      console.error("❌ 音频播放失败:", error);
+      console.error("❌ 音频播放失败:", requestFailureCategory(error));
       throw error;
     }
   }
@@ -824,7 +825,7 @@ class PlayerController {
     try {
       windowResult = this.buildAndroidWindowTracks(song);
     } catch (error) {
-      console.warn("[Android] failed to build window tracks:", error);
+      console.warn("[Android] failed to build window tracks:", requestFailureCategory(error));
       windowResult = {
         windowTracks: [],
         windowCurrentIndex: -1,
@@ -859,7 +860,7 @@ class PlayerController {
         }),
       ]);
     } catch (error) {
-      console.warn("[Android] sync playback context failed:", error);
+      console.warn("[Android] sync playback context failed:", requestFailureCategory(error));
     }
   }
 
@@ -956,7 +957,7 @@ class PlayerController {
       const songManager = useSongManager();
       await songManager.prefetchNextSong();
     } catch (error) {
-      console.warn("[Android] refreshAndroidQueueWindow prefetch failed:", error);
+      console.warn("[Android] refreshAndroidQueueWindow prefetch failed:", requestFailureCategory(error));
     }
     // 重要：windowRefilled=true 让 Java 端区分本次推送属于补窗响应，才会消费 pendingResumeAfterRefill 续播。
     // windowResetFromWrap=true（仅 wrap 路径）：Java 用 current() 而非 advanceRaw 避免跳过 track 0。
@@ -1096,7 +1097,7 @@ class PlayerController {
       });
       await this.syncAndroidPlaybackContext(musicStore.playSong);
     } catch (error) {
-      console.error("❌ 解析本地歌曲元信息失败:", error);
+      console.error("❌ 解析本地歌曲元信息失败:", requestFailureCategory(error));
     }
   }
 
@@ -1415,7 +1416,7 @@ class PlayerController {
       await audioManager.resume({ fadeIn: !!fadeTime, fadeDuration: fadeTime });
       statusStore.playStatus = true;
     } catch (error) {
-      console.error("❌ 播放失败:", error);
+      console.error("❌ 播放失败:", requestFailureCategory(error));
       // 如果是 AbortError，尝试重新加载
       if (error instanceof Error && error.name === "AbortError") {
         await this.playSong({ autoPlay: true });
@@ -1799,7 +1800,7 @@ class PlayerController {
       statusStore.lyricIndex = -1;
       await this.playSong({ autoPlay: play });
     } catch (error) {
-      console.error("Error in togglePlayIndex:", error);
+      console.error("Error in togglePlayIndex:", requestFailureCategory(error));
       statusStore.playLoading = false;
       throw error;
     }
@@ -2109,7 +2110,7 @@ class PlayerController {
           await AndroidNativePlayback.hideFloatingLyric();
           statusStore.showDesktopLyric = false;
         } catch (e) {
-          console.error("悬浮歌词操作失败:", e);
+          console.error("悬浮歌词操作失败:", requestFailureCategory(e));
           if (notify) window.$message.error("关闭桌面歌词失败，请重试");
           return;
         }
@@ -2147,7 +2148,7 @@ class PlayerController {
         this.pushFloatingLyricState();
         if (notify) window.$message.success("已开启桌面歌词");
       } catch (e) {
-        console.error("开启悬浮歌词失败:", e);
+        console.error("开启悬浮歌词失败:", requestFailureCategory(e));
         statusStore.showDesktopLyric = false;
         if (notify) window.$message.error("开启桌面歌词失败");
       }

@@ -13,6 +13,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CoverType } from "@/types/main";
 import { artistVideos } from "@/api/artist";
 import { formatCoverList } from "@/utils/format";
@@ -44,7 +45,7 @@ const getArtistAllVideos = async () => {
     videoData.value = videoData.value.concat(listData);
     loading.value = false;
   } catch (error) {
-    console.error("Error getting artist all videos:", error);
+    console.error("Error getting artist all videos:", requestFailureCategory(error));
   }
 };
 

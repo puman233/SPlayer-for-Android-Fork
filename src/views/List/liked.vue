@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption } from "naive-ui";
 import { SongType } from "@/types/main";
 import { songDetail } from "@/api/song";
@@ -245,7 +246,7 @@ const loadPlaylistData = async (id: number, forceRefresh: boolean = false) => {
       dataStore.setLikeSongsList(detailData.value, listData.value);
     }
   } catch (error) {
-    console.error("Failed to load playlist data:", error);
+    console.error("Failed to load playlist data:", requestFailureCategory(error));
   } finally {
     if (currentRequestId.value === id) {
       setLoading(false);
@@ -277,7 +278,7 @@ const fetchAllSongs = async (id: number, total: number) => {
       }
       offset += limit;
     } catch (error) {
-      console.error("Failed to fetch all songs:", error);
+      console.error("Failed to fetch all songs:", requestFailureCategory(error));
       break;
     }
   }
@@ -324,7 +325,7 @@ const syncSongList = async (serverIds: number[], requestId: number) => {
         const songs = formatSongsList(result.songs);
         songs.forEach((song) => cachedMap.set(song.id, song));
       } catch (error) {
-        console.error("Failed to fetch song details:", error);
+        console.error("Failed to fetch song details:", requestFailureCategory(error));
       }
       offset += limit;
     }
@@ -398,7 +399,7 @@ const handleReorder = async (fromIndex: number, toIndex: number) => {
       }
     }
   } catch (error) {
-    console.error("Failed to update song order:", error);
+    console.error("Failed to update song order:", requestFailureCategory(error));
     window.$message.error("保存排序失败，请重试");
     loadPlaylistData(playlistId.value, true);
   }
@@ -421,7 +422,7 @@ onMounted(async () => {
     try {
       await updateUserLikePlaylist();
     } catch (error) {
-      console.error("Failed to update user playlist data:", error);
+      console.error("Failed to update user playlist data:", requestFailureCategory(error));
       setLoading(false);
       return;
     }

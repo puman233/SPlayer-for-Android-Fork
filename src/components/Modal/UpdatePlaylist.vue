@@ -135,7 +135,7 @@ const toUpdatePlaylist = debounce(
       window.$message.success("歌单编辑成功");
       await updateUserLikePlaylist();
     } else {
-      window.$message.error(result.message || "歌单编辑失败，请重试");
+      window.$message.error("歌单编辑失败，请重试");
     }
   },
   300,

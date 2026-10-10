@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "../../src/utils/requestDiagnostics";
 import type { SongMatchInfo, SongUrlResult } from "./types";
 import { isSongMatch } from "./match";
 import axios from "axios";
@@ -29,7 +30,7 @@ const search = async (match: SongMatchInfo): Promise<string | null> => {
     console.warn(`[unblock] ⚠️ Gequbao 搜索结果均不匹配原曲: "${match.songName}"`);
     return null;
   } catch (error) {
-    console.error("[unblock] ❌ Get GequbaoSongId Error:", error);
+    console.error("[unblock] ❌ Get GequbaoSongId Error:", requestFailureCategory(error));
     return null;
   }
 };
@@ -52,7 +53,7 @@ const getPlayId = async (id: string): Promise<string | null> => {
     }
     return null;
   } catch (error) {
-    console.error("[unblock] ❌ Get GequbaoPlayId Error:", error);
+    console.error("[unblock] ❌ Get GequbaoPlayId Error:", requestFailureCategory(error));
     return null;
   }
 };
@@ -99,13 +100,13 @@ const getGequbaoSongUrl = async (match: SongMatchInfo): Promise<SongUrlResult> =
     const { data } = await axios.post(url, body, { headers });
 
     if (data.code === 1 && data.data && data.data.url) {
-      console.log("[unblock] 🔗 GequbaoSong URL:", data.data.url);
+      console.log("[unblock] 🔗 GequbaoSong URL:");
       return { code: 200, url: data.data.url };
     }
 
     return { code: 404, url: null };
   } catch (error) {
-    console.error("[unblock] ❌ Get GequbaoSong URL Error:", error);
+    console.error("[unblock] ❌ Get GequbaoSong URL Error:", requestFailureCategory(error));
     return { code: 404, url: null };
   }
 };

@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance } from "axios";
 import md5 from "md5";
 import { useSettingStore } from "@/stores";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 
 /**
  * Last.fm API 封装
@@ -137,7 +138,7 @@ const lastfmRequest = async (
     const response = await lastfmClient.get("", { params: requestParams });
     return response.data;
   } catch (error) {
-    console.error("Last.fm API 错误:", error);
+    console.error("Last.fm API 错误:", requestFailureCategory(error));
     throw error;
   }
 };
@@ -165,7 +166,7 @@ const lastfmPostRequest = async (method: string, params: Record<string, string |
     });
     return response.data;
   } catch (error) {
-    console.error("Last.fm API POST 错误:", error);
+    console.error("Last.fm API POST 错误:", requestFailureCategory(error));
     throw error;
   }
 };

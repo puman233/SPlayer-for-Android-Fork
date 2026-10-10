@@ -1,9 +1,11 @@
+import "./runtimeDiagnostics";
 import fastify, { type FastifyRequest, type FastifyReply } from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fastifyMultipart from "@fastify/multipart";
 import NeteaseCloudMusicApi from "@neteasecloudmusicapienhanced/api";
 import { pathCase } from "change-case";
 import { createRequire } from "module";
+import { requestFailureCategory } from "../src/utils/requestDiagnostics";
 
 const DEFAULT_PORT = Number(process.env["SP_API_PORT"] || process.env["VITE_SERVER_PORT"] || 1145);
 const DEFAULT_HOST = process.env["SP_API_HOST"] || "0.0.0.0";
@@ -107,7 +109,7 @@ const createDynamicHandler =
       const result = await neteaseApi(mergeCookieInput(request));
       return reply.send(result.body);
     } catch (error: unknown) {
-      server.log.error({ err: error, requestPath }, "Netease API request failed");
+      server.log.error({ category: requestFailureCategory(error) }, "Netease API request failed");
 
       if (typeof error === "object" && error) {
         const apiError = error as { status?: number; body?: unknown; message?: string };
@@ -122,7 +124,25 @@ const createDynamicHandler =
 
 export const createStandaloneApiServer = async () => {
   const server = fastify({
-    logger: true,
+    logger: {
+      // Framework logs (including 404/error logs) can otherwise serialize query URLs.
+      hooks: {
+        logMethod(args, method) {
+          const input = args[0];
+          const entry = input && typeof input === "object" ? input as Record<string, unknown> : {};
+          const categories = ["timeout", "cancelled", "network", "http", "unknown"];
+          const safe = {
+            category: typeof entry.category === "string" && categories.includes(entry.category) ? entry.category : requestFailureCategory(entry.err),
+            statusCode: typeof (entry.res as { statusCode?: unknown })?.statusCode === "number"
+              ? (entry.res as { statusCode: number }).statusCode : undefined,
+            responseTime: typeof entry.responseTime === "number" ? entry.responseTime : undefined,
+          };
+          const message = typeof input === "string" ? input : args[1];
+          const labels = ["incoming request", "request completed", "request errored", "Netease API request failed", "Fetch TTML lyric failed", "Failed to start standalone API"];
+          method.call(this, safe, typeof message === "string" && labels.includes(message) ? message : "API diagnostic");
+        },
+      },
+    },
     routerOptions: {
       ignoreTrailingSlash: true,
     },
@@ -186,7 +206,7 @@ export const createStandaloneApiServer = async () => {
       }
       return reply.send(await response.text());
     } catch (error) {
-      server.log.error({ err: error, id }, "Fetch TTML lyric failed");
+      server.log.error({ category: requestFailureCategory(error) }, "Fetch TTML lyric failed");
       return reply.send(null);
     }
   });
@@ -209,7 +229,7 @@ export const startStandaloneApiServer = async () => {
     );
     return server;
   } catch (error) {
-    server.log.error(error, "Failed to start standalone API");
+    server.log.error({ category: requestFailureCategory(error) }, "Failed to start standalone API");
     throw error;
   }
 };

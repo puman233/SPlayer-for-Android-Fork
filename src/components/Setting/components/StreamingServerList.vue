@@ -109,7 +109,7 @@ const handleAdd = () => {
       await streamingStore.addServer(config);
       window.$message.success("服务器已添加");
     } catch (error) {
-      window.$message.error("添加失败：" + (error instanceof Error ? error.message : "未知错误"));
+      window.$message.error("添加失败，请检查配置和网络");
     }
   });
 };
@@ -121,7 +121,7 @@ const handleEdit = (server: StreamingServerConfig) => {
       await streamingStore.updateServer(server.id, config);
       window.$message.success("服务器已更新");
     } catch (error) {
-      window.$message.error("更新失败：" + (error instanceof Error ? error.message : "未知错误"));
+      window.$message.error("更新失败，请检查配置和网络");
     }
   });
 };
@@ -132,7 +132,7 @@ const handleDelete = async (serverId: string) => {
     await streamingStore.removeServer(serverId);
     window.$message.success("服务器已删除");
   } catch (error) {
-    window.$message.error("删除失败：" + (error instanceof Error ? error.message : "未知错误"));
+    window.$message.error("删除失败，请检查配置和网络");
   }
 };
 
@@ -147,7 +147,7 @@ const handleConnect = async (server: StreamingServerConfig) => {
       window.$message.error(streamingStore.connectionStatus.value.error || "连接失败");
     }
   } catch (error) {
-    window.$message.error("连接失败：" + (error instanceof Error ? error.message : "未知错误"));
+    window.$message.error("连接失败，请检查配置和网络");
   } finally {
     connectingServerId.value = null;
   }

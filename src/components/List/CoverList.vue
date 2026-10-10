@@ -125,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CoverType, SongType } from "@/types/main";
 import { albumDetail } from "@/api/album";
 import { formatNumber } from "@/utils/helper";
@@ -206,7 +207,7 @@ const playList = debounce(
       const list = await getListData(item.id);
       player.updatePlayList(list, undefined, item.id as number);
     } catch (error) {
-      console.log("Error to play: ", error);
+      console.log("Error to play: ", requestFailureCategory(error));
     } finally {
       item.loading = false;
     }

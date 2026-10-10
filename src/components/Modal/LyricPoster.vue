@@ -100,6 +100,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import QRCode from "qrcode";
 import { useMusicStore, useSettingStore } from "@/stores";
 import { isCapacitorAndroid } from "@/utils/env";
@@ -184,7 +185,7 @@ const loadAssets = async () => {
       URL.revokeObjectURL(objectUrl);
     }
   } catch (error) {
-    console.warn("歌词海报封面加载失败:", error);
+    console.warn("歌词海报封面加载失败:", requestFailureCategory(error));
   }
   try {
     qrImage.value = await loadImage(

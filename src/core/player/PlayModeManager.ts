@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { heartRateList } from "@/api/playlist";
 import { useDataStore, useMusicStore, useStatusStore } from "@/stores";
 import type { SongType } from "@/types/main";
@@ -268,7 +269,7 @@ export class PlayModeManager {
 
         this.clearLoadingMessage();
 
-        console.error("切换模式时发生错误:", e);
+        console.error("切换模式时发生错误:", requestFailureCategory(e));
 
         // 失败回滚
         statusStore.shuffleMode = previousMode;

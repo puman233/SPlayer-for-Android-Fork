@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { DropdownOption } from "naive-ui";
 import { SongType } from "@/types/main";
 import {
@@ -113,7 +114,7 @@ export const useSongMenu = () => {
       if (failed?.code !== -200) {
         window.$message.success("导入成功");
       } else {
-        window.$message.error(failed?.msg || "导入失败，请重试");
+        window.$message.error("导入失败，请重试");
       }
     } else {
       window.$message.error("导入失败，请重试");
@@ -145,7 +146,7 @@ export const useSongMenu = () => {
     } catch (error) {
       loadingMessage.destroy();
       window.$message.error("操作失败，请重试");
-      console.error("不感兴趣操作失败：", error);
+      console.error("不感兴趣操作失败：", requestFailureCategory(error));
     }
   };
 

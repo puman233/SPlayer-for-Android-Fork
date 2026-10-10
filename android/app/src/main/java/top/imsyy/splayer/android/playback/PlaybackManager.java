@@ -2245,7 +2245,7 @@ public final class PlaybackManager {
               bitmap = BitmapFactory.decodeFile(Uri.parse(coverUrl).getPath());
             }
           } catch (Exception error) {
-            Log.w(TAG, "Failed to load cover art", error);
+            Log.w(TAG, "Failed to load cover art" + " [unknown]");
           } finally {
             try {
               if (inputStream != null) {
@@ -2377,12 +2377,11 @@ public final class PlaybackManager {
                   + httpCode
                   + ", businessCode="
                   + businessCode
-                  + ", response="
-                  + response);
+                  );
           return FavoriteRequestResult.failure("favorite_failed");
         }
       } catch (Exception error) {
-        Log.w(TAG, "Failed to toggle song favorite, attempt=" + attempt, error);
+        Log.w(TAG, "Failed to toggle song favorite, attempt=" + attempt + " [unknown]");
         if (attempt >= FAVORITE_REQUEST_MAX_ATTEMPTS) {
           return FavoriteRequestResult.failure("favorite_failed");
         }
@@ -2411,7 +2410,7 @@ public final class PlaybackManager {
     try {
       return new JSONObject(response).optInt("code", -1);
     } catch (Exception error) {
-      Log.w(TAG, "Failed to parse favorite response", error);
+      Log.w(TAG, "Failed to parse favorite response" + " [unknown]");
       return -1;
     }
   }

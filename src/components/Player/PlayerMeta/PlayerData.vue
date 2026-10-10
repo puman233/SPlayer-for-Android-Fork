@@ -177,6 +177,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { RouteLocationRaw } from "vue-router";
 import { useMusicStore, useStatusStore, useSettingStore } from "@/stores";
 import { debounce, isObject } from "lodash-es";
@@ -272,7 +273,7 @@ const handleQualitySelectAndClose = async (value: string) => {
     await handleQualitySelect(value);
     showQualityPopover.value = false;
   } catch (error) {
-    console.error("音质切换失败:", error);
+    console.error("音质切换失败:", requestFailureCategory(error));
     window.$message.error("音质切换失败");
   }
 };

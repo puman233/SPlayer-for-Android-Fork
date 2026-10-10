@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType, SongLevelType } from "@/types/main";
 import { useDataStore, useSettingStore } from "@/stores";
 import { isCapacitorAndroid, isElectron } from "@/utils/env";
@@ -134,7 +135,7 @@ class SongDownloadStrategy implements DownloadStrategy {
           const ttmlRes = await songLyricTTML(this.song.id);
           if (typeof ttmlRes === "string") ttmlLyric = ttmlRes;
         } catch (e) {
-          console.error("Failed to fetch TTML", e);
+          console.error("Failed to fetch TTML", requestFailureCategory(e));
         }
 
         if (!ttmlLyric && !yrcLyric) {
@@ -148,7 +149,7 @@ class SongDownloadStrategy implements DownloadStrategy {
               qmResultData = qmResult;
             }
           } catch (e) {
-            console.error("QM Fallback failed", e);
+            console.error("QM Fallback failed", requestFailureCategory(e));
           }
         }
 
@@ -187,7 +188,7 @@ class SongDownloadStrategy implements DownloadStrategy {
               return [];
             })
             .catch((e) => {
-              console.error(`获取专辑艺术家失败: ${album.id}`, e);
+              console.error(`获取专辑艺术家失败: ${album.id}`, requestFailureCategory(e));
               return [];
             });
           albumArtistCache.set(album.id, promise);
@@ -315,7 +316,7 @@ class SongDownloadStrategy implements DownloadStrategy {
           };
         }
       } catch (e) {
-        console.error("Error fetching playback url for download:", e);
+        console.error("Error fetching playback url for download:", requestFailureCategory(e));
       }
     }
 
@@ -362,7 +363,7 @@ class SongDownloadStrategy implements DownloadStrategy {
           }
         }
       } catch (e) {
-        console.error("Error fetching unlock url for download:", e);
+        console.error("Error fetching unlock url for download:", requestFailureCategory(e));
       }
     }
 
@@ -724,11 +725,10 @@ class DownloadManager {
       }
     } catch (error: any) {
       if (!this.isCurrent(task)) return;
-      console.error(`Error processing task ${strategy.name} (ID: ${strategy.id}):`, error);
-      if (error?.message) console.error("Error message:", error.message);
+      console.error(`Error processing task ${strategy.name} (ID: ${strategy.id}):`, requestFailureCategory(error));
 
       dataStore.markDownloadFailed(strategy.id);
-      window.$message.error(error.message || "下载出错");
+      window.$message.error("下载出错，请检查网络、音源和下载目录");
     } finally {
       this.activeDownloads.delete(task.taskId);
       if (this.tasks.get(strategy.id) === task) this.tasks.delete(strategy.id);

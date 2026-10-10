@@ -64,6 +64,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption, MessageReactive } from "naive-ui";
 import { formatCoverList, formatSongsList } from "@/utils/format";
 import { renderIcon, copyData, getShareUrl } from "@/utils/helper";
@@ -237,7 +238,7 @@ const backgroundCheck = async (id: number, cached: ListCacheData) => {
       getRadioDetail(id, true);
     }
   } catch (e) {
-    console.error("Radio background check failed", e);
+    console.error("Radio background check failed", requestFailureCategory(e));
   }
 };
 

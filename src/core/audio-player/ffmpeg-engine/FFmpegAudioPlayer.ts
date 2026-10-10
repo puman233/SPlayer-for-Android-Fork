@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { toError } from "@/utils/error";
 import { type GetDetail } from "@/utils/TypedEventTarget";
 import { AudioErrorCode, BaseAudioPlayer, type AudioEventMap } from "../BaseAudioPlayer";
@@ -198,7 +199,7 @@ export class FFmpegAudioPlayer extends BaseAudioPlayer {
       }
     } catch (e) {
       const err = toError(e);
-      console.error("[Player] Load error:", err);
+      console.error("[Player] Load error:", requestFailureCategory(err));
       this.dispatch("error", {
         originalEvent: new Event("error"),
         errorCode: AudioErrorCode.DECODE,
@@ -246,7 +247,7 @@ export class FFmpegAudioPlayer extends BaseAudioPlayer {
       });
     } catch (e) {
       const err = toError(e);
-      console.error("[Player] LoadSrc error:", err);
+      console.error("[Player] LoadSrc error:", requestFailureCategory(err));
       this.dispatch("error", { originalEvent: new Event("error"), errorCode: 2 });
     }
   }
@@ -314,7 +315,7 @@ export class FFmpegAudioPlayer extends BaseAudioPlayer {
       if (err.name === "AbortError") {
         return;
       } else {
-        console.error("[Player] Stream error:", err);
+        console.error("[Player] Stream error:", requestFailureCategory(err));
         this.dispatch("error", { originalEvent: new Event("error"), errorCode: 2 });
       }
     }

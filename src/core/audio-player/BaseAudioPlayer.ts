@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useSettingStore } from "@/stores";
 import { TypedEventTarget } from "@/utils/TypedEventTarget";
 import type { IExtendedAudioContext } from "@/types/audio/context";
@@ -226,7 +227,7 @@ export abstract class BaseAudioPlayer
     try {
       await this.doPlay();
     } catch (e) {
-      console.error("播放失败", e);
+      console.error("播放失败", requestFailureCategory(e));
       throw e;
     }
   }

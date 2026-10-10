@@ -149,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useDataStore, useSettingStore } from "@/stores";
 import { personalized, newAlbumsAll, topArtists } from "@/api/rec";
 import { allMv } from "@/api/video";
@@ -319,7 +320,7 @@ const fetchFromNetwork = async (silent: boolean) => {
       video: videoRec.value.length,
     });
   } catch (err) {
-    console.error("加载数据失败:", err);
+    console.error("加载数据失败:", requestFailureCategory(err));
     if (!silent) error.value = true;
   } finally {
     if (!silent) loading.value = false;

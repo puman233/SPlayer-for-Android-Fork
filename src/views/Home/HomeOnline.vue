@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { ArtistType, CoverType } from "@/types/main";
 import { NText } from "naive-ui";
 import { useDataStore, useMusicStore, useSettingStore } from "@/stores";
@@ -184,7 +185,7 @@ const loadPlaylistRecommendations = (force = false): Promise<void> => {
         result.result.filter((pl: any) => !pl.name.includes("私人雷达")),
       );
     } catch (error) {
-      console.error("Error getting playlist:", error);
+      console.error("Error getting playlist:", requestFailureCategory(error));
     } finally {
       if (playlistFlight?.promise === promise) playlistFlight = null;
     }
@@ -211,39 +212,39 @@ const getAllRecData = async () => {
       const radarRes = await getCacheData(radarPlaylist, { key: "radarRec", time: 30 });
       recData.value.radar.list = formatCoverList(radarRes);
     } catch (error) {
-      console.error("Error getting radar:", error);
+      console.error("Error getting radar:", requestFailureCategory(error));
     }
 
     try {
       const artistRes = await getCacheData(topArtists, { key: "artistRec", time: 10 }, 6);
       recData.value.artist.list = formatArtistsList(artistRes.artists);
     } catch (error) {
-      console.error("Error getting artist:", error);
+      console.error("Error getting artist:", requestFailureCategory(error));
     }
 
     try {
       const videoRes = await getCacheData(allMv, { key: "videoRec", time: 10 });
       recData.value.video.list = formatCoverList(videoRes.data);
     } catch (error) {
-      console.error("Error getting video:", error);
+      console.error("Error getting video:", requestFailureCategory(error));
     }
 
     try {
       const radioRes = await getCacheData(radioRecommend, { key: "radioRec", time: 10 });
       recData.value.radio.list = formatCoverList(radioRes.djRadios);
     } catch (error) {
-      console.error("Error getting radio:", error);
+      console.error("Error getting radio:", requestFailureCategory(error));
     }
 
     try {
       const albumRes = await getCacheData(newAlbumsAll, { key: "albumRec", time: 10 });
       recData.value.album.list = formatCoverList(albumRes.albums);
     } catch (error) {
-      console.error("Error getting album:", error);
+      console.error("Error getting album:", requestFailureCategory(error));
     }
   } catch (error) {
     window.$message.error("个性化推荐获取出错");
-    console.error("Error getting personalized data:", error);
+    console.error("Error getting personalized data:", requestFailureCategory(error));
   }
 };
 

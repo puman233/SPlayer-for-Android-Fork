@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "../../src/utils/requestDiagnostics";
 import { encryptQuery } from "./kwDES";
 import type { SongMatchInfo, SongUrlResult } from "./types";
 import { isSongMatch } from "./match";
@@ -32,7 +33,7 @@ const getKuwoSongId = async (match: SongMatchInfo): Promise<string | null> => {
     console.warn(`[unblock] ⚠️ Kuwo 搜索结果均不匹配原曲: "${match.songName}"`);
     return null;
   } catch (error) {
-    console.error("[unblock] ❌ Get KuwoSongId Error:", error);
+    console.error("[unblock] ❌ Get KuwoSongId Error:", requestFailureCategory(error));
     return null;
   }
 };
@@ -62,12 +63,12 @@ const getKuwoSongUrl = async (match: SongMatchInfo): Promise<SongUrlResult> => {
     });
     if (result.data) {
       const urlMatch = result.data.match(/http[^\s$"]+/)[0];
-      console.log("[unblock] 🔗 KuwoSong URL:", urlMatch);
+      console.log("[unblock] 🔗 KuwoSong URL:");
       return { code: 200, url: urlMatch };
     }
     return { code: 404, url: null };
   } catch (error) {
-    console.error("[unblock] ❌ Get KuwoSong URL Error:", error);
+    console.error("[unblock] ❌ Get KuwoSong URL Error:", requestFailureCategory(error));
     return { code: 404, url: null };
   }
 };

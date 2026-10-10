@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 /**
  * Emby API 客户端
  * 基于 Jellyfin 实现，因为两者 API 高度兼容
@@ -524,7 +525,7 @@ export const getLyrics = async (config: StreamingServerConfig, itemId: string): 
     }
     return "";
   } catch (error) {
-    console.warn("Failed to fetch lyrics from Emby:", error);
+    console.warn("Failed to fetch lyrics from Emby:", requestFailureCategory(error));
     return "";
   }
 };

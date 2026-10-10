@@ -13,6 +13,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
+import top.imsyy.splayer.android.security.ApplicationConsoleClient;
 import top.imsyy.splayer.android.cache.AndroidCachePlugin;
 import top.imsyy.splayer.android.cache.AudioPrefetchTtlIndex;
 import top.imsyy.splayer.android.download.AndroidDownloadPlugin;
@@ -42,6 +43,11 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(AndroidSharePlugin.class);
     registerPlugin(AndroidAppUpdatePlugin.class);
     super.onCreate(savedInstanceState);
+    // SDK packet tracing is disabled in config, including during Activity rebuilds.
+    // Keep normal application Console diagnostics and all inherited browser handling.
+    if (bridge != null) {
+      bridge.getWebView().setWebChromeClient(new ApplicationConsoleClient(bridge));
+    }
     // 冷启动重置沉浸式 pref，避免强杀残留隐藏导航栏；旋屏重建（savedInstanceState != null）保留
     if (savedInstanceState == null) {
       try {

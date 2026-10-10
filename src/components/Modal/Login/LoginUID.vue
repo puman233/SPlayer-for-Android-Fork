@@ -42,7 +42,7 @@ const login = async () => {
     emit("close");
   } catch (error) {
     window.$message.error("登录失败，请重试");
-    console.error("UID 登录出错：", error);
+    console.error("UID 登录出错：");
   } finally {
     loadingMsg.value?.destroy();
     loadingMsg.value = null;

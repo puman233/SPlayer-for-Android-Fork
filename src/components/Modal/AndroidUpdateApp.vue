@@ -28,12 +28,12 @@
     </n-text>
 
     <n-scrollbar style="max-height: 360px">
-      <div class="markdown-body" v-html="data.changelog || '暂无更新日志'" />
+      <div class="markdown-body" v-html="safeChangelog || '暂无更新日志'" />
     </n-scrollbar>
 
     <n-flex justify="end" class="actions">
       <n-button secondary @click="emit('close')">关闭</n-button>
-      <n-button secondary @click="openLink(data.url)">浏览器下载</n-button>
+      <n-button secondary @click="openReleasePage">浏览器下载</n-button>
       <n-button v-if="downloading" type="warning" secondary @click="cancelDownload">
         取消下载
       </n-button>
@@ -51,12 +51,13 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { App } from "@capacitor/app";
 import type { PluginListenerHandle } from "@capacitor/core";
 import packageJson from "@/../package.json";
 import type { UpdateLogType } from "@/types/main";
 import { openLink } from "@/utils/helper";
+import { isAllowedUpdateUrl, sanitizeUpdateHtml } from "@/core/update/changelog";
 import { AndroidAppUpdate } from "@/plugins/androidAppUpdate";
 import {
   fetchAndroidReleaseAssets,
@@ -68,7 +69,12 @@ import {
 import "github-markdown-css/github-markdown.css";
 
 const props = defineProps<{ data: UpdateLogType }>();
+const safeChangelog = computed(() => sanitizeUpdateHtml(props.data.changelog || ""));
 const emit = defineEmits<{ close: [] }>();
+const openReleasePage = () => {
+  if (isAllowedUpdateUrl(props.data.url)) openLink(props.data.url);
+  else window.$message.error("更新页面链接无效");
+};
 
 const asset = ref<AndroidReleaseAsset | null>(null);
 const errorMessage = ref("");

@@ -124,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { StreamingServerConfig } from "@/types/streaming";
 import type { SongType } from "@/types/main";
 import type { DropdownOption } from "naive-ui";
@@ -230,7 +231,7 @@ const handleServerChange = async (serverId: string) => {
       window.$message.error(streamingStore.connectionStatus.value.error || "切换失败");
     }
   } catch (error) {
-    window.$message.error("切换失败：" + (error instanceof Error ? error.message : "未知错误"));
+    window.$message.error("切换失败，请检查配置和网络");
   } finally {
     loading.value = false;
   }
@@ -291,7 +292,7 @@ const openServerConfig = () => {
         window.$message.error(streamingStore.connectionStatus.value.error || "连接失败");
       }
     } catch (error) {
-      window.$message.error("连接失败：" + (error instanceof Error ? error.message : "未知错误"));
+      window.$message.error("连接失败，请检查配置和网络");
     }
   });
 };
@@ -316,7 +317,7 @@ const loadData = async () => {
   try {
     await streamingStore.fetchSongs(0, 500);
   } catch (error) {
-    console.error("Failed to load data:", error);
+    console.error("Failed to load data:", requestFailureCategory(error));
     window.$message.error("加载流媒体数据失败");
   } finally {
     loading.value = false;
@@ -366,7 +367,7 @@ const fetchRemainingSongs = async (startOffset: number) => {
         offset += limit;
       }
     } catch (error) {
-      console.error("Background fetch failed:", error);
+      console.error("Background fetch failed:", requestFailureCategory(error));
       hasMore = false;
     }
   }
@@ -411,7 +412,7 @@ const refreshCurrentTab = async () => {
         break;
     }
   } catch (error) {
-    console.error("Failed to refresh tab data:", error);
+    console.error("Failed to refresh tab data:", requestFailureCategory(error));
     window.$message.error("加载数据失败");
   } finally {
     if (loading.value) loading.value = false;
@@ -453,7 +454,7 @@ const forceRefreshCurrentTab = async () => {
         break;
     }
   } catch (error) {
-    console.error("Failed to force refresh tab data:", error);
+    console.error("Failed to force refresh tab data:", requestFailureCategory(error));
   } finally {
     if (loading.value) loading.value = false;
   }

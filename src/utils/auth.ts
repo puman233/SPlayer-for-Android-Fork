@@ -35,7 +35,7 @@ const _runBackgroundUserSync = (tasks: BackgroundSyncTask[]) => {
   void Promise.allSettled(tasks.map(({ task }) => task())).then((results) => {
     results.forEach((result, index) => {
       if (result.status === "rejected") {
-        console.warn(`Non-critical user sync failed: ${tasks[index]?.name}`, result.reason);
+        console.warn(`Non-critical user sync failed: ${tasks[index]?.name}`);
       }
     });
   });
@@ -203,8 +203,8 @@ export const switchAccount = async (userId: number) => {
     // 切换账号后静默热重载，让 UI 立即以新账号刷新（跳过 beforeunload 拦截）
     (window as unknown as { __splayerHotReloading?: boolean }).__splayerHotReloading = true;
     setTimeout(() => window.location.reload(), 600);
-  } catch (error) {
-    console.error("Failed to switch account:", error);
+  } catch {
+    console.error("Failed to switch account:");
     window.$message.error("切换账号失败");
     // 回滚或踢出
     dataStore.userLoginStatus = false;
@@ -273,7 +273,7 @@ export const updateUserData = async () => {
     const hasFailed = allUserLikeResult.some((result) => result.status === "rejected");
     if (hasFailed) throw new Error("Failed to update some user data");
   } catch (error) {
-    console.error("❌ Error updating user data:", error);
+    console.error("❌ Error updating user data:");
     throw error;
   }
 };
@@ -301,7 +301,7 @@ export const updateSpecialUserData = async (userData?: any) => {
     // 获取用户喜欢数据
     await updateUserLikePlaylist();
   } catch (error) {
-    console.error("❌ Error updating special user data:", error);
+    console.error("❌ Error updating special user data:");
     throw error;
   }
 };
@@ -383,9 +383,9 @@ export const toLikeSong: DebouncedFunc<(song: SongType, like: boolean) => Promis
       usePlayerController().applySongLikeState(id, like);
       // ipc
       if (isElectron) window.electron.ipcRenderer.send("like-status-change", like);
-    } catch (error) {
+    } catch {
       window.$message.error(`${like ? "喜欢" : "取消"}音乐时发生错误`);
-      console.error("❌ 更新喜欢歌曲时失败:", error);
+      console.error("❌ 更新喜欢歌曲时失败:");
     }
   },
   300,
@@ -488,8 +488,8 @@ const setUserLikeDataLoop = async <T>(
       }
 
       offset += limit;
-    } catch (error) {
-      console.error(`Error fetching ${key} data at offset ${offset}:`, error);
+    } catch {
+      console.error(`Error fetching ${key} data at offset ${offset}:`);
       break;
     }
   }
@@ -525,7 +525,7 @@ export const updateDailySongsData = async (refresh = false) => {
     musicStore.dailySongsData = { timestamp: Date.now(), list: songsData };
     if (refresh) window.$message.success("每日推荐更新成功");
   } catch (error) {
-    console.error("❌ Error updating daily songs data:", error);
+    console.error("❌ Error updating daily songs data:");
     throw error;
   }
 };
@@ -572,18 +572,18 @@ export const deleteSongs = async (
         const result = await playlistTracks(pid, ids, "del");
         if (result.status === 200) {
           if (result.body?.code !== 200) {
-            window.$message.error(result.body?.message || "删除歌曲失败，请重试");
+            window.$message.error("删除歌曲失败，请重试");
             return;
           }
           if (isFunction(callback)) callback();
           window.$message.success("删除成功");
         } else {
-          window.$message.error(result?.message || "删除歌曲失败，请重试");
+          window.$message.error("删除歌曲失败，请重试");
         }
       },
     });
   } catch (error) {
-    console.error("❌ Error deleting songs:", error);
+    console.error("❌ Error deleting songs:");
     throw error;
   }
 };

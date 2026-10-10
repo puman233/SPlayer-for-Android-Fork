@@ -141,7 +141,7 @@ const addToOnlinePlaylist = debounce(
     if (loadingMsg.value) loadingMsg.value.destroy();
     if (result.status === 200) {
       if (result.body?.code !== 200) {
-        window.$message.error(result.body?.message || "添加失败，请重试");
+        window.$message.error("添加失败，请重试");
         return;
       }
       emit("close");
@@ -149,7 +149,7 @@ const addToOnlinePlaylist = debounce(
       if (index === 0) await updateUserLikeSongs();
       await updateUserLikePlaylist();
     } else {
-      window.$message.error(result?.message || "添加失败，请重试");
+      window.$message.error("添加失败，请重试");
     }
   },
   500,

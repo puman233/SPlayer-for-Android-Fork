@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
+import { requestFailureCategory } from "../../utils/requestDiagnostics";
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 const deferred = () => {
@@ -17,6 +18,7 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
   const requests: any[] = [];
   const songs: any[] = [];
   const messages: string[] = [];
+  const logs: unknown[][] = [];
   let progress: (event: any) => void = () => {};
   let cancelFails = false;
   const settings = {
@@ -48,6 +50,7 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
     addListener: async (_name: string, callback: typeof progress) => { progress = callback; return { remove: async () => {} }; },
   };
   const imports: Record<string, any> = {
+    "@/utils/requestDiagnostics": { requestFailureCategory },
     "@/stores": { useSettingStore: () => settings, useDataStore: () => data },
     "@/utils/env": { isCapacitorAndroid: true, isElectron: false },
     "@/api/song": { songDownloadUrl: async (id: number) => ({ code: 200, data: { url: `http://fixture/${id}`, type: "mp3" } }) },
@@ -63,11 +66,11 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
   runInNewContext(transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText, {
     module, exports: module.exports,
     require: (name: string) => { if (!(name in imports)) throw new Error(`unconfigured boundary ${name}`); return imports[name]; },
-    console: { log() {}, error() {} }, crypto: random,
+    console: { log() {}, error: (...args: unknown[]) => logs.push(args) }, crypto: random,
     window: { $message: { success: (s: string) => messages.push(s), error: (s: string) => messages.push(s) } },
   });
   const manager = module.exports.downloadManager;
-  return { manager, songs, requests, messages, settings, emit: (e: any) => progress(e), failCancel: () => { cancelFails = true; },
+  return { manager, songs, requests, messages, logs, settings, emit: (e: any) => progress(e), failCancel: () => { cancelFails = true; },
     add: async (id: number) => { await manager.addDownload({ id, name: `song${id}`, album: "album", artists: "artist" }, "standard"); await tick(); },
   };
 }
@@ -206,4 +209,17 @@ test("deletion racing a resolved native completion cannot report success for the
   assert.equal(f.songs.length, 1);
   assert.equal(f.requests.length, 2);
   assert.equal(f.songs[0].status, "downloading");
+});
+
+
+test("download failure preserves failed state without logging credentials or showing transport message", async () => {
+  const f = fixture(); await f.add(990);
+  const error = Object.assign(new Error("fixture_download_token"), {
+    isAxiosError: true, code: "ERR_NETWORK", config: { headers: { Authorization: "fixture_download_authorization" }, data: "fixture_download_session" },
+  });
+  f.requests[0].result.reject(error); await tick();
+  assert.equal(f.songs[0].status, "failed");
+  assert.equal(f.requests[0].running, false);
+  assert.deepEqual(f.logs[0].slice(1), ["network"]);
+  assert.ok(!JSON.stringify([f.logs, f.messages]).includes("fixture_download_"));
 });

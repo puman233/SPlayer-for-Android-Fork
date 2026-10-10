@@ -162,6 +162,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType } from "@/types/main";
 import type { FormInst, FormRules } from "naive-ui";
 import type { ICommonTagsResult, IFormat } from "music-metadata";
@@ -302,7 +303,7 @@ const onlineMatch = debounce(
         window.$message.success("匹配成功");
       }
     } catch (error) {
-      console.error("Error online matching:", error);
+      console.error("Error online matching:", requestFailureCategory(error));
       window.$message.error("匹配出错，请重试");
     }
   },

@@ -91,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption, MessageReactive } from "naive-ui";
 import { SongType } from "@/types/main";
 import { songDetail } from "@/api/song";
@@ -303,7 +304,7 @@ const getPlaylistDetail = async (
     try {
       await handleOnlinePlaylist(id, getList, refresh);
     } catch (error) {
-      console.error("Failed to load playlist", error);
+      console.error("Failed to load playlist", requestFailureCategory(error));
       window.$message.error("获取歌单详情失败");
       setLoading(false);
       router.push("/");
@@ -420,7 +421,7 @@ const backgroundCheck = async (id: number, cached: ListCacheData) => {
       handleOnlinePlaylist(id, true, true);
     }
   } catch (e) {
-    console.error("Background check failed", e);
+    console.error("Background check failed", requestFailureCategory(e));
   }
 };
 
@@ -607,7 +608,7 @@ const handleReorder = async (fromIndex: number, toIndex: number) => {
         }
       }
     } catch (error) {
-      console.error("Failed to update song order:", error);
+      console.error("Failed to update song order:", requestFailureCategory(error));
       window.$message.error("保存排序失败，请重试");
       getPlaylistDetail(playlistId.value, { getList: true, refresh: true });
     }

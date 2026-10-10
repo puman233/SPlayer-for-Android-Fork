@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { usePlayerController } from "@/core/player/PlayerController";
 import * as playerIpc from "@/core/player/PlayerIpc";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
@@ -210,7 +211,7 @@ const initIpc = () => {
     // 协议数据
     window.electron.ipcRenderer.on("protocol-url", (_, url) => {
       if (typeof url !== "string") return;
-      console.log("📡 Received protocol url:", url);
+      console.log("Received protocol request");
       handleProtocolUrl(url);
     });
     // 请求播放信息
@@ -243,7 +244,7 @@ const initIpc = () => {
       );
     });
   } catch (error) {
-    console.log(error);
+    console.log(requestFailureCategory(error));
   }
 };
 

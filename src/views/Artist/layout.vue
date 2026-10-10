@@ -152,6 +152,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption } from "naive-ui";
 import type { ArtistType } from "@/types/main";
 import { useResizeObserver } from "@vueuse/core";
@@ -249,7 +250,7 @@ const getArtistDetail = async (id: number) => {
     // 附加身份
     artistDetailData.value.identify = result.data.identify?.imageDesc;
   } catch (error) {
-    console.error("Erorr getting artist detail:", error);
+    console.error("Erorr getting artist detail:", requestFailureCategory(error));
     window.$message.error("获取歌手详情失败");
   }
 };

@@ -115,7 +115,7 @@ const toCreatePlaylist = debounce(
         }
         await updateUserLikePlaylist();
       } else {
-        window.$message.error(result.message || "新建歌单失败，请重试");
+        window.$message.error("新建歌单失败，请重试");
       }
     } else {
       // 本地歌单

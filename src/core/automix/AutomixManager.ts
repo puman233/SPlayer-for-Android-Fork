@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { AudioScheduler } from "./AudioScheduler";
 import { getSharedAudioContext } from "./SharedAudioContext";
 import { useAudioManager } from "../player/AudioManager";
@@ -1051,7 +1052,7 @@ export class AutomixManager {
         console.log("[Automix] Transition cancelled (new request)");
         return;
       }
-      console.error("Automix failed, fallback to normal play", e);
+      console.error("Automix failed, fallback to normal play", requestFailureCategory(e));
       if (requestToken === playerController.currentRequestToken) {
         playerController.isTransitioning = false;
         this.resetAutomixScheduling("IDLE");

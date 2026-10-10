@@ -27,6 +27,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType, MetaData } from "@/types/main";
 import { useSettingStore } from "@/stores";
 import { searchArtist, artistDetail } from "@/api/artist";
@@ -105,7 +106,7 @@ const getArtistData = async () => {
           cover: artist?.avatar || artist?.img1v1Url || artist?.picUrl,
         };
       } catch (error) {
-        console.error(`获取歌手 ${ar.name} (${ar.id}) 的详情失败:`, error);
+        console.error(`获取歌手 ${ar.name} (${ar.id}) 的详情失败:`, requestFailureCategory(error));
         return { id: ar.id, name: ar.name, cover: undefined };
       }
     });

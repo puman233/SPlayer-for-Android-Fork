@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { songQuality } from "@/api/song";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
@@ -118,7 +119,7 @@ export const useQualityControl = () => {
         window.$message.warning("获取音质信息失败");
       }
     } catch (error) {
-      console.error(`获取音质详情失败${isPreload ? " (预加载)" : ""}:`, error);
+      console.error(`获取音质详情失败${isPreload ? " (预加载)" : ""}:`, requestFailureCategory(error));
       statusStore.availableQualities = [];
       if (!isPreload) {
         window.$message.error("获取音质信息失败");

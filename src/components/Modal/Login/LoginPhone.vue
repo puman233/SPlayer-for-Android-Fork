@@ -101,7 +101,7 @@ const getCountryListData = async () => {
     }));
     countryListData.value = transformedData;
   } catch (error) {
-    console.error("获取国家列表失败:", error);
+    console.error("获取国家列表失败:");
     countryListData.value = [
       {
         key: "86",

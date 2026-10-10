@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   排除以下数据：
-  - cache / external_cache：体积膨胀且语义无需迁移
+  - cache / code_cache / no_backup：由 Android 自动排除，不配置不受支持的存储域
   - WebView 内部存储（app_webview）：含登录态 cookie / localStorage / IndexedDB 等敏感数据，
-    跨设备恢复会泄露账号会话（修复 #5 隐私风险）
+    跨设备恢复可能带入敏感账号会话
   - Capacitor 的 SharedPreferences (CapacitorStorage)：用户偏好可重建，且部分设置含 API 配置
-  其余如音乐设置、播放历史等无敏感字段的 prefs 仍允许备份，方便重装恢复体验。
+  其余原生 prefs 仍允许备份。与凭据同在 WebView 的普通偏好也会被排除，
+  无法仅靠目录规则分离；本规则不更改其正常运行时持久化。
 -->
 <full-backup-content>
-    <exclude domain="cache" />
-    <exclude domain="external_cache" />
-    <exclude domain="file" path="app_webview/" />
+    <exclude domain="root" path="app_webview/" />
     <exclude domain="database" path="webview.db" />
     <exclude domain="database" path="webviewCookiesChromium.db" />
     <exclude domain="sharedpref" path="CapacitorStorage.xml" />

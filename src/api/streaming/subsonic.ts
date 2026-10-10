@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 /**
  * Subsonic API 客户端
  * 适用于 Navidrome、OpenSubsonic 和其他兼容 Subsonic API 的服务器
@@ -179,7 +180,7 @@ export const getLyrics = async (
     if (result.lyrics?.content) return result.lyrics.content;
     if (result.lyricsList?.lyrics?.[0]?.content) return result.lyricsList.lyrics[0].content;
   } catch (e) {
-    console.warn("getLyrics failed:", e);
+    console.warn("getLyrics failed:", requestFailureCategory(e));
   }
 
   return "";
@@ -228,7 +229,7 @@ export const getLyricsBySongId = async (
     }
     return result.lyricsList?.lyrics?.[0]?.content || "";
   } catch (e) {
-    console.warn("getLyricsBySongId failed:", e);
+    console.warn("getLyricsBySongId failed:", requestFailureCategory(e));
     return "";
   }
 };

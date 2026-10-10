@@ -15,6 +15,7 @@ import { cloneDeep, isEmpty } from "lodash-es";
 import { isLogin } from "@/utils/auth";
 import { formatCategoryList } from "@/utils/format";
 import localforage from "localforage";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 
 interface ListState {
   playList: SongType[];
@@ -474,14 +475,14 @@ export const useDataStore = defineStore("data", {
       // 获取歌单分类
       try {
         const [catsRes, hqCatsRes] = await Promise.all([playlistCatlist(), playlistCatlist(true)]);
-        console.log(catsRes, hqCatsRes);
+        console.log("Playlist categories received");
         this.catData = {
           type: catsRes.categories,
           cats: formatCategoryList(catsRes.sub),
           hqCats: formatCategoryList(hqCatsRes.tags),
         };
       } catch (error) {
-        console.error("Error getting playlist cat list:", error);
+        console.error("Error getting playlist cat list:", requestFailureCategory(error));
         throw error;
       }
     },

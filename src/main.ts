@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) SPlayer-Dev Contributors
 // Original source: https://github.com/SPlayer-Dev/SPlayer
+import "./security/nativeBridgeDiagnostics";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { createPinia } from "pinia";
@@ -22,7 +24,7 @@ app.directive("debounce", debounceDirective);
 app.directive("throttle", throttleDirective);
 app.directive("visible", visibleDirective);
 
-app.config.errorHandler = (err, _instance, info) => {
+app.config.errorHandler = (err) => {
   const error = err as Error & { isAxiosError?: boolean; code?: string };
   const message = error?.message || "";
   const nonCriticalKeywords = [
@@ -42,11 +44,23 @@ app.config.errorHandler = (err, _instance, info) => {
     nonCriticalKeywords.some((keyword) => message.includes(keyword));
 
   if (isNonCritical) {
-    console.warn("[Vue ErrorHandler] Ignored non-fatal error", err, info);
+    console.warn("[Vue ErrorHandler] Ignored non-fatal error", requestFailureCategory(err));
     return;
   }
 
-  console.error("[Vue ErrorHandler] Fatal error", err, info);
+  console.error("[Vue ErrorHandler] Fatal error", requestFailureCategory(err));
+};
+
+window.addEventListener("unhandledrejection", (event) => {
+  // Suppress the browser's default serialization, not the Promise rejection itself.
+  event.preventDefault();
+  console.error("[Unhandled rejection]", requestFailureCategory(event.reason));
+});
+
+// Replace SDK/default window error serialization; never forward source URLs/messages.
+window.onerror = (_message, _source, _line, _column, error) => {
+  console.error("[Window error]", requestFailureCategory(error));
+  return true;
 };
 
 app.mount("#app");
@@ -57,7 +71,7 @@ if (isCapacitorAndroid) {
       startHealthCheck();
     })
     .catch((error) => {
-      console.error("Failed to warm up embedded API:", error);
+      console.error("Failed to warm up embedded API:", requestFailureCategory(error));
     });
 }
 
@@ -71,6 +85,6 @@ if (isElectron && !location.hash.includes("desktop-lyric")) {
     const settings = useSettingStore();
     sendRegisterProtocol("orpheus", settings.registryProtocol.orpheus);
   })().catch((err) => {
-    console.error("Electron 主进程辅助模块加载失败:", err);
+    console.error("Electron 主进程辅助模块加载失败:", requestFailureCategory(err));
   });
 }

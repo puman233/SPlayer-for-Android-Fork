@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useStatusStore, useDataStore, useSettingStore } from "@/stores";
 import { searchDefault } from "@/api/search";
 import { usePlayerController } from "@/core/player/PlayerController";
@@ -119,7 +120,7 @@ const updatePlaceholder = async () => {
     searchPlaceholder.value = result.data.showKeyword;
     searchRealkeyword.value = result.data.realkeyword;
   } catch (error) {
-    console.error("搜索关键词获取失败：", error);
+    console.error("搜索关键词获取失败：", requestFailureCategory(error));
     searchPlaceholder.value = "搜索音乐 / 视频";
   }
 };

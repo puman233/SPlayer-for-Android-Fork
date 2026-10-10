@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "../../src/utils/requestDiagnostics";
 import type { SongMatchInfo, SongUrlResult } from "./types";
 import { isSongMatch } from "./match";
 import { createHash } from "crypto";
@@ -87,7 +88,7 @@ const search = async (match: SongMatchInfo): Promise<string | null> => {
     console.warn(`[unblock] ⚠️ Bodian 搜索结果均不匹配原曲: "${match.songName}"`);
     return null;
   } catch (error) {
-    console.error("[unblock] ❌ Get BodianSongId Error:", error);
+    console.error("[unblock] ❌ Get BodianSongId Error:", requestFailureCategory(error));
     return null;
   }
 };
@@ -120,7 +121,7 @@ const sendAdFreeRequest = () => {
     });
     return axios.post(adurl, data, { headers });
   } catch (error) {
-    console.error("[unblock] ❌ Get Bodian Ad Free Error:", error);
+    console.error("[unblock] ❌ Get Bodian Ad Free Error:", requestFailureCategory(error));
     return null;
   }
 };
@@ -154,12 +155,12 @@ const getBodianSongUrl = async (match: SongMatchInfo): Promise<SongUrlResult> =>
     const result = await axios.get(audioUrl, { headers });
     if (typeof result.data === "object") {
       const urlMatch = result.data.data.audioUrl;
-      console.log("[unblock] 🔗 BodianSong URL:", urlMatch);
+      console.log("[unblock] 🔗 BodianSong URL:");
       return { code: 200, url: urlMatch };
     }
     return { code: 404, url: null };
   } catch (error) {
-    console.error("[unblock] ❌ Get BodianSong URL Error:", error);
+    console.error("[unblock] ❌ Get BodianSong URL Error:", requestFailureCategory(error));
     return { code: 404, url: null };
   }
 };

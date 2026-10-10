@@ -164,7 +164,7 @@ server.interceptors.request.use(
     return request;
   },
   (error: AxiosError) => {
-    console.error("Request failed before dispatch:", error);
+    console.error("Request failed before dispatch:");
     return Promise.reject(error);
   },
 );
@@ -177,7 +177,7 @@ server.interceptors.response.use(
       const cost = performance.now() - response.config._startTime;
       if (cost > SLOW_REQUEST_THRESHOLD_MS) {
         const method = (response.config.method || "GET").toUpperCase();
-        console.warn(`[perf] 慢请求 ${Math.round(cost)}ms: ${method} ${response.config.url}`);
+        console.warn(`[perf] 慢请求 ${Math.round(cost)}ms: ${method}`);
       }
     }
     return response;
@@ -217,22 +217,22 @@ server.interceptors.response.use(
     const { response } = error;
     switch (response?.status) {
       case 400:
-        console.warn("Bad request:", response.status, response.statusText);
+        console.warn("Bad request:", response.status);
         break;
       case 401:
-        console.warn("Unauthorized:", response.status, response.statusText);
+        console.warn("Unauthorized:", response.status);
         break;
       case 403:
-        console.warn("Forbidden:", response.status, response.statusText);
+        console.warn("Forbidden:", response.status);
         break;
       case 404:
-        console.warn("Not found:", response.status, response.statusText);
+        console.warn("Not found:", response.status);
         break;
       case 500:
-        console.warn("Server error:", response.status, response.statusText);
+        console.warn("Server error:", response.status);
         break;
       default:
-        console.warn("Unhandled request error:", error.message);
+        console.warn("Unhandled request error", response?.status);
     }
 
     return Promise.reject(error);

@@ -44,6 +44,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CommentType } from "@/types/main";
 import CommentList from "@/components/List/CommentList.vue";
 import { useElementSize } from "@vueuse/core";
@@ -88,7 +89,7 @@ const getHotCommentData = async (requestId: number) => {
     const formatData = formatCommentList(result.hotComments);
     commentHotData.value = formatData?.length > 0 ? formatData : null;
   } catch (error) {
-    console.error("Error getting hot comment data:", error);
+    console.error("Error getting hot comment data:", requestFailureCategory(error));
     if (currentRequestId.value === requestId) commentHotData.value = null;
   }
 };
@@ -132,7 +133,7 @@ const getCommentData = async (clean: boolean = true) => {
     commentLoading.value = false;
   } catch (error) {
     if (currentRequestId.value !== requestId) return;
-    console.error("Error getting comment data:", error);
+    console.error("Error getting comment data:", requestFailureCategory(error));
     window.$message.error("获取评论数据失败");
     commentLoading.value = false;
   }

@@ -87,7 +87,7 @@ const login = async () => {
     emit("close");
   } catch (error) {
     window.$message.error("登录失败，请重试");
-    console.error("Cookie 登录出错：", error);
+    console.error("Cookie 登录出错：");
   }
 };
 

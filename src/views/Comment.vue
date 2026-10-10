@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType } from "@/types/main";
 import { useMusicStore, useSettingStore } from "@/stores";
 import { usePlayerController } from "@/core/player/PlayerController";
@@ -109,7 +110,7 @@ const initSongData = async (id: number, type: number) => {
       songSnapshot.value = songs[0];
     }
   } catch (error) {
-    console.error("获取歌曲信息失败:", error);
+    console.error("获取歌曲信息失败:", requestFailureCategory(error));
   }
 };
 

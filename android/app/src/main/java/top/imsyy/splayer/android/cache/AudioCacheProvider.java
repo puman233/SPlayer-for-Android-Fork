@@ -588,7 +588,7 @@ public final class AudioCacheProvider {
             }
           } catch (Throwable e) {
             // 网络失败 / 取消都走这里；不致命，下次播放走正常流程
-            Log.d(TAG, "prefetch aborted: " + cacheKey + " - " + e.getMessage());
+            Log.d(TAG, "prefetch aborted [unknown]");
           } finally {
             synchronized (inFlight) {
               inFlight.remove(inFlightKey);

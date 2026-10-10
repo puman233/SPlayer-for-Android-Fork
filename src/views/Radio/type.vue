@@ -33,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { radioCatHot, radioCatRecommend } from "@/api/radio";
 import type { CoverType } from "@/types/main";
 import { formatCoverList } from "@/utils/format";
@@ -62,7 +63,7 @@ const getRadioTypeData = async () => {
     // 推荐数据
     radioRecData.value = formatCoverList(recRec.djRadios);
   } catch (error) {
-    console.error("Error getting rec radio:", error);
+    console.error("Error getting rec radio:", requestFailureCategory(error));
     window.$message.error("获取电台分类出现错误");
   }
 };

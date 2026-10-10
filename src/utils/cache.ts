@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 type StorageType = "localStorage" | "sessionStorage";
 
 interface CacheOptions {
@@ -34,7 +35,7 @@ export const getCacheData = async <T>(
       // 判断缓存是否过期
       const { value, expiry } = JSON.parse(cachedData);
       if (expiry === 0 || new Date().getTime() < expiry) {
-        console.log(`✅ Cached data found for key: ${key}`, value);
+        console.log("Cached data found");
         return value;
       }
     }
@@ -45,7 +46,7 @@ export const getCacheData = async <T>(
     storageObj.setItem(key, JSON.stringify({ value: result, expiry }));
     return result;
   } catch (error) {
-    console.error(`❌ Error in getCacheData: ${error}`);
+    console.error("Error in getCacheData:", requestFailureCategory(error));
     throw error;
   }
 };

@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "../src/utils/requestDiagnostics";
 import http, { IncomingMessage, ServerResponse } from "http";
 import https from "https";
 import { createRequire } from "module";
@@ -257,7 +258,7 @@ const handleNeteaseRoute = async (
       }
       sendText(request, response, 200, text);
     } catch (error) {
-      console.error("[embedded-api] Fetch TTML lyric failed", error);
+      console.error("[embedded-api] Fetch TTML lyric failed", requestFailureCategory(error));
       sendJson(request, response, 200, null);
     }
     return;
@@ -272,7 +273,7 @@ const handleNeteaseRoute = async (
       const result = await handleUnblockRequest(server, query);
       sendJson(request, response, 200, result);
     } catch (error) {
-      console.error("[embedded-api] Unblock request failed", server, error);
+      console.error("[embedded-api] Unblock request failed", requestFailureCategory(error));
       sendJson(request, response, 200, { code: 500, url: null });
     }
     return;
@@ -301,7 +302,7 @@ const handleNeteaseRoute = async (
         : result;
     sendJson(request, response, 200, payload);
   } catch (error: unknown) {
-    console.error("[embedded-api] Netease API request failed", requestPath, error);
+    console.error("[embedded-api] Netease API request failed", requestFailureCategory(error));
 
     if (typeof error === "object" && error) {
       const apiError = error as { status?: number; body?: unknown; message?: string };
@@ -374,7 +375,7 @@ export const startEmbeddedApiServer = async () => {
     });
   });
 
-  console.log(`[embedded-api] listening on http://${DEFAULT_HOST}:${DEFAULT_PORT}/api`);
+  console.log("[embedded-api] ready");
   activeServer = server;
   serverGeneration++;
   notifyEmbeddedApiReady();
@@ -404,12 +405,12 @@ if (process.env["SP_EMBEDDED"] === "1") {
   getRuntimeBridge()?.channel?.on?.("message", (message) => {
     if (message === "embedded-api-reload") {
       void reloadEmbeddedApiServer().catch((error) =>
-        console.error("[embedded-api] reload failed", error),
+        console.error("[embedded-api] reload failed", requestFailureCategory(error)),
       );
     }
   });
 }
 
 void startEmbeddedApiServer().catch((error) => {
-  console.error("[embedded-api] startEmbeddedApiServer failed", error);
+  console.error("[embedded-api] startEmbeddedApiServer failed", requestFailureCategory(error));
 });

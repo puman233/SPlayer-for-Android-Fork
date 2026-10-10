@@ -5,6 +5,7 @@
 
 import { updateNowPlaying, scrobbleTrack } from "@/api/lastfm";
 import { useSettingStore } from "@/stores";
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 
 interface ScrobbleTrack {
   name: string;
@@ -133,7 +134,7 @@ class LastfmScrobbler {
       );
       console.log("Last.fm: 正在播放状态已更新");
     } catch (error) {
-      console.error("Last.fm: 更新正在播放状态失败", error);
+      console.error("Last.fm: 更新正在播放状态失败", requestFailureCategory(error));
     }
   }
 
@@ -182,7 +183,7 @@ class LastfmScrobbler {
       this.hasScrobbled = true;
       console.log("Last.fm: Scrobble 成功", this.currentTrack);
     } catch (error) {
-      console.error("Last.fm: Scrobble 失败", error);
+      console.error("Last.fm: Scrobble 失败", requestFailureCategory(error));
     }
   }
 

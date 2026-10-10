@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType } from "@/types/main";
 import { artistAllSongs } from "@/api/artist";
 import { songDetail } from "@/api/song";
@@ -51,7 +52,7 @@ const getArtistAllSongs = async () => {
     songData.value = songData.value.concat(songDetailData);
     loading.value = false;
   } catch (error) {
-    console.error("Error getting artist all songs:", error);
+    console.error("Error getting artist all songs:", requestFailureCategory(error));
   }
 };
 

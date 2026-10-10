@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useSettingStore } from "@/stores";
 import { isCapacitorAndroid, isCapacitorNative, isElectron } from "@/utils/env";
 import { SettingConfig } from "@/types/settings";
@@ -110,10 +111,11 @@ export const useNetworkSettings = (): SettingConfig => {
       }
 
       window.$message.error(
-        `API 测试失败: ${data?.message || response.statusText || response.status}`,
+        "API 测试失败，请检查服务地址和网络连接",
       );
-    } catch (error: any) {
-      window.$message.error(`API 测试失败: ${error?.message || "无法连接到服务"}`);
+    } catch (error: unknown) {
+      console.warn("API 测试失败:", requestFailureCategory(error));
+      window.$message.error("API 测试失败，请检查服务地址和网络连接");
     } finally {
       testApiBaseUrlLoading.value = false;
     }
@@ -262,8 +264,8 @@ export const useNetworkSettings = (): SettingConfig => {
         }, 30000);
       }
     } catch (error: any) {
-      console.error("Last.fm 连接失败:", error);
-      window.$message.error(`连接失败: ${error.message || "未知错误"}`);
+      console.error("Last.fm 连接失败:", requestFailureCategory(error));
+      window.$message.error("连接 Last.fm 失败，请检查网络和 API 配置");
       lastfmAuthLoading.value = false;
     }
   };

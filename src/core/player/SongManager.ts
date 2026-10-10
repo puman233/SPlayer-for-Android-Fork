@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) SPlayer-Dev Contributors
 // Original source: https://github.com/SPlayer-Dev/SPlayer
@@ -278,7 +279,7 @@ class SongManager {
           }
         }
       } catch (e) {
-        console.error(`检查杜比音质支持失败，降级到极高音质:`, e);
+        console.error(`检查杜比音质支持失败，降级到极高音质:`, requestFailureCategory(e));
         level = "exhigh";
       }
     }
@@ -291,10 +292,10 @@ class SongManager {
         }
       } catch (e) {
         if (AI_AUDIO_LEVELS.includes(level)) {
-          console.warn(`检查 AI 音质支持失败，降级到 Hi-Res:`, e);
+          console.warn(`检查 AI 音质支持失败，降级到 Hi-Res:`, requestFailureCategory(e));
           level = "hires";
         } else {
-          console.warn(`检查音质支持失败，继续按当前音质请求:`, e);
+          console.warn(`检查音质支持失败，继续按当前音质请求:`, requestFailureCategory(e));
         }
       }
     }
@@ -305,14 +306,14 @@ class SongManager {
     for (const requestLevel of getSongUrlRequestLevels(level, qualityData)) {
       try {
         res = await songUrl(id, requestLevel);
-        console.log(`🌐 ${id} music data:`, res);
+        console.log("Music data received");
         songData = getSongUrlData(res);
         if (songData?.url) {
           level = requestLevel;
           break;
         }
       } catch (error) {
-        console.warn(`🔽 [${id}] ${requestLevel} 音质地址获取失败，尝试降级`, error);
+        console.warn(`🔽 [${id}] ${requestLevel} 音质地址获取失败，尝试降级`, requestFailureCategory(error));
       }
     }
 
@@ -443,7 +444,7 @@ class SongManager {
           unlockSongUrl(songId, keyWord, server, song.name, String(artistName || "")),
         ).then((result) => {
           // 记录每个音源返回，便于 logcat 排查解锁链路
-          console.log(`🔎 [${songId}] 解锁源 ${server}: code=${result.code} url=${result.url}`);
+          console.log("Unlock source response received");
           return {
             server,
             result,
@@ -466,7 +467,7 @@ class SongManager {
         if (unlockUrl && (unlockUrl.includes(".flac") || unlockUrl.includes(".wav"))) {
           quality = QualityType.SQ;
         }
-        console.log(`最终音质判断：详细输出：`, { unlockUrl, quality });
+        console.log("Audio quality resolved");
         return {
           id: songId,
           url: unlockUrl,
@@ -504,7 +505,7 @@ class SongManager {
               musicStore.personalFM.list = [...fmList, ...newList];
             }
           } catch (e) {
-            console.warn("⚠️ 预拉取下一批私人FM失败", e);
+            console.warn("⚠️ 预拉取下一批私人FM失败", requestFailureCategory(e));
             return;
           }
         }
@@ -618,7 +619,7 @@ class SongManager {
         return this.nextPrefetch;
       }
     } catch (error) {
-      console.error("❌ 预加载下一首歌曲地址失败", error);
+      console.error("❌ 预加载下一首歌曲地址失败", requestFailureCategory(error));
       return;
     }
   };
@@ -677,7 +678,7 @@ class SongManager {
     if (song.type === "streaming" && song.streamUrl) {
       const streamingStore = useStreamingStore();
       const finalUrl = streamingStore.getSongUrl(song);
-      console.log(`🔄 [${song.id}] Stream URL:`, finalUrl);
+      console.log("Stream source resolved");
       return {
         id: song.id,
         url: finalUrl,
@@ -718,7 +719,7 @@ class SongManager {
         }
         const unlockUrl = await this.getUnlockSongUrl(song, forceSource);
         if (unlockUrl.url) {
-          console.log(`🔓 [${songId}] 指定源解锁成功: ${forceSource}`, unlockUrl);
+          console.log("Selected source unlocked");
           return unlockUrl;
         } else {
           // 指定源失败，不回退
@@ -737,7 +738,7 @@ class SongManager {
       if ((!forceSource || forceSource === "auto") && canUnlock) {
         const unlockUrl = await this.getUnlockSongUrl(song);
         if (unlockUrl.url) {
-          console.log(`🔓 [${songId}] 解锁成功`, unlockUrl);
+          console.log("Source unlocked");
           return unlockUrl;
         }
         // 解锁失败：仅当允许播放试听时才回退官方试听，避免静默播放 30 秒试听
@@ -755,7 +756,7 @@ class SongManager {
       if (!forceSource || forceSource === "auto") {
         const fallbackUrl = await this.checkLocalCache(songId);
         if (fallbackUrl) {
-          console.log(`🚀 [${songId}] 网络请求失败，使用本地缓存兜底`, fallbackUrl);
+          console.log("Network failed; using cached source");
           return {
             id: songId,
             url: fallbackUrl,
@@ -768,7 +769,7 @@ class SongManager {
       // 无可用源
       return { id: songId, url: undefined, quality: undefined, isUnlocked: false };
     } catch (e) {
-      console.error(`❌ [${songId}] 获取音频源异常:`, e);
+      console.error(`❌ [${songId}] 获取音频源异常:`, requestFailureCategory(e));
       // 异常时的兜底：检查本地是否有缓存
       if (!forceSource || forceSource === "auto") {
         const fallbackUrl = await this.checkLocalCache(songId);
@@ -822,7 +823,7 @@ class SongManager {
         }
       }
     } catch (error) {
-      console.error("❌ 私人 FM 初始化失败", error);
+      console.error("❌ 私人 FM 初始化失败", requestFailureCategory(error));
     }
   }
 
@@ -842,7 +843,7 @@ class SongManager {
       onSuccess?.();
     } catch (error) {
       window.$message.error("移至垃圾桶失败，请重试");
-      console.error("❌ 私人 FM 垃圾桶失败", error);
+      console.error("❌ 私人 FM 垃圾桶失败", requestFailureCategory(error));
     }
   }
 
@@ -865,7 +866,7 @@ class SongManager {
       musicStore.personalFM.playIndex = 0;
       window.$message.success("刷新成功");
     } catch (error) {
-      console.error("❌ 刷新私人 FM 失败", error);
+      console.error("❌ 刷新私人 FM 失败", requestFailureCategory(error));
       window.$message.error("刷新失败，请重试");
     }
   }

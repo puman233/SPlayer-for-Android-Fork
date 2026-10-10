@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 /**
  * Jellyfin API 客户端
  */
@@ -515,7 +516,7 @@ export const getLyrics = async (config: StreamingServerConfig, itemId: string): 
     }
     return "";
   } catch (error) {
-    console.warn("Failed to fetch lyrics from Jellyfin:", error);
+    console.warn("Failed to fetch lyrics from Jellyfin:", requestFailureCategory(error));
     return "";
   }
 };

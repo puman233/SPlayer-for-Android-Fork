@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { isCapacitorAndroid } from "./env";
 import { createEmbeddedRecovery } from "./requestRecovery";
 
@@ -28,12 +29,11 @@ const waitForEmbeddedApiPolling = async (shouldStop: () => boolean) => {
 };
 
 const reportEmbeddedApiError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error("[embedded-api] startup failed:", error);
+  console.error("[embedded-api] startup failed:", requestFailureCategory(error));
   if (embeddedApiErrorShown) return;
   embeddedApiErrorShown = true;
   // 提示一次即可：后续请求会驱动 waitForEmbeddedApiReady 自动重试
-  window.$message?.error(`内置 API 启动失败，将自动重试: ${message}`, {
+  window.$message?.error("内置 API 启动失败，将自动重试", {
     duration: 8000,
   });
 };
@@ -195,7 +195,7 @@ export const restartEmbeddedApi = async (): Promise<boolean> => {
     await restartInProgress;
     return true;
   } catch (error) {
-    console.error("[embedded-api] restart failed:", error);
+    console.error("[embedded-api] restart failed:", requestFailureCategory(error));
     return false;
   } finally {
     restartInProgress = null;

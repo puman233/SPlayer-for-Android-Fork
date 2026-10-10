@@ -118,7 +118,7 @@ const correctSong = debounce(
       }
       window.$message.success("歌曲信息纠正成功");
     } else {
-      window.$message.error(result.message || "纠正失败，请重试");
+      window.$message.error("纠正失败，请重试");
     }
   },
   300,

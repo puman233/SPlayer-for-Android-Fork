@@ -163,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType, MetaData } from "@/types/main";
 import { songDetail } from "@/api/song";
 import { formatSongsList } from "@/utils/format";
@@ -217,7 +218,7 @@ const fetchSongDetail = async () => {
     }
     songInfo.value = songs[0];
   } catch (error) {
-    console.error("获取歌曲详情失败：", error);
+    console.error("获取歌曲详情失败：", requestFailureCategory(error));
     window.$message.error("获取歌曲详情失败");
   } finally {
     loading.value = false;

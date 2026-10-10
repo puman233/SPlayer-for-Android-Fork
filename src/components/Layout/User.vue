@@ -226,7 +226,7 @@ const handleAddAccount = async () => {
         window.$message.success("登录成功");
         // router.push("/");
       } catch (error) {
-        console.error("Login update failed", error);
+        console.error("Login update failed");
       }
     },
     true,

@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { ref, watch, onBeforeUnmount, type Ref } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { useCacheManager, type CacheResourceType } from "@/core/resource/CacheManager";
@@ -188,7 +189,7 @@ const downloadAndCache = (url: string, key: string, type: CoverCacheType): Promi
       await cm.set(type, key, new Uint8Array(buf));
     } catch (e) {
       // 网络失败 / abort 不致命：下次访问仍可能命中或重试
-      console.warn("[useCoverCache] download failed:", url, e);
+      console.warn("[useCoverCache] download failed:", requestFailureCategory(e));
     } finally {
       downloadInFlight.delete(flightKey);
       if (timer.id !== undefined) clearTimeout(timer.id);

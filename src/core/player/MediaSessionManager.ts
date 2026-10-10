@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { likeSong } from "@/api/song";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { getCookie } from "@/utils/cookie";
@@ -207,7 +208,7 @@ class MediaSessionManager {
       player.applySongLikeState(songId, targetLike);
       await player.syncAndroidPlaybackContext();
     } catch (error) {
-      console.error("[AndroidMedia] favorite fallback failed:", error);
+      console.error("[AndroidMedia] favorite fallback failed:", requestFailureCategory(error));
       window.$message.error("收藏操作失败，请重试");
     }
   }
@@ -405,7 +406,7 @@ class MediaSessionManager {
         });
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
-          console.error("[Media] update metadata failed:", error);
+          console.error("[Media] update metadata failed:", requestFailureCategory(error));
         }
       } finally {
         if (this.metadataAbortController?.signal === signal) {

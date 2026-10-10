@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { fetchAmlRawLyric, searchAmlLyricsWithStatus, type AmlLyricSearchResult } from "@/api/amll";
 import { qqMusicMatch } from "@/api/qqmusic";
 import { searchResult, SearchTypes } from "@/api/search";
@@ -203,7 +204,7 @@ class LyricManager {
       try {
         data = await qqMusicMatch(keyword);
       } catch (error) {
-        console.warn("QQ 音乐歌词获取失败:", error);
+        console.warn("QQ 音乐歌词获取失败:", requestFailureCategory(error));
         return null;
       }
     }
@@ -463,7 +464,7 @@ class LyricManager {
         await this.writeLocalMatchCache(cacheKey, onlineId);
         return onlineId;
       } catch (error) {
-        console.warn("本地歌曲在线歌词匹配失败:", error);
+        console.warn("本地歌曲在线歌词匹配失败:", requestFailureCategory(error));
         await this.writeLocalMatchCache(cacheKey, null);
         return null;
       } finally {
@@ -564,7 +565,7 @@ class LyricManager {
         }
         return file;
       } catch (error) {
-        console.warn("AMLL 歌词搜索失败:", error);
+        console.warn("AMLL 歌词搜索失败:", requestFailureCategory(error));
         return null;
       } finally {
         this.localAmlMatchInFlight.delete(inFlightKey);
@@ -597,7 +598,7 @@ class LyricManager {
       const parsed = this.parseLocalLyricContent(ttmlContent, "ttml");
       return this.hasLyricResult(parsed) ? parsed : null;
     } catch (error) {
-      console.warn("解析 AMLL TTML 歌词失败:", error);
+      console.warn("解析 AMLL TTML 歌词失败:", requestFailureCategory(error));
       return null;
     }
   }
@@ -1477,7 +1478,7 @@ class LyricManager {
         }
       }
     } catch (error) {
-      console.error("❌ 获取流媒体歌词失败:", error);
+      console.error("❌ 获取流媒体歌词失败:", requestFailureCategory(error));
     }
     return { data: result, meta: defaultMeta };
   }
@@ -1521,7 +1522,7 @@ class LyricManager {
       statusStore.usingQRCLyric = meta.usingQRCLyric;
       this.setFinalLyric(data, req);
     } catch (error) {
-      console.error("❌ 处理歌词失败:", error);
+      console.error("❌ 处理歌词失败:", requestFailureCategory(error));
       this.resetSongLyric();
     }
   }
@@ -1574,7 +1575,7 @@ class LyricManager {
 
       return fetchResult;
     } catch (error) {
-      console.error("❌ 获取歌词失败:", error);
+      console.error("❌ 获取歌词失败:", requestFailureCategory(error));
       return fetchResult;
     }
   }
@@ -1595,7 +1596,7 @@ class LyricManager {
       };
       console.log(`Lyrics prefetch completed: [${song.id}]`);
     } catch (e) {
-      console.warn(`Lyrics prefetch failed: [${song.id}]`, e);
+      console.warn(`Lyrics prefetch failed: [${song.id}]`, requestFailureCategory(e));
     }
   }
 

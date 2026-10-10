@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { isCapacitorAndroid, isElectron } from "@/utils/env";
@@ -221,12 +222,12 @@ export const useGeneralSettings = (): SettingConfig => {
             }
           } else {
             if (result?.error !== "cancelled") {
-              window.$message.error("设置导入失败: " + (result?.error || "未知错误"));
+              window.$message.error("设置导入失败，请检查文件格式");
             }
           }
         } catch (error) {
           window.$message.error("设置导入出错");
-          console.error(error);
+          console.error("设置导入出错:", requestFailureCategory(error));
         }
       },
     });

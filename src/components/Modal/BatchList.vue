@@ -108,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 import type { SongType } from "@/types/main";
 import { isArray, isObject } from "lodash-es";
@@ -298,7 +299,7 @@ const handleDeleteLocalSongs = () => {
           window.$message.error("删除失败，请重试");
         }
       } catch (error) {
-        console.error("批量删除失败:", error);
+        console.error("批量删除失败:", requestFailureCategory(error));
         window.$message.error("删除过程中出现错误");
       } finally {
         loading.destroy();

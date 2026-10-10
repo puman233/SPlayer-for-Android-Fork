@@ -85,7 +85,7 @@ const getQrData = async () => {
     resumeCheck();
   } catch (error) {
     pauseCheck();
-    console.error("二维码获取失败:", error);
+    console.error("二维码获取失败:");
   }
 };
 
@@ -125,7 +125,7 @@ const checkQrStatus = async () => {
         break;
     }
   } catch (error) {
-    console.error("二维码状态检查失败:", error);
+    console.error("二维码状态检查失败:");
   } finally {
     qrChecking.value = false;
   }

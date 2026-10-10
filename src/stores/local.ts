@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType, LocalPlaylistType } from "@/types/main";
 import { cloneDeep } from "lodash-es";
 import localforage from "localforage";
@@ -96,7 +97,7 @@ const createLocalStore = () => {
         reader.readAsDataURL(blob);
       });
     } catch (error) {
-      console.error("Error fetching cover:", error);
+      console.error("Error fetching cover:", requestFailureCategory(error));
       return undefined;
     }
   };

@@ -16,7 +16,9 @@ const config: AndroidCapacitorConfig = {
   appName: "SPlayer for Android",
   webDir: "dist/capacitor",
   backgroundColor: "#00000000",
-  loggingBehavior: "debug",
+  // SDK packet/Cookie tracing includes credentials. Application diagnostics use
+  // their own Console client and remain enabled in Debug and production.
+  loggingBehavior: "none",
   initialFocus: true,
   android: {
     backgroundColor: "#00000000",

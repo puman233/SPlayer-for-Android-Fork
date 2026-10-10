@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 /**
  * 流媒体 Store
  * 管理流媒体服务器配置和数据缓存
@@ -81,7 +82,7 @@ const createStreamingStore = () => {
         connectToServer(activeServerId.value);
       }
     } catch (error) {
-      console.error("Failed to load streaming servers:", error);
+      console.error("Failed to load streaming servers:", requestFailureCategory(error));
     }
   };
 
@@ -95,7 +96,7 @@ const createStreamingStore = () => {
       await getStreamingDB().setItem("servers", serversData);
       await getStreamingDB().setItem("activeServerId", activeServerId.value);
     } catch (error) {
-      console.error("Failed to save streaming servers:", error);
+      console.error("Failed to save streaming servers:", requestFailureCategory(error));
     }
   };
 
@@ -200,10 +201,10 @@ const createStreamingStore = () => {
           serverVersion: pingResult.serverVersion || pingResult.version,
         };
       }
-    } catch (error) {
+    } catch {
       return {
         connected: false,
-        error: error instanceof Error ? error.message : "连接失败",
+        error: "连接失败，请检查服务器地址、凭据和网络",
       };
     }
   };
@@ -241,10 +242,10 @@ const createStreamingStore = () => {
       }
 
       return false;
-    } catch (error) {
+    } catch {
       connectionStatus.value = {
         connected: false,
-        error: error instanceof Error ? error.message : "连接失败",
+        error: "连接失败，请检查服务器地址、凭据和网络",
       };
       return false;
     } finally {
@@ -295,7 +296,7 @@ const createStreamingStore = () => {
       songs.value = result;
       return result;
     } catch (error) {
-      console.error("Failed to fetch random songs:", error);
+      console.error("Failed to fetch random songs:", requestFailureCategory(error));
       return [];
     } finally {
       loading.value = false;
@@ -337,7 +338,7 @@ const createStreamingStore = () => {
       }
       return result;
     } catch (error) {
-      console.error("Failed to fetch songs:", error);
+      console.error("Failed to fetch songs:", requestFailureCategory(error));
       throw error;
     } finally {
       loading.value = false;
@@ -368,7 +369,7 @@ const createStreamingStore = () => {
       artists.value = result;
       return result;
     } catch (error) {
-      console.error("Failed to fetch artists:", error);
+      console.error("Failed to fetch artists:", requestFailureCategory(error));
       return [];
     } finally {
       loading.value = false;
@@ -399,7 +400,7 @@ const createStreamingStore = () => {
       albums.value = result;
       return result;
     } catch (error) {
-      console.error("Failed to fetch albums:", error);
+      console.error("Failed to fetch albums:", requestFailureCategory(error));
       return [];
     } finally {
       loading.value = false;
@@ -430,7 +431,7 @@ const createStreamingStore = () => {
       playlists.value = result;
       return result;
     } catch (error) {
-      console.error("Failed to fetch playlists:", error);
+      console.error("Failed to fetch playlists:", requestFailureCategory(error));
       return [];
     } finally {
       loading.value = false;
@@ -456,7 +457,7 @@ const createStreamingStore = () => {
         return result.songs;
       }
     } catch (error) {
-      console.error("Failed to fetch album songs:", error);
+      console.error("Failed to fetch album songs:", requestFailureCategory(error));
       return [];
     }
   };
@@ -480,7 +481,7 @@ const createStreamingStore = () => {
         return result.songs;
       }
     } catch (error) {
-      console.error("Failed to fetch playlist songs:", error);
+      console.error("Failed to fetch playlist songs:", requestFailureCategory(error));
       return [];
     }
   };
@@ -511,7 +512,7 @@ const createStreamingStore = () => {
         return await subsonic.search(server, query);
       }
     } catch (error) {
-      console.error("Failed to search:", error);
+      console.error("Failed to search:", requestFailureCategory(error));
       return { artists: [], albums: [], songs: [] };
     }
   };
@@ -540,7 +541,7 @@ const createStreamingStore = () => {
         return "";
       }
     } catch (error) {
-      console.error("Failed to fetch lyrics:", error);
+      console.error("Failed to fetch lyrics:", requestFailureCategory(error));
       return "";
     }
   };

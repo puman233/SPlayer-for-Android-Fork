@@ -88,7 +88,7 @@ const hydrateCoreUserData = async () => {
 
 const saveLogin = async (loginData: any, type: LoginType = "qr") => {
   if (!loginData || loginData.code !== 200) {
-    window.$message.error(loginData?.msg ?? loginData?.message ?? "账号或密码错误，请重试");
+    window.$message.error("账号或密码错误，请重试");
     return;
   }
 
@@ -106,14 +106,14 @@ const saveLogin = async (loginData: any, type: LoginType = "qr") => {
     if (type !== "uid") {
       await hydrateCoreUserData();
       void updateUserData().catch((error) => {
-        console.error("Deferred user sync failed:", error);
+        console.error("Deferred user sync failed:");
       });
     } else {
       await updateSpecialUserData(loginData?.profile);
     }
     window.$message.success("登录成功");
   } catch (error) {
-    console.error("Post-login sync failed:", error);
+    console.error("Post-login sync failed:");
     window.$message.warning("登录成功，但账号数据同步较慢，稍后会继续刷新");
   }
 

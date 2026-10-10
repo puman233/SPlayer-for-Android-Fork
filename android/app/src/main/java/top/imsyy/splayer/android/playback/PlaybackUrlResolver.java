@@ -290,7 +290,7 @@ public final class PlaybackUrlResolver {
           }
         }
       } catch (Exception e) {
-        Log.w(TAG, "resolveSync failed songId=" + songId + " level=" + requestLevel, e);
+        Log.w(TAG, "resolveSync failed songId=" + songId + " level=" + requestLevel + " [network]");
         hadNetworkFailure = true;
       } finally {
         if (connection != null) connection.disconnect();
@@ -410,7 +410,7 @@ public final class PlaybackUrlResolver {
       JSONObject root = new JSONObject(readBody(connection));
       return root.optJSONObject("data");
     } catch (Exception e) {
-      Log.w(TAG, "fetchQualityData failed songId=" + songId, e);
+      Log.w(TAG, "fetchQualityData failed songId=" + songId + " [network]");
       return null;
     } finally {
       if (connection != null) connection.disconnect();

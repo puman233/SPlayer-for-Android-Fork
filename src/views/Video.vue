@@ -132,6 +132,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CoverType, CommentType } from "@/types/main";
 import { useStatusStore, useSettingStore } from "@/stores";
 import { videoDetail, videoUrl, videoDetailInfo } from "@/api/video";
@@ -253,7 +254,7 @@ const getVideoData = async (id: number, type: "mv" | "video") => {
           size: result.data.r,
         };
       } catch (error) {
-        console.error("视频地址加载失败：", error);
+        console.error("视频地址加载失败：", requestFailureCategory(error));
         return null;
       }
     });
@@ -268,7 +269,7 @@ const getVideoData = async (id: number, type: "mv" | "video") => {
     // 获取评论
     getCommentData(id);
   } catch (error) {
-    console.error("Error getting video data:", error);
+    console.error("Error getting video data:", requestFailureCategory(error));
     window.$message.error("获取视频数据失败");
   }
 };
@@ -305,7 +306,7 @@ const getCommentData = async (id: number, clean: boolean = true) => {
     commentHasMore.value = result.data.hasMore;
     commentLoading.value = false;
   } catch (error) {
-    console.error("Error getting comment data:", error);
+    console.error("Error getting comment data:", requestFailureCategory(error));
     window.$message.error("获取评论数据失败");
   }
 };

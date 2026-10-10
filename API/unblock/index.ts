@@ -1,3 +1,4 @@
+import { requestFailureCategory } from "../../src/utils/requestDiagnostics";
 import type { SongUrlResult, SongMatchInfo } from "./types";
 import axios from "axios";
 import getKuwoSongUrl from "./kuwo";
@@ -28,10 +29,7 @@ const getNeteaseSongUrl = async (id: number | string): Promise<SongUrlResult> =>
         Referer: "https://music.gdstudio.xyz/",
       },
     });
-    console.log(`[unblock] 🌐 NeteaseSongUrl 响应状态: ${result.status}`, {
-      id,
-      data: result.data && typeof result.data === "object" ? result.data : String(result.data),
-    });
+    console.log("[unblock] Audio source response received");
     const data = result.data;
     // 校验响应结构：data 需为对象且含 url 字段
     const songUrl = data && typeof data === "object" ? data.url : undefined;
@@ -42,10 +40,10 @@ const getNeteaseSongUrl = async (id: number | string): Promise<SongUrlResult> =>
       );
       return { code: 404, url: null };
     }
-    console.log("[unblock] 🔗 NeteaseSongUrl URL:", songUrl);
+    console.log("[unblock] 🔗 NeteaseSongUrl URL:");
     return { code: 200, url: songUrl };
   } catch (error) {
-    console.error("[unblock] ❌ Get NeteaseSongUrl Error:", error);
+    console.error("[unblock] ❌ Get NeteaseSongUrl Error:", requestFailureCategory(error));
     return { code: 404, url: null };
   }
 };

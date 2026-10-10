@@ -7,7 +7,7 @@ import { updateLog } from "@/api/other";
 import { isEmpty } from "lodash-es";
 import { convertToLocalTime } from "./time";
 import { useSettingStore } from "@/stores";
-import { marked } from "marked";
+import { renderUpdateMarkdown } from "@/core/update/changelog";
 import { isElectron } from "./env";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
 import Fuse from "fuse.js";
@@ -260,7 +260,7 @@ export const getUpdateLog = async (forceRefresh = false): Promise<UpdateLogType[
   const updateLogs = await Promise.all(
     filterUpdateReleases(result).map(async (v: any) => ({
       version: v.tag_name,
-      changelog: await marked(v.body),
+      changelog: await renderUpdateMarkdown(v.body),
       time: convertToLocalTime(v.published_at),
       url: v.html_url,
       prerelease: v.prerelease,

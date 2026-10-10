@@ -63,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption } from "naive-ui";
 import { songDetail } from "@/api/song";
 import { albumDetail, albumDetailDynamic } from "@/api/album";
@@ -234,7 +235,7 @@ const backgroundCheck = async (id: number, cached: ListCacheData) => {
       getAlbumDetail(id, true);
     }
   } catch (e) {
-    console.error("Album background check failed", e);
+    console.error("Album background check failed", requestFailureCategory(e));
   }
 };
 

@@ -38,6 +38,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { DropdownOption } from "naive-ui";
 import type { CoverType } from "@/types/main";
 import { useStreamingStore } from "@/stores";
@@ -155,7 +156,7 @@ const getPlaylistDetail = async (id: string, refresh: boolean = false) => {
       saveCache("streaming-playlist", id, detailData.value, songs);
     }
   } catch (error) {
-    console.error("Failed to fetch streaming playlist:", error);
+    console.error("Failed to fetch streaming playlist:", requestFailureCategory(error));
     window.$message.error("获取歌单详情失败");
   } finally {
     setLoading(false);
@@ -182,7 +183,7 @@ const backgroundRefresh = async (id: string) => {
     }
   } catch (e) {
     // 后台刷新失败不打扰用户：缓存数据仍可用
-    console.warn("[streaming-playlist] background refresh failed", e);
+    console.warn("[streaming-playlist] background refresh failed", requestFailureCategory(e));
   }
 };
 

@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType, SongLevelType } from "@/types/main";
 import { useSettingStore } from "@/stores";
 import { songLevelData, getSongLevelsData, AI_AUDIO_LEVELS } from "@/utils/meta";
@@ -135,7 +136,7 @@ const getSongDetail = async () => {
     const result = await songDetail(props.songId);
     songs.value = formatSongsList(result.songs);
   } catch (error) {
-    console.error("获取歌曲详情失败:", error);
+    console.error("获取歌曲详情失败:", requestFailureCategory(error));
     window.$message.error("获取歌曲详情失败");
   } finally {
     loading.value = false;

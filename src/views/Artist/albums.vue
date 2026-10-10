@@ -12,6 +12,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CoverType } from "@/types/main";
 import { artistAblums } from "@/api/artist";
 import { formatCoverList } from "@/utils/format";
@@ -43,7 +44,7 @@ const getArtistAllAlbums = async () => {
     albumData.value = albumData.value.concat(listData);
     loading.value = false;
   } catch (error) {
-    console.error("Error getting artist all albums:", error);
+    console.error("Error getting artist all albums:", requestFailureCategory(error));
   }
 };
 

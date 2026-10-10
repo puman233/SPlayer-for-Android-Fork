@@ -99,6 +99,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { CommentType } from "@/types/main";
 import { coverLoaded } from "@/utils/helper";
 import { formatCommentTime } from "@/utils/time";
@@ -163,7 +164,7 @@ const likeComment = debounce(async (data: CommentType) => {
     data.liked = !isLiked;
     if (data.likedCount) data.likedCount += isLiked ? -1 : 1;
   } else {
-    window.$message.error(result.msg || "评论点赞失败");
+    window.$message.error("评论点赞失败");
   }
 }, 300);
 
@@ -201,14 +202,14 @@ const handleHug = debounce(async (item: CommentType) => {
           window.$message.success("抱一抱成功");
         }
       } catch (e) {
-        console.error("Error fetching hug list:", e);
+        console.error("Error fetching hug list:", requestFailureCategory(e));
         window.$message.success("抱一抱成功");
       }
     } else {
-      window.$message.error(result.msg || "抱一抱失败");
+      window.$message.error("抱一抱失败");
     }
   } catch (error) {
-    console.error("Hug comment error:", error);
+    console.error("Hug comment error:", requestFailureCategory(error));
     window.$message.error("抱一抱失败");
   }
 }, 300);

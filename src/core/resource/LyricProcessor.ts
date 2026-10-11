@@ -207,9 +207,15 @@ export const LyricProcessor = {
       const ext = ttml || lines.length > 0 ? "ttml" : "yrc";
       const encoding = options.downloadLyricEncoding || "utf-8";
 
-      if (ext === "ttml" && encoding !== "utf-8") {
-        content = content.replace('encoding="utf-8"', `encoding="${encoding}"`);
-        content = content.replace('encoding="UTF-8"', `encoding="${encoding}"`);
+      if (ext === "ttml") {
+        const declaration = /^(\s*<\?xml\b[^?]*\bencoding\s*=\s*)(["'])[^"']*\2/i;
+        if (declaration.test(content)) {
+          content = content.replace(declaration, (_match, prefix, quote) => `${prefix}${quote}${encoding}${quote}`);
+        } else if (/^\s*<\?xml\b/i.test(content)) {
+          content = content.replace(/\?>/, ` encoding="${encoding}"?>`);
+        } else {
+          content = `<?xml version="1.0" encoding="${encoding}"?>\n${content}`;
+        }
       }
 
       return { content, ext, encoding };

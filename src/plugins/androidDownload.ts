@@ -11,6 +11,19 @@ export interface AndroidDownloadResult {
   taskId: string;
   path?: string;
   fileName?: string;
+  bytes?: number;
+  sha256?: string;
+}
+
+export interface DownloadedAudioReceipt {
+  path: string;
+  bytes: number;
+  sha256: string;
+  fileName: string;
+  fileType: string;
+  directoryUri: string;
+  subPath: string;
+  targetPath: string;
 }
 
 export interface AndroidWriteFileResult {
@@ -79,7 +92,11 @@ export interface AndroidDownloadPlugin {
   cancelDownload(options: { taskId: string }): Promise<{ status: "cancelling" | "finished" }>;
   /** Cancels stale workers and resolves only after every captured worker has settled. */
   resetDownloads(): Promise<void>;
+  releaseDownloadTask(options: { taskId: string }): Promise<void>;
+  verifyDownloadedFile(options: { taskId: string; path: string; bytes: number; sha256: string }): Promise<{ valid: boolean }>;
   writeTextFile(options: {
+    taskId?: string;
+    encoding?: string;
     fileName: string;
     content: string;
     directoryUri: string;

@@ -10,7 +10,7 @@ import { songLevelData } from "@/utils/meta";
 import { getPlayerInfoObj } from "@/utils/format";
 import { LyricProcessor, type LyricProcessorOptions, type LyricResult } from "./LyricProcessor";
 import { albumDetail } from "@/api/album";
-import { AndroidDownload } from "@/plugins/androidDownload";
+import { AndroidDownload, type DownloadedAudioReceipt } from "@/plugins/androidDownload";
 
 const albumArtistCache = new Map<number, string[] | Promise<string[]>>();
 const MAX_ALBUM_ARTIST_CACHE_SIZE = 100;
@@ -30,6 +30,8 @@ interface DownloadConfig {
   threadCount: number;
   referer?: string;
   enableDownloadHttp2: boolean;
+  directoryUri: string;
+  androidSubPath: string;
 }
 
 interface DownloadProgressPayload {
@@ -44,6 +46,12 @@ interface ElectronDownloadResult {
   path?: string;
   message?: string;
 }
+
+const safeDownloadName = (value: string) => {
+  const safe = value.replace(/[\\/:*?"<>|]/g, "&").split("")
+    .map((character) => character.charCodeAt(0) < 32 ? "&" : character).join("");
+  return safe === "." || safe === ".." ? "_" : safe;
+};
 
 const normalizeDownloadPath = (value: string) => {
   return value.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
@@ -62,15 +70,17 @@ interface DownloadStrategy {
   readonly name: string;
   readonly song: SongType;
   readonly downloadUrl: string;
+  sidecarFailed: boolean;
+  readonly audio?: DownloadedAudioReceipt;
 
   // 准备阶段：获取链接，获取歌词，处理元数据
-  prepare(): Promise<void>;
+  prepare(skipAudio?: boolean): Promise<void>;
 
   // 执行阶段：返回给 Electron 下载器需要的配置对象
   getDownloadConfig(): DownloadConfig;
 
   // 收尾阶段：处理 ASS 生成，歌词文件写入
-  postProcess(downloadedFilePath: string): Promise<void>;
+  postProcess(downloadedFilePath: string, isCurrent?: () => boolean, taskId?: string): Promise<void>;
 }
 
 /**
@@ -78,6 +88,7 @@ interface DownloadStrategy {
  */
 class SongDownloadStrategy implements DownloadStrategy {
   private settingStore = useSettingStore();
+  private settings = cloneDeep(this.settingStore.$state || this.settingStore);
   private dataStore = useDataStore();
 
   // prepare 阶段准备的状态
@@ -88,11 +99,16 @@ class SongDownloadStrategy implements DownloadStrategy {
   private ttmlLyric = "";
   private yrcLyric = "";
   private albumArtists: string[] = [];
+  public sidecarFailed = false;
+  private taskId?: string;
 
   constructor(
     public readonly song: SongType,
     private quality: SongLevelType,
-  ) {}
+    public readonly audio?: DownloadedAudioReceipt,
+  ) {
+    if (audio) this.settings.androidDownloadDirectoryUri = audio.directoryUri;
+  }
 
   get id() {
     return this.song.id;
@@ -104,63 +120,27 @@ class SongDownloadStrategy implements DownloadStrategy {
     return this._downloadUrl;
   }
 
-  async prepare(): Promise<void> {
+  async prepare(skipAudio = false): Promise<void> {
     // 解析下载链接
-    const { url, type } = await this.resolveUrl();
-    this._downloadUrl = url;
-    this.fileType = type;
+    if (!skipAudio) {
+      const { url, type } = await this.resolveUrl();
+      this._downloadUrl = url;
+      this.fileType = type;
+    } else if (this.audio) {
+      this.fileType = this.audio.fileType;
+    }
 
-    // 获取歌词
     if (this.shouldDownloadLyrics()) {
-      this.lyricResult = (await songLyric(this.song.id)) as LyricResult;
-
-      const options: LyricProcessorOptions = {
-        downloadLyricToTraditional: this.settingStore.downloadLyricToTraditional,
-        downloadLyricTranslation: this.settingStore.downloadLyricTranslation,
-        downloadLyricRomaji: this.settingStore.downloadLyricRomaji,
-        downloadLyricEncoding: this.settingStore.downloadLyricEncoding,
-      };
-
-      // 处理基础歌词
-      this.basicLyric = await LyricProcessor.processBasic(this.lyricResult, options);
-
-      // 处理逐字歌词 (后续使用)
-      const { downloadMakeYrc, downloadSaveAsAss } = this.settingStore;
-      if (downloadMakeYrc || downloadSaveAsAss) {
-        let ttmlLyric = "";
-        const yrcLyric = this.lyricResult?.yrc?.lyric || "";
-        let qmResultData;
-
-        try {
-          const ttmlRes = await songLyricTTML(this.song.id);
-          if (typeof ttmlRes === "string") ttmlLyric = ttmlRes;
-        } catch (e) {
-          console.error("Failed to fetch TTML", requestFailureCategory(e));
-        }
-
-        if (!ttmlLyric && !yrcLyric) {
-          try {
-            const artistsStr = Array.isArray(this.song.artists)
-              ? this.song.artists.map((a) => a.name).join("/")
-              : String(this.song.artists || "");
-            const keyword = `${this.song.name}-${artistsStr}`;
-            const qmResult = await qqMusicMatch(keyword);
-            if (qmResult?.code === 200 && qmResult?.qrc) {
-              qmResultData = qmResult;
-            }
-          } catch (e) {
-            console.error("QM Fallback failed", requestFailureCategory(e));
-          }
-        }
-
-        const verbatim = LyricProcessor.parseVerbatim(ttmlLyric, yrcLyric, qmResultData);
-        this.ttmlLyric = verbatim.ttml;
-        this.yrcLyric = verbatim.yrc;
+      try {
+        await this.prepareLyrics();
+      } catch (error) {
+        this.sidecarFailed = true;
+        console.error("Download lyric preparation failed:", requestFailureCategory(error));
       }
     }
 
     // 处理专辑艺术家信息
-    if (this.settingStore.downloadMeta) {
+    if (this.settings.downloadMeta) {
       const album = this.song.album;
       if (typeof album !== "string") {
         const cached = albumArtistCache.get(album.id);
@@ -197,6 +177,53 @@ class SongDownloadStrategy implements DownloadStrategy {
       }
     }
   }
+  private async prepareLyrics(): Promise<void> {
+    this.lyricResult = (await songLyric(this.song.id)) as LyricResult;
+
+    const options: LyricProcessorOptions = {
+      downloadLyricToTraditional: this.settings.downloadLyricToTraditional,
+      downloadLyricTranslation: this.settings.downloadLyricTranslation,
+      downloadLyricRomaji: this.settings.downloadLyricRomaji,
+      downloadLyricEncoding: this.settings.downloadLyricEncoding,
+    };
+
+    // 处理基础歌词
+    this.basicLyric = await LyricProcessor.processBasic(this.lyricResult, options);
+
+    // 处理逐字歌词 (后续使用)
+    const { downloadMakeYrc, downloadSaveAsAss } = this.settings;
+    if (downloadMakeYrc || downloadSaveAsAss) {
+      let ttmlLyric = "";
+      const yrcLyric = this.lyricResult?.yrc?.lyric || "";
+      let qmResultData;
+
+      try {
+        const ttmlRes = await songLyricTTML(this.song.id);
+        if (typeof ttmlRes === "string") ttmlLyric = ttmlRes;
+      } catch (e) {
+        console.error("Failed to fetch TTML", requestFailureCategory(e));
+      }
+
+      if (!ttmlLyric && !yrcLyric) {
+        try {
+          const artistsStr = Array.isArray(this.song.artists)
+            ? this.song.artists.map((a) => a.name).join("/")
+            : String(this.song.artists || "");
+          const keyword = `${this.song.name}-${artistsStr}`;
+          const qmResult = await qqMusicMatch(keyword);
+          if (qmResult?.code === 200 && qmResult?.qrc) {
+            qmResultData = qmResult;
+          }
+        } catch (e) {
+          console.error("QM Fallback failed", requestFailureCategory(e));
+        }
+      }
+
+      const verbatim = LyricProcessor.parseVerbatim(ttmlLyric, yrcLyric, qmResultData);
+      this.ttmlLyric = verbatim.ttml;
+      this.yrcLyric = verbatim.yrc;
+    }
+  }
   /**
    * 获取下载配置
    * @returns 下载配置
@@ -205,12 +232,14 @@ class SongDownloadStrategy implements DownloadStrategy {
     const fileName = this.getFileName();
     const targetPath = this.getDownloadPath();
     const { downloadMeta, downloadCover, saveMetaFile, downloadThreadCount, enableDownloadHttp2 } =
-      this.settingStore;
+      this.settings;
 
     return {
       fileName,
       fileType: this.fileType,
       path: targetPath,
+      directoryUri: this.settings.androidDownloadDirectoryUri,
+      androidSubPath: this.audio?.subPath ?? getAndroidDownloadSubPath(targetPath, this.settings.downloadPath),
       downloadMeta: downloadMeta,
       downloadCover: downloadCover && downloadMeta,
       downloadLyric: this.shouldDownloadLyrics(),
@@ -227,20 +256,28 @@ class SongDownloadStrategy implements DownloadStrategy {
    * 后置处理
    * @param downloadedFilePath 下载文件路径
    */
-  async postProcess(downloadedFilePath: string): Promise<void> {
-    console.log(`Post-processing file: ${downloadedFilePath}`);
+  async postProcess(_downloadedFilePath: string, isCurrent: () => boolean = () => true, taskId?: string): Promise<void> {
+    if (!isCurrent()) return;
+    this.taskId = taskId;
     const fileName = this.getFileName();
     const targetPath = this.getDownloadPath();
-    const { downloadMakeYrc, downloadSaveAsAss } = this.settingStore;
+    if (isCapacitorAndroid && this.shouldDownloadLyrics() && this.basicLyric.trim()) {
+      await this.writeAndroidText(isCurrent, {
+        fileName: `${fileName}.lrc`, content: this.basicLyric,
+        directoryUri: this.settings.androidDownloadDirectoryUri,
+        subPath: this.audio?.subPath ?? getAndroidDownloadSubPath(targetPath, this.settings.downloadPath),
+      });
+    }
+    const { downloadMakeYrc, downloadSaveAsAss } = this.settings;
 
     const options: LyricProcessorOptions = {
-      downloadLyricToTraditional: this.settingStore.downloadLyricToTraditional,
-      downloadLyricTranslation: this.settingStore.downloadLyricTranslation,
-      downloadLyricRomaji: this.settingStore.downloadLyricRomaji,
-      downloadLyricEncoding: this.settingStore.downloadLyricEncoding,
+      downloadLyricToTraditional: this.settings.downloadLyricToTraditional,
+      downloadLyricTranslation: this.settings.downloadLyricTranslation,
+      downloadLyricRomaji: this.settings.downloadLyricRomaji,
+      downloadLyricEncoding: this.settings.downloadLyricEncoding,
     };
 
-    if (downloadMakeYrc) {
+    if (this.shouldDownloadLyrics() && downloadMakeYrc) {
       const result = await LyricProcessor.generateVerbatimContent(
         this.ttmlLyric,
         this.yrcLyric,
@@ -256,18 +293,18 @@ class SongDownloadStrategy implements DownloadStrategy {
             content: result.content,
             encoding: result.encoding,
           });
-        } else if (isCapacitorAndroid && this.settingStore.androidDownloadDirectoryUri) {
-          await AndroidDownload.writeTextFile({
+        } else if (isCapacitorAndroid && this.settings.androidDownloadDirectoryUri) {
+          await this.writeAndroidText(isCurrent, {
             fileName: `${fileName}.${result.ext}`,
             content: result.content,
-            directoryUri: this.settingStore.androidDownloadDirectoryUri,
-            subPath: targetPath,
+            directoryUri: this.settings.androidDownloadDirectoryUri,
+            subPath: this.audio?.subPath ?? getAndroidDownloadSubPath(targetPath, this.settings.downloadPath),
           });
         }
       }
     }
 
-    if (downloadSaveAsAss) {
+    if (this.shouldDownloadLyrics() && downloadSaveAsAss) {
       const artist = Array.isArray(this.song.artists)
         ? this.song.artists[0]?.name
         : String(this.song.artists || "");
@@ -289,20 +326,29 @@ class SongDownloadStrategy implements DownloadStrategy {
             content: result.content,
             encoding: result.encoding,
           });
-        } else if (isCapacitorAndroid && this.settingStore.androidDownloadDirectoryUri) {
-          await AndroidDownload.writeTextFile({
+        } else if (isCapacitorAndroid && this.settings.androidDownloadDirectoryUri) {
+          await this.writeAndroidText(isCurrent, {
             fileName: `${fileName}.ass`,
             content: result.content,
-            directoryUri: this.settingStore.androidDownloadDirectoryUri,
-            subPath: targetPath,
+            directoryUri: this.settings.androidDownloadDirectoryUri,
+            subPath: this.audio?.subPath ?? getAndroidDownloadSubPath(targetPath, this.settings.downloadPath),
           });
         }
       }
     }
   }
 
+  private async writeAndroidText(
+    isCurrent: () => boolean,
+    options: Parameters<typeof AndroidDownload.writeTextFile>[0],
+  ) {
+    if (!isCurrent()) return;
+    const result = await AndroidDownload.writeTextFile({ ...options, taskId: this.taskId, encoding: this.settings.downloadLyricEncoding });
+    if (result.status !== "success") throw new Error("DOWNLOAD_SIDECAR_WRITE_FAILED");
+  }
+
   private async resolveUrl(): Promise<{ url: string; type: string }> {
-    const usePlayback = this.settingStore.usePlaybackForDownload;
+    const usePlayback = this.settings.usePlaybackForDownload;
     const levelName = songLevelData[this.quality].level;
 
     // 尝试使用播放链接
@@ -325,9 +371,9 @@ class SongDownloadStrategy implements DownloadStrategy {
     const isRestricted = this.song.free === 1 || this.song.free === 4 || this.song.free === 8;
     const canUseUnlock = !isRestricted || isVipUser;
 
-    if (this.settingStore.useUnlockForDownload && canUseUnlock) {
+    if (this.settings.useUnlockForDownload && canUseUnlock) {
       try {
-        const servers = this.settingStore.songUnlockServer
+        const servers = this.settings.songUnlockServer
           .filter((s) => s.enabled)
           .map((s) => s.key);
         const artist =
@@ -382,31 +428,33 @@ class SongDownloadStrategy implements DownloadStrategy {
    * @returns 文件名
    */
   private getFileName(): string {
+    if (this.audio) return this.audio.fileName;
     const infoObj = getPlayerInfoObj(this.song) || {
       name: this.song.name || "未知歌曲",
       artist: "未知歌手",
     };
     const baseTitle = infoObj.name || "未知歌曲";
     const rawArtist = infoObj.artist || "未知歌手";
-    const safeArtist = rawArtist.replace(/[/:*?"<>|]/g, "&");
-    const { fileNameFormat } = this.settingStore;
+    const safeArtist = safeDownloadName(rawArtist);
+    const { fileNameFormat } = this.settings;
 
     let displayName = baseTitle;
     if (fileNameFormat === "artist-title") displayName = `${safeArtist} - ${baseTitle}`;
     else if (fileNameFormat === "title-artist") displayName = `${baseTitle} - ${safeArtist}`;
 
-    return displayName.replace(/[/:*?"<>|]/g, "&");
+    return safeDownloadName(displayName);
   }
   /**
    * 获取下载路径
    * @returns 下载路径
    */
   private getDownloadPath(): string {
-    const finalPath = this.settingStore.downloadPath;
+    if (this.audio) return this.audio.targetPath;
+    const finalPath = this.settings.downloadPath;
     const infoObj = getPlayerInfoObj(this.song) || { artist: "未知歌手", album: "未知专辑" };
-    const safeArtist = (infoObj.artist || "未知歌手").replace(/[/:*?"<>|]/g, "&");
-    const safeAlbum = (infoObj.album || "未知专辑").replace(/[/:*?"<>|]/g, "&");
-    const { folderStrategy } = this.settingStore;
+    const safeArtist = safeDownloadName(infoObj.artist || "未知歌手");
+    const safeAlbum = safeDownloadName(infoObj.album || "未知专辑");
+    const { folderStrategy } = this.settings;
 
     if (folderStrategy === "artist") return `${finalPath}/${safeArtist}`;
     else if (folderStrategy === "artist-album") return `${finalPath}/${safeArtist}/${safeAlbum}`;
@@ -414,7 +462,7 @@ class SongDownloadStrategy implements DownloadStrategy {
   }
 
   private shouldDownloadLyrics(): boolean {
-    return this.settingStore.downloadLyric && this.settingStore.downloadMeta;
+    return this.settings.downloadLyric;
   }
 }
 
@@ -423,6 +471,7 @@ interface DownloadTask {
   strategy: DownloadStrategy;
   cancelled: boolean;
   nativeStarted: boolean;
+  retryRequested?: boolean;
 }
 
 const createDownloadTaskId = () => {
@@ -443,20 +492,30 @@ class DownloadManager {
   private maxConcurrent: number = 1;
   private initialized: boolean = false;
   private nativeReady: Promise<void> | null = null;
+  private progressReady: Promise<void> | null = null;
 
   constructor() {
     this.setupIpcListeners();
     if (isCapacitorAndroid) {
-      void AndroidDownload.addListener("downloadProgress", (progress) => {
+      void this.ensureProgressListener().catch(() => {});
+    }
+  }
+
+  private ensureProgressListener(): Promise<void> {
+    this.progressReady ??= AndroidDownload.addListener("downloadProgress", (progress) => {
         const task = this.activeDownloads.get(progress.taskId);
         if (!task || !this.isCurrent(task)) return;
         useDataStore().updateDownloadProgress(
-          task.strategy.id, Number((progress.percent * 100).toFixed(1)),
+          task.strategy.id, Number((Math.max(0, Math.min(1, progress.percent)) * 100).toFixed(1)),
           (progress.bytesRead / 1024 / 1024).toFixed(2) + "MB",
-          progress.contentLength > 0 ? (progress.contentLength / 1024 / 1024).toFixed(2) + "MB" : "0MB",
+          progress.contentLength > 0 ? (progress.contentLength / 1024 / 1024).toFixed(2) + "MB" : "未知",
         );
-      }).catch((error) => console.error("Download progress listener failed:", error));
-    }
+      }).then(() => {}).catch((error) => {
+        this.progressReady = null;
+        console.error("Download progress listener failed:", requestFailureCategory(error));
+        throw error;
+      });
+    return this.progressReady;
   }
 
   public init() {
@@ -481,7 +540,7 @@ class DownloadManager {
         const isActive = this.tasks.has(item.song.id);
         if (!isQueued && !isActive) {
           // 常规歌曲下载
-          this.enqueue(new SongDownloadStrategy(item.song as SongType, item.quality));
+          this.enqueue(new SongDownloadStrategy(item.song as SongType, item.quality, item.audio));
         }
       }
     });
@@ -577,10 +636,17 @@ class DownloadManager {
   public retryDownload(id: number) {
     const dataStore = useDataStore();
     const task = dataStore.downloadingSongs.find((s) => s.song.id === id);
+    const running = this.tasks.get(id);
+    if (task && running && task.status === "partial" && !running.cancelled) {
+      // A visible partial result can precede the journal write settling. Keep
+      // one retry intent without releasing the old task's resource slot early.
+      running.retryRequested = true;
+      return;
+    }
     if (task && !this.tasks.has(id)) {
       dataStore.updateDownloadStatus(id, "waiting");
       // 重新加入队列
-      this.enqueue(new SongDownloadStrategy(task.song as SongType, task.quality));
+      this.enqueue(new SongDownloadStrategy(task.song as SongType, task.quality, task.audio));
       this.processQueue();
     }
   }
@@ -591,7 +657,7 @@ class DownloadManager {
     this.init();
     const dataStore = useDataStore();
     const failedSongs = dataStore.downloadingSongs
-      .filter((item) => item.status === "failed")
+      .filter((item) => (item.status === "failed" || item.status === "partial"))
       .map((item) => item.song.id);
     failedSongs.forEach((id) => this.retryDownload(id));
   }
@@ -605,7 +671,7 @@ class DownloadManager {
     const existing = dataStore.downloadingSongs.find((item) => item.song.id === id);
 
     if (existing) {
-      if (existing.status === "failed") {
+      if ((existing.status === "failed" || existing.status === "partial")) {
         this.retryDownload(id);
         return true;
       }
@@ -647,6 +713,26 @@ class DownloadManager {
    * 开始下载任务
    * @param strategy 下载策略
    */
+  private async finishSidecars(task: DownloadTask, path: string) {
+    try {
+      await task.strategy.postProcess(path, () => this.isCurrent(task), task.taskId);
+    } catch (error) {
+      task.strategy.sidecarFailed = true;
+      console.error("Download sidecar write failed:", requestFailureCategory(error));
+    }
+  }
+
+  private async saveAudioReceipt(task: DownloadTask, audio: DownloadedAudioReceipt, status: "downloading" | "partial") {
+    try {
+      await useDataStore().saveDownloadedAudio(task.strategy.id, audio, status);
+    } catch (error) {
+      if (!this.isCurrent(task)) return;
+      task.strategy.sidecarFailed = true;
+      useDataStore().updateDownloadStatus(task.strategy.id, "partial");
+      console.error("Downloaded audio receipt persistence failed:", requestFailureCategory(error));
+    }
+  }
+
   private async startTask(task: DownloadTask) {
     const { strategy } = task;
     this.activeDownloads.set(task.taskId, task);
@@ -655,6 +741,7 @@ class DownloadManager {
 
     try {
       if (isCapacitorAndroid) {
+        await this.ensureProgressListener();
         // A WebView reload may leave the native plugin alive. Drain that session first.
         this.nativeReady ??= AndroidDownload.resetDownloads().then(() => {}).catch((error) => {
           this.nativeReady = null;
@@ -663,7 +750,13 @@ class DownloadManager {
         await this.nativeReady;
         if (!this.isCurrent(task)) return;
       }
-      await strategy.prepare();
+      if (isCapacitorAndroid && strategy.audio) {
+        task.nativeStarted = true;
+        const verified = await AndroidDownload.verifyDownloadedFile({ ...strategy.audio, taskId: task.taskId });
+        if (!this.isCurrent(task)) return;
+        if (!verified.valid) throw new Error("DOWNLOADED_AUDIO_CHANGED_OR_UNAVAILABLE");
+      }
+      await strategy.prepare(isCapacitorAndroid && !!strategy.audio);
       if (!this.isCurrent(task)) return;
       const config = strategy.getDownloadConfig();
 
@@ -678,10 +771,15 @@ class DownloadManager {
 
         if (!this.isCurrent(task)) return;
         if (downloadResult.status === "success" || downloadResult.status === "skipped") {
-          await strategy.postProcess(downloadResult.path || config.path); // IPC 返回结果通常包含路径
+          await this.finishSidecars(task, downloadResult.path || config.path);
           if (!this.isCurrent(task)) return;
-          dataStore.removeDownloadingSong(strategy.id);
-          window.$message.success(`${strategy.name} 下载完成`);
+          if (strategy.sidecarFailed) {
+            dataStore.updateDownloadStatus(strategy.id, "partial");
+            window.$message.warning(`${strategy.name} 音频已保存，歌词处理失败，可重试补充`);
+          } else {
+            dataStore.removeDownloadingSong(strategy.id);
+            window.$message.success(`${strategy.name} 下载完成`);
+          }
         } else {
           if (downloadResult.status === "cancelled") {
             // 已取消，无需处理
@@ -691,29 +789,44 @@ class DownloadManager {
         }
       } else if (isCapacitorAndroid) {
         // Android SAF 下载
-        if (!strategy.downloadUrl) throw new Error("Download URL missing");
-        const settingStore = useSettingStore();
-        const directoryUri = settingStore.androidDownloadDirectoryUri;
+        if (!strategy.audio && !strategy.downloadUrl) throw new Error("Download URL missing");
+        const directoryUri = config.directoryUri;
         if (!directoryUri) {
           throw new Error("未配置下载目录，请在设置中选择下载目录");
         }
 
         const fileName = `${config.fileName}.${config.fileType}`;
         task.nativeStarted = true;
-        const downloadResult = await AndroidDownload.downloadFile({
+        const downloadResult = strategy.audio
+          ? { status: "skipped" as const, ...strategy.audio }
+          : await AndroidDownload.downloadFile({
           taskId: task.taskId,
           url: strategy.downloadUrl,
           fileName,
           directoryUri,
-          subPath: getAndroidDownloadSubPath(config.path, settingStore.downloadPath),
+          subPath: config.androidSubPath,
         });
 
         if (!this.isCurrent(task)) return;
         if (downloadResult.status === "success" || downloadResult.status === "skipped") {
-          await strategy.postProcess(downloadResult.path || config.path);
+          const audio = downloadResult.path && downloadResult.bytes && downloadResult.sha256
+            ? { path: downloadResult.path, bytes: downloadResult.bytes, sha256: downloadResult.sha256,
+                fileName: config.fileName, fileType: config.fileType, directoryUri,
+                subPath: config.androidSubPath, targetPath: config.path }
+            : undefined;
+          if (audio) await this.saveAudioReceipt(task, audio, "downloading");
           if (!this.isCurrent(task)) return;
-          dataStore.removeDownloadingSong(strategy.id);
-          window.$message.success(`${strategy.name} 下载完成`);
+          await this.finishSidecars(task, downloadResult.path || config.path);
+          if (!this.isCurrent(task)) return;
+          if (strategy.sidecarFailed) {
+            if (audio) await this.saveAudioReceipt(task, audio, "partial");
+            else dataStore.updateDownloadStatus(strategy.id, "partial");
+            if (!this.isCurrent(task)) return;
+            window.$message.warning(`${strategy.name} 音频已保存，歌词或完成记录保存失败，可重试补充`);
+          } else {
+            dataStore.removeDownloadingSong(strategy.id);
+            window.$message.success(`${strategy.name} 下载完成`);
+          }
         } else {
           throw new Error("下载失败");
         }
@@ -730,8 +843,15 @@ class DownloadManager {
       dataStore.markDownloadFailed(strategy.id);
       window.$message.error("下载出错，请检查网络、音源和下载目录");
     } finally {
+      if (isCapacitorAndroid && task.nativeStarted) {
+        void AndroidDownload.releaseDownloadTask({ taskId: task.taskId }).catch((error) => {
+          console.error("Download task identity cleanup failed:", requestFailureCategory(error));
+        });
+      }
       this.activeDownloads.delete(task.taskId);
-      if (this.tasks.get(strategy.id) === task) this.tasks.delete(strategy.id);
+      const ownsTask = this.tasks.get(strategy.id) === task;
+      if (ownsTask) this.tasks.delete(strategy.id);
+      if (ownsTask && !task.cancelled && task.retryRequested) this.retryDownload(strategy.id);
       this.processQueue();
     }
   }

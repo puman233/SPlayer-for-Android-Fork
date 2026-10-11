@@ -46,6 +46,7 @@ public class AndroidDownloadPlugin extends Plugin {
   // Activity recreation creates a new plugin before old provider IO necessarily settles.
   // The startup barrier must see those workers across plugin instances in this process.
   private static final ConcurrentHashMap<String, DownloadTransfer.Control> activeDownloads = new ConcurrentHashMap<>();
+  private static final Set<String> cancelledTasks = ConcurrentHashMap.newKeySet();
   private final ConcurrentHashMap<String, DownloadTransfer.Control> ownedDownloads = new ConcurrentHashMap<>();
   private final ExecutorService cancellationExecutor = Executors.newFixedThreadPool(2);
   private static final Object[] DOWNLOAD_LOCKS = new Object[32];
@@ -53,6 +54,12 @@ public class AndroidDownloadPlugin extends Plugin {
     for (int i = 0; i < DOWNLOAD_LOCKS.length; i++) DOWNLOAD_LOCKS[i] = new Object();
   }
   private final ConcurrentHashMap<String, Object> coverWriteLocks = new ConcurrentHashMap<>();
+
+  private void settleDownloadStage(String taskId, DownloadTransfer.Control control) {
+    activeDownloads.remove(taskId, control);
+    ownedDownloads.remove(taskId, control);
+    control.settled.countDown();
+  }
 
   @Override
   protected void handleOnDestroy() {
@@ -121,7 +128,8 @@ public class AndroidDownloadPlugin extends Plugin {
     String subPath = call.getString("subPath", "");
 
     if (!taskId.matches("[a-zA-Z0-9-]{1,80}") || fileUrl.isEmpty() || fileName.isEmpty() || directoryUri.isEmpty()
-        || fileName.contains("/") || fileName.contains("\\") || fileName.equals(".") || fileName.equals("..")) {
+        || fileName.contains("/") || fileName.contains("\\") || fileName.equals(".") || fileName.equals("..")
+        || subPath.startsWith("/") || subPath.contains("\\") || subPath.contains(":")) {
       call.reject("Valid taskId, url, fileName, and directoryUri are required");
       return;
     }
@@ -153,6 +161,7 @@ public class AndroidDownloadPlugin extends Plugin {
                   if (part.equals(".") || part.equals("..")) throw new IOException("INVALID_DOWNLOAD_SUBPATH");
                   control.check();
                   DocumentFile existing = findChild(targetDir, part);
+                  if (existing != null && !existing.isDirectory()) throw new IOException("DOWNLOAD_DIRECTORY_CONFLICT");
                   if (existing != null && existing.isDirectory()) {
                     targetDir = existing;
                   } else {
@@ -162,6 +171,7 @@ public class AndroidDownloadPlugin extends Plugin {
                       return;
                     }
                   }
+                  if (!part.equals(targetDir.getName())) throw new IOException("DOWNLOAD_DIRECTORY_NAME_CHANGED");
                 }
               }
 
@@ -170,29 +180,39 @@ public class AndroidDownloadPlugin extends Plugin {
               DownloadTransfer.Result transferred;
               synchronized (lock) {
                 control.check();
-                final int[] lastPercent = {-1};
+                DownloadProgress emission = new DownloadProgress();
                 transferred = DownloadTransfer.download(
                     taskId, fileUrl, fileName, new SafDownloadStorage(targetDir), control,
                     (read, total) -> {
-                      int percent = total > 0 ? (int) (read * 100 / total) : -1;
-                      if (!control.cancelled && percent >= 0 && percent / 5 != lastPercent[0] / 5) {
-                        lastPercent[0] = percent;
+                      if (!control.cancelled && emission.shouldEmit(read, total, android.os.SystemClock.elapsedRealtime())) {
                         JSObject progress = new JSObject();
                         progress.put("taskId", taskId);
                         progress.put("bytesRead", read);
                         progress.put("contentLength", total);
-                        progress.put("percent", percent / 100.0);
+                        progress.put("percent", total > 0 ? Math.min(0.99, (double) read / total) : 0);
                         notifyListeners("downloadProgress", progress);
                       }
                     });
+              }
+              if (transferred.status.equals("success") || transferred.status.equals("skipped")) {
+                JSObject complete = new JSObject();
+                complete.put("taskId", taskId);
+                complete.put("bytesRead", transferred.bytes);
+                complete.put("contentLength", transferred.bytes);
+                complete.put("percent", 1.0);
+                notifyListeners("downloadProgress", complete);
               }
               JSObject result = new JSObject();
               result.put("taskId", taskId);
               result.put("status", transferred.status);
               result.put("path", transferred.path);
               result.put("fileName", fileName);
+              result.put("bytes", transferred.bytes);
+              result.put("sha256", transferred.sha256);
+              settleDownloadStage(taskId, control);
               call.resolve(result);
             } catch (Exception error) {
+              settleDownloadStage(taskId, control);
               if (control.cancelled) {
                 JSObject cancelled = new JSObject();
                 cancelled.put("taskId", taskId);
@@ -241,6 +261,8 @@ public class AndroidDownloadPlugin extends Plugin {
   @PluginMethod
   public void cancelDownload(PluginCall call) {
     String taskId = call.getString("taskId", "");
+    if (!taskId.matches("[a-zA-Z0-9-]{1,80}")) { call.reject("INVALID_TASK_ID"); return; }
+    cancelledTasks.add(taskId);
     DownloadTransfer.Control control = activeDownloads.get(taskId);
     if (control == null || control.completed) {
       JSObject result = new JSObject();
@@ -260,6 +282,14 @@ public class AndroidDownloadPlugin extends Plugin {
     JSObject result = new JSObject();
     result.put("status", "cancelling");
     call.resolve(result);
+  }
+
+  @PluginMethod
+  public void releaseDownloadTask(PluginCall call) {
+    String taskId = call.getString("taskId", "");
+    if (activeDownloads.containsKey(taskId)) { call.reject("DOWNLOAD_TASK_STILL_ACTIVE"); return; }
+    cancelledTasks.remove(taskId);
+    call.resolve();
   }
 
   private final class SafDownloadStorage implements DownloadTransfer.Storage {
@@ -296,6 +326,10 @@ public class AndroidDownloadPlugin extends Plugin {
 
   @PluginMethod
   public void writeTextFile(PluginCall call) {
+    if (call.getString("taskId") != null) {
+      writeDownloadSidecar(call);
+      return;
+    }
     String fileName = call.getString("fileName", "");
     String content = call.getString("content", "");
     String directoryUri = call.getString("directoryUri", "");
@@ -372,6 +406,119 @@ public class AndroidDownloadPlugin extends Plugin {
             call.reject("WRITE_FILE_FAILED", error);
           }
         });
+  }
+
+  private void writeDownloadSidecar(PluginCall call) {
+    String taskId = call.getString("taskId", "");
+    String fileName = call.getString("fileName", "");
+    String subPath = call.getString("subPath", "");
+    String directoryUri = call.getString("directoryUri", "");
+    String content = call.getString("content", "");
+    String encoding = call.getString("encoding", "utf-8");
+    if (!taskId.matches("[a-zA-Z0-9-]{1,80}") || fileName.isEmpty() || directoryUri.isEmpty()
+        || fileName.contains("/") || fileName.contains("\\") || fileName.equals(".") || fileName.equals("..")
+        || subPath.startsWith("/") || subPath.contains("\\") || subPath.contains(":")) {
+      call.reject("INVALID_SIDECAR_TARGET"); return;
+    }
+    if (!java.util.Arrays.asList("utf-8", "utf-16", "gbk", "iso-8859-1").contains(encoding)) {
+      call.reject("UNSUPPORTED_SIDECAR_ENCODING"); return;
+    }
+    DownloadTransfer.Control control = new DownloadTransfer.Control();
+    if (cancelledTasks.contains(taskId)) control.requestCancel();
+    if (activeDownloads.putIfAbsent(taskId, control) != null) {
+      call.reject("DOWNLOAD_TASK_ID_ALREADY_ACTIVE"); return;
+    }
+    ownedDownloads.put(taskId, control);
+    try {
+      executor.execute(() -> {
+        try {
+          if (cancelledTasks.contains(taskId)) control.requestCancel();
+          control.check();
+          DocumentFile target = DocumentFile.fromTreeUri(getContext(), Uri.parse(directoryUri));
+          if (target == null || !target.exists() || !target.canWrite()) throw new IOException("DOWNLOAD_DIRECTORY_NOT_WRITABLE");
+          for (String part : subPath.split("/")) {
+            if (part.isEmpty()) continue;
+            if (part.equals(".") || part.equals("..")) throw new IOException("INVALID_DOWNLOAD_SUBPATH");
+            control.check();
+            DocumentFile child = findChild(target, part);
+            if (child != null && !child.isDirectory()) throw new IOException("DOWNLOAD_DIRECTORY_CONFLICT");
+            target = child != null ? child : target.createDirectory(part);
+            if (target == null) throw new IOException("FAILED_TO_CREATE_SUBDIRECTORY");
+            if (!part.equals(target.getName())) throw new IOException("DOWNLOAD_DIRECTORY_NAME_CHANGED");
+          }
+          java.nio.charset.Charset charset = java.nio.charset.Charset.forName(encoding);
+          java.nio.ByteBuffer encoded = charset.newEncoder()
+              .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+              .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+              .encode(java.nio.CharBuffer.wrap(content));
+          byte[] bytes = new byte[encoded.remaining()];
+          encoded.get(bytes);
+          String key = directoryUri + "/" + subPath + "/" + fileName;
+          Object lock = DOWNLOAD_LOCKS[(key.hashCode() & 0x7fffffff) % DOWNLOAD_LOCKS.length];
+          DownloadTransfer.Result saved;
+          synchronized (lock) {
+            control.check();
+            saved = DownloadTransfer.writeText(taskId, bytes, fileName, new SafDownloadStorage(target), control);
+          }
+          JSObject result = new JSObject();
+          result.put("status", saved.status);
+          result.put("path", saved.path);
+          settleDownloadStage(taskId, control);
+          call.resolve(result);
+        } catch (Exception error) {
+          settleDownloadStage(taskId, control);
+          call.reject(control.cancelled ? "DOWNLOAD_CANCELLED" : "SIDECAR_WRITE_FAILED");
+        } finally {
+          activeDownloads.remove(taskId, control);
+          ownedDownloads.remove(taskId, control);
+          control.settled.countDown();
+        }
+      });
+    } catch (java.util.concurrent.RejectedExecutionException error) {
+      activeDownloads.remove(taskId, control);
+      ownedDownloads.remove(taskId, control);
+      control.settled.countDown();
+      call.reject("DOWNLOAD_EXECUTOR_UNAVAILABLE");
+    }
+  }
+
+  @PluginMethod
+  public void verifyDownloadedFile(PluginCall call) {
+    String taskId = call.getString("taskId", "");
+    String path = call.getString("path", "");
+    String hash = call.getString("sha256", "");
+    // JSONObject represents small JS integers as Integer; Capacitor getLong only
+    // accepts Long. Validate the numeric value rather than its boxed Java type.
+    Object rawBytes = call.getData().opt("bytes");
+    double numericBytes = rawBytes instanceof Number ? ((Number) rawBytes).doubleValue() : Double.NaN;
+    Long bytes = Double.isFinite(numericBytes) && numericBytes > 0
+        && numericBytes <= 9007199254740991d && Math.floor(numericBytes) == numericBytes
+        ? ((Number) rawBytes).longValue() : null;
+    if (!taskId.matches("[a-zA-Z0-9-]{1,80}") || !path.startsWith("content://")
+        || !hash.matches("[a-f0-9]{64}") || bytes == null || bytes <= 0) {
+      call.reject("INVALID_AUDIO_RECEIPT"); return;
+    }
+    DownloadTransfer.Control control = new DownloadTransfer.Control();
+    if (activeDownloads.putIfAbsent(taskId, control) != null) { call.reject("DOWNLOAD_TASK_ID_ALREADY_ACTIVE"); return; }
+    ownedDownloads.put(taskId, control);
+    try {
+      executor.execute(() -> {
+        try {
+          if (cancelledTasks.contains(taskId)) control.requestCancel();
+          DownloadTransfer.verify(new SafDownloadStorage(null), path, bytes, hash, control);
+          settleDownloadStage(taskId, control);
+          JSObject result = new JSObject(); result.put("valid", true); call.resolve(result);
+        } catch (IOException | RuntimeException error) {
+          settleDownloadStage(taskId, control);
+          JSObject result = new JSObject(); result.put("valid", false); call.resolve(result);
+        } finally {
+          activeDownloads.remove(taskId, control); ownedDownloads.remove(taskId, control); control.settled.countDown();
+        }
+      });
+    } catch (java.util.concurrent.RejectedExecutionException error) {
+      activeDownloads.remove(taskId, control); ownedDownloads.remove(taskId, control); control.settled.countDown();
+      call.reject("DOWNLOAD_EXECUTOR_UNAVAILABLE");
+    }
   }
 
   @PluginMethod

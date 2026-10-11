@@ -54,10 +54,12 @@
                   >
                     {{
                       item.status === "downloading"
-                        ? `${item.progress}%`
+                        ? item.totalSize === "未知" ? "下载中…" : `${item.progress}%`
                         : item.status === "waiting"
                           ? "等待下载..."
-                          : "下载失败"
+                          : item.status === "partial"
+                            ? "音频已保存，歌词处理失败"
+                            : "下载失败"
                     }}
                   </n-text>
                   <n-text v-if="item.status === 'downloading'" depth="3" style="font-size: 12px">
@@ -77,7 +79,7 @@
             <!-- 操作 -->
             <n-flex align="center" justify="center" class="actions">
               <n-button
-                v-if="item.status === 'failed'"
+                v-if="item.status === 'failed' || item.status === 'partial'"
                 type="primary"
                 secondary
                 strong

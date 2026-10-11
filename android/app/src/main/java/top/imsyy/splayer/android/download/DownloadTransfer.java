@@ -26,7 +26,13 @@ final class DownloadTransfer {
   static final class Result {
     final String status;
     final String path;
-    Result(String status, String path) { this.status = status; this.path = path; }
+    final long bytes;
+    final String sha256;
+    Result(String status, String path) { this(status, path, 0); }
+    Result(String status, String path, long bytes) { this(status, path, bytes, null); }
+    Result(String status, String path, long bytes, String sha256) {
+      this.status = status; this.path = path; this.bytes = bytes; this.sha256 = sha256;
+    }
   }
   static final class Control {
     final java.util.concurrent.CountDownLatch settled = new java.util.concurrent.CountDownLatch(1);
@@ -53,6 +59,76 @@ final class DownloadTransfer {
 
   static String pendingName(String name) {
     return ".splayer-" + hex(digest().digest(name.getBytes(StandardCharsets.UTF_8))) + ".pending";
+  }
+
+  static Result writeText(String taskId, byte[] bytes, String name, Storage storage,
+      Control control) throws IOException {
+    if (bytes.length == 0) throw new IOException("SIDECAR_EMPTY_CONTENT");
+    control.check();
+    String hash = hex(digest().digest(bytes));
+    String recovery = recoverPending(name, storage, control);
+    String existing = storage.find(name);
+    if (existing != null) {
+      // Equality permits reuse, never deleting or replacing a user's document.
+      verify(storage, existing, bytes.length, hash, control);
+      control.check();
+      if (recovery != null && !storage.delete(recovery)) throw new IOException("DOWNLOAD_MARKER_CLEANUP_FAILED");
+      return new Result("success", existing);
+    }
+    String[] staged = {null}, pending = {recovery};
+    boolean finalAttempted = false;
+    try {
+      if (pending[0] == null) {
+        createExact(storage, pendingName(name), path -> pending[0] = path);
+        writeMarker(storage, pending[0], "CREATING");
+      }
+      String partName = ".splayer-" + taskId + ".part";
+      String part = createExact(storage, partName, path -> {
+        staged[0] = path;
+        writeMarker(storage, pending[0], path);
+      });
+      try (OutputStream output = storage.write(part)) {
+        for (int offset = 0; offset < bytes.length; offset += 8192) {
+          control.check();
+          output.write(bytes, offset, Math.min(8192, bytes.length - offset));
+        }
+        control.check();
+        output.flush();
+      }
+      verify(storage, part, bytes.length, hash, control);
+      writeMarker(storage, pending[0], "CREATING");
+      control.check();
+      finalAttempted = true;
+      String destination = createExact(storage, name, path -> writeMarker(storage, pending[0], path));
+      try (InputStream input = storage.read(part); OutputStream output = storage.write(destination)) {
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) control.write(output, buffer, count);
+        control.check();
+        output.flush();
+      }
+      verify(storage, destination, bytes.length, hash, control);
+      synchronized (control) {
+        control.check();
+        control.completed = true;
+      }
+      if (!storage.delete(pending[0])) throw new IOException("DOWNLOAD_COMMIT_MARKER_FAILED");
+      pending[0] = null;
+      return new Result("success", destination);
+    } catch (RuntimeException error) {
+      throw new IOException("DOWNLOAD_PROVIDER_FAILED", error);
+    } finally {
+      boolean stagedRemoved = staged[0] == null;
+      if (staged[0] != null) {
+        try {
+          stagedRemoved = (".splayer-" + taskId + ".part").equals(storage.name(staged[0])) && storage.delete(staged[0]);
+        } catch (IOException | RuntimeException ignored) { stagedRemoved = false; }
+      }
+      // Preserve a journal after any indeterminate final creation or failed cleanup.
+      if (pending[0] != null && !finalAttempted && stagedRemoved && recovery == null) {
+        try { storage.delete(pending[0]); } catch (IOException | RuntimeException ignored) {}
+      }
+    }
   }
 
   static Result download(String taskId, String url, String name, Storage storage,
@@ -121,7 +197,7 @@ final class DownloadTransfer {
         }
         // Content equality authorizes completion, never deletion/overwrite of the audio.
         if (recovery != null && !storage.delete(recovery)) throw new IOException("DOWNLOAD_MARKER_CLEANUP_FAILED");
-        return new Result("skipped", existing);
+        return new Result("skipped", existing, total, hash);
       }
       // Persist unfinished state before any document can acquire its final audio name.
       // An indeterminate creation (crash or failed journal write) quarantines this directory.
@@ -152,7 +228,7 @@ final class DownloadTransfer {
       if (!storage.delete(pending)) throw new IOException("DOWNLOAD_COMMIT_MARKER_FAILED");
       pendingRef[0] = null;
       published = true;
-      return new Result("success", ownedFinal);
+      return new Result("success", ownedFinal, total, hash);
     } catch (IOException error) {
       if (control.cancelled) return new Result("cancelled", null);
       throw error;
@@ -276,7 +352,7 @@ final class DownloadTransfer {
         .decode(java.nio.ByteBuffer.wrap(bytes)).toString();
   }
 
-  private static void verify(Storage storage, String path, long size, String hash, Control control) throws IOException {
+  static void verify(Storage storage, String path, long size, String hash, Control control) throws IOException {
     MessageDigest actual = digest();
     long count = 0;
     try (InputStream input = storage.read(path)) {

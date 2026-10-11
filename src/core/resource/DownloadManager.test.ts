@@ -14,7 +14,7 @@ const deferred = () => {
 };
 
 // Native/HTTP, persistence and platform boundaries; the actual manager and strategy run unchanged.
-function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(), random = globalThis.crypto) {
+function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(), random = globalThis.crypto, listenerReady = Promise.resolve()) {
   const requests: any[] = [];
   const songs: any[] = [];
   const messages: string[] = [];
@@ -34,6 +34,7 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
     updateDownloadProgress: (id: number, percent: number) => { const s = songs.find((s) => s.song.id === id); if (s) s.progress = percent; },
   };
   const native = {
+    releaseDownloadTask: async () => {},
     resetDownloads: () => typeof startup === "function" ? startup() : startup,
     downloadFile: (options: any) => {
       const result = deferred();
@@ -47,7 +48,7 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
       // Cancellation request acknowledgement is deliberately earlier than resource shutdown.
       return { status: "cancelling" };
     },
-    addListener: async (_name: string, callback: typeof progress) => { progress = callback; return { remove: async () => {} }; },
+    addListener: async (_name: string, callback: typeof progress) => { await listenerReady; progress = callback; return { remove: async () => {} }; },
   };
   const imports: Record<string, any> = {
     "@/utils/requestDiagnostics": { requestFailureCategory },
@@ -74,6 +75,18 @@ function fixture(startup: Promise<any> | (() => Promise<any>) = Promise.resolve(
     add: async (id: number) => { await manager.addDownload({ id, name: `song${id}`, album: "album", artists: "artist" }, "standard"); await tick(); },
   };
 }
+
+test("native requests wait for progress subscription so fast downloads cannot precede the listener", async () => {
+  const listener = deferred();
+  const f = fixture(Promise.resolve(), globalThis.crypto, listener.promise);
+  await f.add(1);
+  assert.equal(f.requests.length, 0);
+  listener.resolve(undefined);
+  await tick();
+  assert.equal(f.requests.length, 1);
+  f.emit({ taskId: f.requests[0].taskId, bytesRead: 1, contentLength: 2, percent: 0.5 });
+  assert.equal(f.songs[0].progress, 50);
+});
 
 test("deleting an active download cancels native IO and retains its slot until shutdown", async () => {
   const f = fixture();

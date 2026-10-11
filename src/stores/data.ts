@@ -18,6 +18,7 @@ import localforage from "localforage";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { useMusicStore } from "./music";
 import { useStatusStore } from "./status";
+import type { DownloadedAudioReceipt } from "@/plugins/androidDownload";
 
 interface ListState {
   accountRevision: number;
@@ -48,7 +49,8 @@ interface ListState {
     /** 音质 */
     quality: SongLevelType;
     /** 状态：下载中 / 等待中 / 失败 */
-    status: "downloading" | "waiting" | "failed";
+    status: "downloading" | "waiting" | "failed" | "partial";
+    audio?: DownloadedAudioReceipt;
     /** 下载进度 */
     progress: number;
     /** 已传输大小 */
@@ -557,7 +559,7 @@ export const useDataStore = defineStore("data", {
      * @param songId 歌曲ID
      * @param status 下载状态
      */
-    updateDownloadStatus(songId: number, status: "downloading" | "waiting" | "failed") {
+    updateDownloadStatus(songId: number, status: "downloading" | "waiting" | "failed" | "partial") {
       const index = this.downloadingSongs.findIndex((item) => item.song.id === songId);
       if (index !== -1) {
         this.downloadingSongs[index].status = status;
@@ -565,6 +567,15 @@ export const useDataStore = defineStore("data", {
         this.downloadingSongs = [...this.downloadingSongs];
         markMusicDirty("downloadingSongs");
       }
+    },
+    async saveDownloadedAudio(songId: number, audio: DownloadedAudioReceipt, status: "downloading" | "partial") {
+      const item = this.downloadingSongs.find((entry) => entry.song.id === songId);
+      if (!item) return;
+      item.audio = cloneDeep(audio);
+      item.status = status;
+      item.progress = 100;
+      markMusicDirty("downloadingSongs");
+      await getMusicDB().setItem("downloadingSongs", cloneDeep(this.downloadingSongs));
     },
     // 更新下载进度
     updateDownloadProgress(

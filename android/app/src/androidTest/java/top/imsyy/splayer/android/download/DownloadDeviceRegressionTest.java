@@ -198,6 +198,106 @@ public class DownloadDeviceRegressionTest {
     await("window.__SPLAYER_PLAYER_CONTROLLER__?.currentRequestToken>0&&!Reflect.ownKeys(document.querySelector('#app').__vue_app__._context.provides).map(k=>document.querySelector('#app').__vue_app__._context.provides[k]).find(v=>v?._s instanceof Map)._s.get('status').playLoading");
     js("(()=>{const a=document.querySelector('#app').__vue_app__,p=Reflect.ownKeys(a._context.provides).map(k=>a._context.provides[k]).find(v=>v?._s instanceof Map);window.drSetting=p._s.get('setting');window.drSaved="+saved+";window.drNative=window.Capacitor.nativePromise;window.drRequests=[];window.drResults={};})()");
   }
+
+  @Test public void sidecarConflictAndWriteFailurePreserveOriginalBytes() throws Exception {
+    byte[] original = "[00:01.000]用户合成歌词".getBytes(StandardCharsets.UTF_8);
+    put("original.lrc", original);
+    configure(true, 0);
+    JSONObject options = new JSONObject().put("taskId", "sidecar-"+UUID.randomUUID())
+        .put("directoryUri", tree.toString()).put("fileName", "original.lrc")
+        .put("content", "replacement").put("encoding", "utf-8");
+    js("Capacitor.nativePromise('AndroidDownload','writeTextFile',"+options+").then(v=>drResults.conflict={ok:true,...v},e=>drResults.conflict={ok:false})");
+    assertFalse(result("conflict").getBoolean("ok"));
+    assertArrayEquals(original, read("original.lrc"));
+    options.put("taskId", "sidecar-"+UUID.randomUUID()).put("fileName", "failed.lrc");
+    js("Capacitor.nativePromise('AndroidDownload','writeTextFile',"+options+").then(v=>drResults.denied={ok:true,...v},e=>drResults.denied={ok:false})");
+    assertFalse(result("denied").getBoolean("ok"));
+    assertFalse(names().contains("failed.lrc"));
+    configure(false, 0);
+    options.put("taskId", "sidecar-"+UUID.randomUUID()).put("subPath", "歌手/专辑").put("fileName", "song.lrc")
+        .put("content", "[00:01.000]合成歌词").put("encoding", "utf-16");
+    js("Capacitor.nativePromise('AndroidDownload','writeTextFile',"+options+").then(v=>drResults.utf16={ok:true,...v},e=>drResults.utf16={ok:false})");
+    assertTrue(result("utf16").getBoolean("ok"));
+    assertEquals("[00:01.000]合成歌词", new String(read("歌手/专辑/song.lrc"), StandardCharsets.UTF_16));
+    evidence.put("originalLyricsPreserved", true);
+  }
+
+  @Test public void unknownLengthProgressAndVerifiedCompletionUseActualBytes() throws Exception {
+    js("window.drEvents=[];window.drProgressHandle=Capacitor.addListener('AndroidDownload','downloadProgress',e=>drEvents.push(e))");
+    try {
+      String task = download("chunkProgress", "chunked", "progress.wav", "");
+      assertEquals("success", result("chunkProgress").getString("status"));
+      await("drEvents.some(e=>e.taskId==="+JSONObject.quote(task)+"&&e.percent===1)");
+      JSONArray events = new JSONArray((String)value("JSON.stringify(drEvents.filter(e=>e.taskId==="+JSONObject.quote(task)+"))"));
+      assertTrue("Unknown length must still report bytes", events.length() >= 2);
+      JSONObject first = events.getJSONObject(0), last = events.getJSONObject(events.length()-1);
+      assertEquals(-1, first.getLong("contentLength"));
+      assertTrue(first.getLong("bytesRead") > 0);
+      assertTrue(first.getDouble("percent") < 1);
+      assertEquals(Server.wav.length, last.getLong("bytesRead"));
+      assertEquals(Server.wav.length, last.getLong("contentLength"));
+      assertArrayEquals(Server.wav, read("progress.wav"));
+      evidence.put("progressEvents", events);
+    } finally {
+      js("window.drProgressHandle?.remove()");
+    }
+    restartFixtureActivity();
+    js("window.drEvents=[];window.drProgressHandle=Capacitor.addListener('AndroidDownload','downloadProgress',e=>drEvents.push(e))");
+    try {
+      String restoredTask = download("restoredProgress", "chunked", "restored-progress.wav", "");
+      assertEquals("success", result("restoredProgress").getString("status"));
+      await("drEvents.some(e=>e.taskId==="+JSONObject.quote(restoredTask)+"&&e.percent===1)");
+      assertTrue("Listener must be registered in the new WebView", Integer.parseInt(js("drEvents.filter(e=>e.taskId==="+JSONObject.quote(restoredTask)+").length")) >= 2);
+      assertArrayEquals(Server.wav, read("restored-progress.wav"));
+      evidence.put("progressAfterActivityRecreation", true);
+    } finally {
+      js("window.drProgressHandle?.remove()");
+    }
+  }
+
+  @Test public void publicManagerSavesBasicLrcAndRetriesOnlyLyricsInOriginalDirectory() throws Exception {
+    js("(async()=>{const u=performance.getEntriesByType('resource').find(e=>/\\/stores-[^/]+\\.js/.test(e.name)).name,m=await import(u);window.drManager=Object.values(m).flatMap(v=>typeof v==='function'&&/^\\(\\)=>[\\w$]+$/.test(Function.prototype.toString.call(v))?[v()]:[v]).find(v=>v&&Object.prototype.hasOwnProperty.call(v,'queue')&&typeof v.addDownload==='function');})()");
+    await("!!window.drManager");
+    js("(()=>{drSetting.downloadLyric=true;drSetting.folderStrategy='artist-album';window.drLyricFailure=true;window.drXhrOpen=XMLHttpRequest.prototype.open;window.drXhrSend=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.open=function(m,u,...a){this.drUrl=u;return drXhrOpen.call(this,m,u,...a)};XMLHttpRequest.prototype.send=function(...a){const u=String(this.drUrl),isLyric=u.includes('/lyric/new');if(isLyric||u.includes('/song/download/url')){const response=JSON.stringify(isLyric?(drLyricFailure?{code:500}:{code:200,lrc:{lyric:'[00:01.000]Device basic lyrics'}}):{code:200,data:{url:"+JSONObject.quote(server.url("normal"))+",type:'wav'}});for(const[k,v]of Object.entries({readyState:4,status:isLyric&&drLyricFailure?500:200,responseText:response,response})){Object.defineProperty(this,k,{configurable:true,value:v})}setTimeout(()=>{this.onload?.(new Event('load'));this.onloadend?.(new Event('loadend'))},0);return}return drXhrSend.apply(this,a)};drManager.addDownload({id:99000001,name:'DeviceLyrics',artists:'FixtureArtist',album:'FixtureAlbum',duration:2000},'h');})()");
+    await("drData.downloadingSongs.find(s=>s.song.id===99000001)?.status==='partial'");
+    assertEquals("1", js("drRequests.length"));
+    assertArrayEquals(Server.wav, read("FixtureArtist/FixtureAlbum/DeviceLyrics.wav"));
+    js("drLyricFailure=false;drSetting.androidDownloadDirectoryUri='content://fixture-ungranted/tree/new';drManager.retryDownload(99000001)");
+    await("!drData.downloadingSongs.some(s=>s.song.id===99000001)");
+    assertEquals("No duplicate audio request", "1", js("drRequests.length"));
+    assertEquals("[00:01.000]Device basic lyrics", new String(read("FixtureArtist/FixtureAlbum/DeviceLyrics.lrc"), StandardCharsets.UTF_8));
+    evidence.put("sidecarOnlyRetry", true);
+  }
+
+  @Test public void audioVerificationAndSequentialSidecarsReuseTaskIdentityWithoutRegistrationRaces() throws Exception {
+    String task = download("sequenceAudio", "normal", "sequence.wav", "");
+    JSONObject audio = result("sequenceAudio");
+    assertEquals("success", audio.getString("status"));
+    JSONObject receipt = new JSONObject().put("taskId", task).put("path", audio.getString("path"))
+        .put("bytes", audio.getLong("bytes")).put("sha256", audio.getString("sha256"));
+    js("(async()=>{try{const verified=await Capacitor.nativePromise('AndroidDownload','verifyDownloadedFile',"+receipt+");if(!verified.valid)throw Error('Audio receipt failed');for(const ext of ['lrc','ttml','ass'])await Capacitor.nativePromise('AndroidDownload','writeTextFile',{taskId:"+JSONObject.quote(task)+",directoryUri:"+JSONObject.quote(tree.toString())+",fileName:'sequence.'+ext,content:'fixture '+ext,encoding:'utf-8'});drResults.sequence={ok:true}}catch(e){drResults.sequence={ok:false,message:e.message}}})()");
+    assertTrue(result("sequence").toString(), result("sequence").getBoolean("ok"));
+    for (String ext : new String[]{"lrc", "ttml", "ass"}) assertEquals("fixture "+ext, new String(read("sequence."+ext), StandardCharsets.UTF_8));
+    String cancelled = "sidecar-"+UUID.randomUUID();
+    js("(async()=>{await Capacitor.nativePromise('AndroidDownload','cancelDownload',{taskId:"+JSONObject.quote(cancelled)+"});try{await Capacitor.nativePromise('AndroidDownload','writeTextFile',{taskId:"+JSONObject.quote(cancelled)+",directoryUri:"+JSONObject.quote(tree.toString())+",fileName:'cancelled.lrc',content:'must not publish'});drResults.cancelledSidecar={ok:true}}catch(e){drResults.cancelledSidecar={ok:false}}finally{await Capacitor.nativePromise('AndroidDownload','releaseDownloadTask',{taskId:"+JSONObject.quote(cancelled)+"})}})()");
+    assertFalse(result("cancelledSidecar").getBoolean("ok"));
+    assertFalse(names().contains("cancelled.lrc"));
+    evidence.put("sequentialTaskStages", true);
+  }
+  @Test public void invalidAndConflictingSubdirectoriesNeverPublishAudio() throws Exception {
+    int index = 0;
+    for (String subPath : new String[]{"/absolute", "windows\\path", "drive:path", ".", ".."}) {
+      String key = "badPath"+(index++);
+      download(key, "normal", "unsafe.wav", subPath);
+      assertFalse("Invalid subPath must fail: "+subPath, result(key).getBoolean("ok"));
+    }
+    put("artist", new byte[]{8, 9});
+    download("conflictDirectory", "normal", "unsafe.wav", "artist/album");
+    assertFalse(result("conflictDirectory").getBoolean("ok"));
+    assertArrayEquals(new byte[]{8, 9}, read("artist"));
+    assertFalse(names().contains("unsafe.wav"));
+    evidence.put("invalidSubpathsRejected", true);
+  }
   private void assertHidden(String file,String key) throws Exception {
     js("window.Capacitor.nativePromise('AndroidDownload','scanLocalMusic',{directories:[{uri:"+JSONObject.quote(tree.toString())+"}]}).then(v=>drResults["+JSONObject.quote(key)+"]=v)");
     JSONArray songs=result(key).getJSONArray("songs");

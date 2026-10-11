@@ -20,8 +20,12 @@ class LastfmScrobbler {
   private currentTrack: ScrobbleTrack | null = null;
   /** 播放开始时间戳 */
   private playStartTime: number = 0;
+  private playedMilliseconds = 0;
+  private playing = false;
+  private playbackSessionKey = "";
   /** 是否已经 scrobble */
   private hasScrobbled: boolean = false;
+  private readonly inFlight = new WeakSet<ScrobbleTrack>();
   /** Scrobble 定时器 */
   private scrobbleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -32,7 +36,7 @@ class LastfmScrobbler {
    * @param album 专辑名
    * @param duration 时长（秒）
    */
-  public startPlaying(name: string, artist: string, album?: string, duration?: number) {
+  public startPlaying(name: string, artist: string, album?: string, duration?: number, playing = true) {
     const settingStore = useSettingStore();
 
     // 检查 Last.fm 是否启用
@@ -50,6 +54,9 @@ class LastfmScrobbler {
       timestamp: Math.floor(Date.now() / 1000),
     };
     this.playStartTime = Date.now();
+    this.playedMilliseconds = 0;
+    this.playing = playing;
+    this.playbackSessionKey = settingStore.lastfm.sessionKey;
     this.hasScrobbled = false;
 
     console.log("Last.fm: 开始播放", this.currentTrack);
@@ -69,6 +76,8 @@ class LastfmScrobbler {
    * 暂停播放
    */
   public pause() {
+    if (this.playing) this.playedMilliseconds += Date.now() - this.playStartTime;
+    this.playing = false;
     // 清除 scrobble 定时器
     this.clearScrobbleTimer();
   }
@@ -80,6 +89,16 @@ class LastfmScrobbler {
     const settingStore = useSettingStore();
 
     if (!this.isEnabled() || !this.currentTrack || this.hasScrobbled) return;
+    if (this.playing) {
+      // Preserve explicit resume retry after a failed submission, without duplicating
+      // an existing timer or a request which has not yet settled.
+      if (settingStore.lastfm.scrobbleEnabled && !this.scrobbleTimer && !this.inFlight.has(this.currentTrack)) {
+        this.scheduleScrobble();
+      }
+      return;
+    }
+    this.playStartTime = Date.now();
+    this.playing = true;
 
     // 重新设置 scrobble 定时器
     if (settingStore.lastfm.scrobbleEnabled) {
@@ -91,13 +110,13 @@ class LastfmScrobbler {
    * 停止播放
    */
   public stop() {
-    this.clearScrobbleTimer();
+    this.pause();
 
     // 如果歌曲播放时间足够但尚未 scrobble，则立即执行
     if (this.currentTrack && !this.hasScrobbled) {
       const settingStore = useSettingStore();
       if (settingStore.lastfm.scrobbleEnabled) {
-        const playedTime = (Date.now() - this.playStartTime) / 1000;
+        const playedTime = this.playedMilliseconds / 1000;
         const duration =
           this.currentTrack?.duration && this.currentTrack.duration > 0
             ? this.currentTrack.duration
@@ -114,6 +133,7 @@ class LastfmScrobbler {
 
     this.currentTrack = null;
     this.hasScrobbled = false;
+    this.playedMilliseconds = 0;
   }
 
   /**
@@ -143,7 +163,8 @@ class LastfmScrobbler {
    * Scrobble 条件：播放超过 4 分钟或歌曲长度的 50%（取较小值）
    */
   private scheduleScrobble() {
-    if (!this.currentTrack) return;
+    if (!this.currentTrack || !this.playing) return;
+    this.clearScrobbleTimer();
     // 默认 4 分钟
     const duration =
       this.currentTrack?.duration && this.currentTrack.duration > 0
@@ -153,13 +174,15 @@ class LastfmScrobbler {
     const scrobbleTime = Math.min(240, duration / 2);
 
     // 计算已播放时间
-    const playedTime = (Date.now() - this.playStartTime) / 1000;
+    const playedTime = (this.playedMilliseconds + Date.now() - this.playStartTime) / 1000;
     const remainingTime = Math.max(0, scrobbleTime - playedTime);
 
     console.log(`Last.fm: 将在 ${remainingTime.toFixed(1)} 秒后 scrobble`);
 
+    const track = this.currentTrack;
     this.scrobbleTimer = setTimeout(() => {
-      this.scrobble();
+      this.scrobbleTimer = null;
+      if (this.playing && this.currentTrack === track) void this.scrobble();
     }, remainingTime * 1000);
   }
 
@@ -169,21 +192,28 @@ class LastfmScrobbler {
   private async scrobble() {
     const settingStore = useSettingStore();
 
-    if (!this.currentTrack || !settingStore.lastfm.sessionKey || this.hasScrobbled) return;
+    const track = this.currentTrack;
+    const sessionKey = settingStore.lastfm.sessionKey;
+    if (!track || !this.isEnabled() || sessionKey !== this.playbackSessionKey || this.hasScrobbled || this.inFlight.has(track)) return;
+    this.inFlight.add(track);
 
     try {
       await scrobbleTrack(
-        settingStore.lastfm.sessionKey,
-        this.currentTrack.name,
-        this.currentTrack.artist,
-        this.currentTrack.timestamp,
-        this.currentTrack.album,
-        this.currentTrack.duration,
+        sessionKey,
+        track.name,
+        track.artist,
+        track.timestamp,
+        track.album,
+        track.duration,
       );
-      this.hasScrobbled = true;
-      console.log("Last.fm: Scrobble 成功", this.currentTrack);
+      if (this.currentTrack === track && settingStore.lastfm.sessionKey === sessionKey) {
+        this.hasScrobbled = true;
+      }
+      console.log("Last.fm: Scrobble 成功");
     } catch (error) {
       console.error("Last.fm: Scrobble 失败", requestFailureCategory(error));
+    } finally {
+      this.inFlight.delete(track);
     }
   }
 

@@ -25,7 +25,7 @@
       <n-flex class="left" align="flex-end">
         <n-button
           :focusable="false"
-          :disabled="showLoading || !cloudData?.length"
+          :disabled="showLoading || !listDataShow.length"
           :loading="showLoading"
           type="primary"
           strong
@@ -70,7 +70,7 @@
     <!-- 列表 -->
     <Transition name="fade" mode="out-in">
       <SongList
-        v-if="!searchValue || searchData?.length"
+        v-if="!searchValue.trim() || searchData?.length"
         :data="listDataShow"
         :loading="loading"
         :doubleClickAction="searchData?.length ? 'add' : 'all'"
@@ -120,7 +120,7 @@ const searchData = ref<SongType[]>([]);
 
 // 列表歌曲
 const listDataShow = computed<SongType[]>(() => {
-  if (searchValue.value && searchData.value.length) return searchData.value;
+  if (searchValue.value.trim()) return searchData.value;
   return cloudData.value;
 });
 
@@ -143,12 +143,13 @@ const moreOptions = computed<DropdownOption[]>(() => [
 ]);
 
 let requestRevision = 0;
+let disposed = false;
 watch(() => dataStore.getAccountToken(), () => {
   ++requestRevision;
   cloudData.value = []; cloudCount.value = 0; cloudSize.value = { size: 0, maxSize: 0 };
   searchData.value = []; searchValue.value = ""; loading.value = false;
 }, { flush: "sync" });
-onBeforeUnmount(() => { ++requestRevision; });
+onBeforeUnmount(() => { disposed = true; ++requestRevision; });
 
 // 获取全部云盘歌曲
 const getAllCloudMusic = async () => {
@@ -188,11 +189,13 @@ const getAllCloudMusic = async () => {
   }
 };
 
+// Clear the previous query's results immediately; debounce only the new search.
+watch(() => [searchValue.value, cloudData.value], () => { searchData.value = []; }, { flush: "sync" });
 watchDebounced(
   () => [searchValue.value, cloudData.value],
   () => {
     const search = searchValue.value.trim();
-    if (!search || search === "" || !cloudData.value.length) return;
+    if (disposed || !search || !cloudData.value.length) return;
     // 获取搜索结果
     const result = fuzzySearch(search, cloudData.value);
     searchData.value = result;

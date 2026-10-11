@@ -28,7 +28,7 @@ const router: Router = createRouter({
 });
 
 // 前置守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
   // console.log("前置守卫", to, from);
   // 进度条
   if (!isElectron && to.path !== from.path) {
@@ -39,15 +39,15 @@ router.beforeEach((to, from, next) => {
     if (!isElectron) window.$loadingBar?.error();
     window.$message?.warning("请登录后使用");
     openUserLogin();
-    return;
+    return false;
   }
   // 需要客户端
   // Electron 与 Capacitor Android 均视为客户端
   else if (to.meta.needApp && !isElectron && !isCapacitorAndroid) {
     window.$message?.warning("该功能为客户端独占功能");
-    next("/403");
+    return "/403";
   }
-  next();
+  return true;
 });
 
 // 后置守卫

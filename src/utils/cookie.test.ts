@@ -32,7 +32,13 @@ test("saving a fixture session never writes credentials to any console channel",
   });
   setCookies("fixture_session=abc==");
   assert.equal(output.length, 0, "even truncated credentials must never be logged");
-  // R26 parsing remains independent: do not change its currently truncated value here.
+  assert.equal(getCookie("fixture_session"), "abc==", "R26: preserve the entire padded value");
+  setCookies("fixture_one=a=b; fixture_encoded=abc%3D%3D; fixture_empty=; invalid; =ignored");
+  assert.equal(getCookie("fixture_one"), "a=b");
+  assert.equal(getCookie("fixture_encoded"), "abc==");
+  assert.equal(getCookie("fixture_empty"), "");
+  assert.equal(storage.has("cookie-invalid"), false);
+  assert.equal(storage.has("cookie-"), false);
   setCookies("fixture_session=restored; fixture_csrf=synthetic");
   assert.equal(getCookie("fixture_session"), "restored");
   cookies.clear();

@@ -655,7 +655,7 @@ class PlayerController {
     if (settingStore.lastfm.enabled && settingStore.isLastfmConfigured) {
       const { name, artist, album } = getPlayerInfoObj() || {};
       const durationInSeconds = song.duration > 0 ? Math.floor(song.duration / 1000) : undefined;
-      lastfmScrobbler.startPlaying(name || "", artist || "", album, durationInSeconds);
+      lastfmScrobbler.startPlaying(name || "", artist || "", album, durationInSeconds, !useAudioManager().paused);
     }
   }
 
@@ -1197,6 +1197,9 @@ class PlayerController {
         this.syncFloatingLyricProgress(statusStore.currentTime, true);
       }
     });
+    // Buffering is not effective listening time; actual playback resumes the interval.
+    audioManager.addEventListener("waiting", () => lastfmScrobbler.pause());
+    audioManager.addEventListener("playing", () => lastfmScrobbler.resume());
     // 暂停
     audioManager.addEventListener("pause", () => {
       statusStore.playStatus = false;

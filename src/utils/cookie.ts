@@ -35,11 +35,12 @@ export const setCookies = (cookieValue: string) => {
     // 跳过空字符串
     const trimmedCookie = cookie.trim();
     if (!trimmedCookie) return;
-    const nameValuePair = trimmedCookie.split("=");
-    const name = nameValuePair[0]?.trim();
-    const value = nameValuePair[1]?.trim();
+    const separator = trimmedCookie.indexOf("=");
+    if (separator < 0) return;
+    const name = trimmedCookie.slice(0, separator).trim();
+    const value = trimmedCookie.slice(separator + 1).trim();
     // 跳过无效的cookie
-    if (!name || !value) return;
+    if (!name) return;
     // 设置 cookie
     document.cookie = `${name}=${value}; ${expires}; path=/`;
     // 保存 cookie

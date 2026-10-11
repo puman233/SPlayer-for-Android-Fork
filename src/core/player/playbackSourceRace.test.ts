@@ -15,6 +15,7 @@ const song = (id: number) => ({ id, name: `song${id}`, duration: 60000, type: "r
 // Exercise the full controller through its public commands. Deferred source and
 // audio adapters represent network/media execution; no controller methods are replaced.
 function fixture() {
+  const listeningEvents: string[] = [];
   const pending: ReturnType<typeof deferred>[] = [];
   const notices: string[] = [];
   let loadCompletion: Promise<any> | undefined;
@@ -53,7 +54,7 @@ function fixture() {
     "@/utils/helper": { sleep: () => { const d = deferred(); retryDelays.push(d); return d.promise; } },
     "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
     "@/utils/time": { calculateProgress: (time: number, duration: number) => time / duration },
-    "@/utils/lastfmScrobbler": { default: { resume: noop, pause: noop } },
+    "@/utils/lastfmScrobbler": { default: { resume: () => listeningEvents.push("resume"), pause: () => listeningEvents.push("pause") } },
     "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: noop, updateState: noop } },
     "./PlayModeManager": { PlayModeManager: class {} },
     "./PlayerIpc": new Proxy({}, { get: () => noop }),
@@ -70,10 +71,16 @@ function fixture() {
     setTimeout: () => 0, clearTimeout: noop,
   });
   return { controller: module.exports.usePlayerController(), status, music, audio, pending, notices,
+    listeningEvents, emit: (name: string) => callbacks.get(name)?.(),
     retryDelays, emitError: () => callbacks.get("error")?.({ detail: { errorCode: 2 } }),
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
     delayResume: (promise: Promise<any>) => { resumeCompletion = promise; } };
 }
+
+test("R11: actual controller buffering events suspend and restore Last.fm listening", () => {
+  const f = fixture(); f.emit("waiting"); f.emit("playing");
+  assert.deepEqual(f.listeningEvents, ["pause", "resume"]);
+});
 
 test("late quality response cannot replace the new song's audio, lyric identity or loading state", async () => {
   const f = fixture();

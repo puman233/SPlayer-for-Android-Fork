@@ -34,7 +34,8 @@ export const getCacheData = async <T>(
     if (cachedData && useCache) {
       // 判断缓存是否过期
       const { value, expiry } = JSON.parse(cachedData);
-      if (expiry === 0 || new Date().getTime() < expiry) {
+      // Keep the historical zero sentinel readable; new time=0 writes expire immediately.
+      if (expiry === -1 || expiry === 0 || new Date().getTime() < expiry) {
         console.log("Cached data found");
         return value;
       }

@@ -15,13 +15,21 @@ interface ParsedEvent {
 export function parseLrc(lrcContent: string): LyricLine[] {
   const lines = lrcContent.split(/\r?\n/);
   const parsedEvents: ParsedEvent[] = [];
+  // Positive LRC offset advances lyrics. The last valid declaration is global,
+  // including metadata placed after lyric lines; manual player offset stays separate.
+  let offset = 0;
+  const offsetTagRegex = /\[offset:\s*([+-]?\d+)\s*\]/gi;
+  for (const match of lrcContent.matchAll(offsetTagRegex)) {
+    const value = Number(match[1]);
+    if (Number.isSafeInteger(value)) offset = value;
+  }
 
   const timeTagRegex = /\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
 
   let globalIndex = 0;
 
   for (const line of lines) {
-    const text = line.replace(timeTagRegex, "").trim();
+    const text = line.replace(timeTagRegex, "").replace(offsetTagRegex, "").trim();
     const matches = line.matchAll(timeTagRegex);
 
     for (const match of matches) {
@@ -33,7 +41,7 @@ export function parseLrc(lrcContent: string): LyricLine[] {
       const totalMilliseconds = minutes * 60 * 1000 + seconds * 1000 + milliseconds;
 
       parsedEvents.push({
-        time: totalMilliseconds,
+        time: totalMilliseconds - offset,
         text: text,
         index: globalIndex++,
       });
@@ -89,6 +97,9 @@ export function parseLrc(lrcContent: string): LyricLine[] {
 }
 
 function createBasicLyricLine(text: string, startTime: number, endTime: number): LyricLine {
+  // Clamp after grouping so distinct early lines don't become translations of one another.
+  startTime = Math.max(0, startTime);
+  endTime = Math.max(startTime, endTime);
   const line = newLyricLine();
   const word = newLyricWord();
 

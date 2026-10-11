@@ -40,6 +40,12 @@ const generateId = (): string => {
  * 创建流媒体 Store
  */
 const createStreamingStore = () => {
+  let connectionRevision = 0;
+  let connecting = false;
+  let saving: Promise<void> = Promise.resolve();
+  const sessionRevision = ref(0);
+  const pendingRequests = new Set<symbol>();
+  const latestRequests = new Map<string, symbol>();
   // 响应式状态
   const servers = ref<StreamingServerConfig[]>([]);
   const activeServerId = ref<string | null>(null);
@@ -56,6 +62,25 @@ const createStreamingStore = () => {
     return servers.value.find((s) => s.id === activeServerId.value) || null;
   });
 
+  const beginRequest = (kind: string, tracksLoading = true) => {
+    const revision = connectionRevision;
+    const token = Symbol(kind);
+    const server = activeServer.value ? { ...activeServer.value } : null;
+    latestRequests.set(kind, token);
+    if (tracksLoading) { pendingRequests.add(token); loading.value = true; }
+    return {
+      server,
+      current: () => revision === connectionRevision && latestRequests.get(kind) === token,
+      finish: () => {
+        if (revision !== connectionRevision) return;
+        pendingRequests.delete(token);
+        if (tracksLoading) loading.value = connecting || pendingRequests.size > 0;
+      },
+    };
+  };
+
+  const getCacheScope = (): string | null => activeServer.value?.cacheScope || null;
+
   // 计算属性：是否已连接
   const isConnected = computed(() => connectionStatus.value.connected);
 
@@ -66,20 +91,23 @@ const createStreamingStore = () => {
    * 加载服务器配置
    */
   const loadServers = async (): Promise<void> => {
+    const revision = connectionRevision;
     try {
       const savedServers = await getStreamingDB().getItem<StreamingServerConfig[]>("servers");
-      if (savedServers) {
+      if (revision !== connectionRevision) return;
+      if (savedServers && servers.value.length === 0) {
         servers.value = savedServers;
       }
 
       const savedActiveId = await getStreamingDB().getItem<string>("activeServerId");
+      if (revision !== connectionRevision) return;
       if (savedActiveId && servers.value.some((s) => s.id === savedActiveId)) {
         activeServerId.value = savedActiveId;
       }
 
       // 自动连接
       if (servers.value.length > 0 && activeServerId.value) {
-        connectToServer(activeServerId.value);
+        await connectToServer(activeServerId.value);
       }
     } catch (error) {
       console.error("Failed to load streaming servers:", requestFailureCategory(error));
@@ -89,17 +117,17 @@ const createStreamingStore = () => {
   /**
    * 保存服务器配置
    */
-  const saveServers = async (): Promise<void> => {
-    try {
-      // 使用 JSON 序列化来避免 DataCloneError
-      const serversData = JSON.parse(JSON.stringify(servers.value));
+  const saveServers = (): Promise<void> => {
+    const serversData = JSON.parse(JSON.stringify(servers.value));
+    const activeId = activeServerId.value;
+    saving = saving.catch(() => {}).then(async () => {
       await getStreamingDB().setItem("servers", serversData);
-      await getStreamingDB().setItem("activeServerId", activeServerId.value);
-    } catch (error) {
+      await getStreamingDB().setItem("activeServerId", activeId);
+    });
+    return saving.catch((error) => {
       console.error("Failed to save streaming servers:", requestFailureCategory(error));
-    }
+    });
   };
-
   /**
    * 添加服务器配置
    */
@@ -109,6 +137,7 @@ const createStreamingStore = () => {
     const newServer: StreamingServerConfig = {
       ...config,
       id: generateId(),
+      cacheScope: crypto.randomUUID(),
     };
 
     servers.value.push(newServer);
@@ -127,7 +156,22 @@ const createStreamingStore = () => {
     const index = servers.value.findIndex((s) => s.id === id);
     if (index === -1) return false;
 
-    servers.value[index] = { ...servers.value[index], ...updates };
+    const previous = servers.value[index];
+    const next = { ...previous, ...updates, id: previous.id };
+    const identityKeys = ["type", "url", "username", "password", "userId", "libraryRoot", "webdavAuth"] as const;
+    if (identityKeys.some((key) => previous[key] !== next[key])) {
+      next.cacheScope = crypto.randomUUID();
+      if (activeServerId.value === id) {
+        ++connectionRevision;
+        sessionRevision.value = connectionRevision;
+        connecting = false;
+        pendingRequests.clear(); latestRequests.clear();
+        loading.value = false;
+        connectionStatus.value = { connected: false };
+        clearCache();
+      }
+    }
+    servers.value[index] = next;
     await saveServers();
 
     return true;
@@ -144,9 +188,7 @@ const createStreamingStore = () => {
 
     // 如果删除的是当前激活的服务器，清除激活状态
     if (activeServerId.value === id) {
-      activeServerId.value = null;
-      connectionStatus.value = { connected: false };
-      clearCache();
+      disconnect();
     }
 
     await saveServers();
@@ -213,43 +255,57 @@ const createStreamingStore = () => {
    * 连接到服务器
    */
   const connectToServer = async (serverId: string): Promise<boolean> => {
-    const server = servers.value.find((s) => s.id === serverId);
-    if (!server) return false;
+    const savedServer = servers.value.find((s) => s.id === serverId);
+    if (!savedServer) return false;
+    const revision = ++connectionRevision;
+    sessionRevision.value = revision;
+    if (!savedServer.cacheScope) savedServer.cacheScope = crypto.randomUUID();
+    pendingRequests.clear();
+    latestRequests.clear();
+    connecting = true;
+    // Authentication may mutate this snapshot, never the live configuration.
+    const server = { ...savedServer };
+    activeServerId.value = serverId;
+    clearCache();
+    // Persist selection and namespace even when authentication is offline.
+    void saveServers();
 
     loading.value = true;
     connectionStatus.value = { connected: false };
 
     try {
       const status = await testConnection(server);
-      connectionStatus.value = status;
+      if (revision !== connectionRevision) return false;
 
       if (status.connected) {
         activeServerId.value = serverId;
         server.lastConnected = Date.now();
 
-        // 如果是 Jellyfin 或 Emby，保存认证信息
-        if ((server.type === "jellyfin" || server.type === "emby") && server.accessToken) {
-          await updateServer(serverId, {
-            accessToken: server.accessToken,
-            userId: server.userId,
-            lastConnected: server.lastConnected,
-          });
-        } else {
-          await updateServer(serverId, { lastConnected: server.lastConnected });
-        }
+        const live = servers.value.find((s) => s.id === serverId);
+        if (!live) return false;
+        if (live.userId !== server.userId) live.cacheScope = crypto.randomUUID();
+        Object.assign(live, { accessToken: server.accessToken, userId: server.userId, lastConnected: server.lastConnected });
+        // Synchronous connection observers may immediately start authenticated reads.
+        connectionStatus.value = status;
+        await saveServers();
 
-        return true;
+        return revision === connectionRevision;
       }
 
+      connectionStatus.value = status;
       return false;
     } catch {
+      if (revision !== connectionRevision) return false;
       connectionStatus.value = {
         connected: false,
         error: "连接失败，请检查服务器地址、凭据和网络",
       };
       return false;
     } finally {
-      loading.value = false;
+      if (revision === connectionRevision) {
+        connecting = false;
+        loading.value = pendingRequests.size > 0;
+      }
     }
   };
 
@@ -257,9 +313,16 @@ const createStreamingStore = () => {
    * 断开连接
    */
   const disconnect = (): void => {
+    ++connectionRevision;
+    sessionRevision.value = connectionRevision;
+    connecting = false;
+    pendingRequests.clear();
+    latestRequests.clear();
+    loading.value = false;
     activeServerId.value = null;
     connectionStatus.value = { connected: false };
     clearCache();
+    void saveServers();
   };
 
   /**
@@ -276,10 +339,10 @@ const createStreamingStore = () => {
    * 获取随机歌曲
    */
   const fetchRandomSongs = async (count: number = 50): Promise<SongType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("songs");
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
-    loading.value = true;
     try {
       let result: SongType[];
 
@@ -293,13 +356,15 @@ const createStreamingStore = () => {
         result = await subsonic.getRandomSongs(server, count);
       }
 
+      if (!request.current()) return [];
       songs.value = result;
       return result;
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch random songs:", requestFailureCategory(error));
       return [];
     } finally {
-      loading.value = false;
+      request.finish();
     }
   };
 
@@ -314,10 +379,10 @@ const createStreamingStore = () => {
     size: number = 50,
     append: boolean = false,
   ): Promise<SongType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("songs");
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
-    loading.value = true;
     try {
       let result: SongType[];
 
@@ -331,6 +396,7 @@ const createStreamingStore = () => {
         result = await subsonic.getSongs(server, offset, size);
       }
 
+      if (!request.current()) return [];
       if (append) {
         songs.value = [...songs.value, ...result];
       } else {
@@ -338,10 +404,11 @@ const createStreamingStore = () => {
       }
       return result;
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch songs:", requestFailureCategory(error));
       throw error;
     } finally {
-      loading.value = false;
+      request.finish();
     }
   };
 
@@ -349,10 +416,10 @@ const createStreamingStore = () => {
    * 获取艺术家列表
    */
   const fetchArtists = async (): Promise<StreamingArtistType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("artists");
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
-    loading.value = true;
     try {
       let result: StreamingArtistType[];
 
@@ -366,13 +433,15 @@ const createStreamingStore = () => {
         result = await subsonic.getArtists(server);
       }
 
+      if (!request.current()) return [];
       artists.value = result;
       return result;
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch artists:", requestFailureCategory(error));
       return [];
     } finally {
-      loading.value = false;
+      request.finish();
     }
   };
 
@@ -380,10 +449,10 @@ const createStreamingStore = () => {
    * 获取专辑列表
    */
   const fetchAlbums = async (): Promise<StreamingAlbumType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("albums");
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
-    loading.value = true;
     try {
       let result: StreamingAlbumType[];
 
@@ -397,13 +466,15 @@ const createStreamingStore = () => {
         result = await subsonic.getAlbumList(server, "alphabeticalByName");
       }
 
+      if (!request.current()) return [];
       albums.value = result;
       return result;
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch albums:", requestFailureCategory(error));
       return [];
     } finally {
-      loading.value = false;
+      request.finish();
     }
   };
 
@@ -411,10 +482,10 @@ const createStreamingStore = () => {
    * 获取歌单列表
    */
   const fetchPlaylists = async (): Promise<StreamingPlaylistType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("playlists");
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
-    loading.value = true;
     try {
       let result: StreamingPlaylistType[];
 
@@ -428,13 +499,15 @@ const createStreamingStore = () => {
         result = await subsonic.getPlaylists(server);
       }
 
+      if (!request.current()) return [];
       playlists.value = result;
       return result;
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch playlists:", requestFailureCategory(error));
       return [];
     } finally {
-      loading.value = false;
+      request.finish();
     }
   };
 
@@ -442,23 +515,30 @@ const createStreamingStore = () => {
    * 获取专辑歌曲
    */
   const fetchAlbumSongs = async (albumId: string): Promise<SongType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("fetchAlbumSongs", false);
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
     try {
       if (server.type === "jellyfin") {
-        return await jellyfin.getAlbumItems(server, albumId);
+        const result = await jellyfin.getAlbumItems(server, albumId);
+        return request.current() ? result : [];
       } else if (server.type === "emby") {
-        return await emby.getAlbumItems(server, albumId);
+        const result = await emby.getAlbumItems(server, albumId);
+        return request.current() ? result : [];
       } else if (server.type === "webdav") {
-        return await webdav.getAlbumItems(server, albumId);
+        const result = await webdav.getAlbumItems(server, albumId);
+        return request.current() ? result : [];
       } else {
         const result = await subsonic.getAlbum(server, albumId);
-        return result.songs;
+        return request.current() ? result.songs : [];
       }
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch album songs:", requestFailureCategory(error));
       return [];
+    } finally {
+      request.finish();
     }
   };
 
@@ -466,23 +546,30 @@ const createStreamingStore = () => {
    * 获取歌单歌曲
    */
   const fetchPlaylistSongs = async (playlistId: string): Promise<SongType[]> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return [];
+    const request = beginRequest("fetchPlaylistSongs", false);
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return []; }
 
     try {
       if (server.type === "jellyfin") {
-        return await jellyfin.getPlaylistItems(server, playlistId);
+        const result = await jellyfin.getPlaylistItems(server, playlistId);
+        return request.current() ? result : [];
       } else if (server.type === "emby") {
-        return await emby.getPlaylistItems(server, playlistId);
+        const result = await emby.getPlaylistItems(server, playlistId);
+        return request.current() ? result : [];
       } else if (server.type === "webdav") {
-        return await webdav.getPlaylistItems(server, playlistId);
+        const result = await webdav.getPlaylistItems(server, playlistId);
+        return request.current() ? result : [];
       } else {
         const result = await subsonic.getPlaylist(server, playlistId);
-        return result.songs;
+        return request.current() ? result.songs : [];
       }
     } catch (error) {
+      if (!request.current()) return [];
       console.error("Failed to fetch playlist songs:", requestFailureCategory(error));
       return [];
+    } finally {
+      request.finish();
     }
   };
 
@@ -496,24 +583,33 @@ const createStreamingStore = () => {
     albums: StreamingAlbumType[];
     songs: SongType[];
   }> => {
-    const server = activeServer.value;
+    const request = beginRequest("search", false);
+    const server = request.server;
     if (!server || !isConnected.value) {
+      request.finish();
       return { artists: [], albums: [], songs: [] };
     }
 
     try {
       if (server.type === "jellyfin") {
-        return await jellyfin.search(server, query);
+        const result = await jellyfin.search(server, query);
+        return request.current() ? result : { artists: [], albums: [], songs: [] };
       } else if (server.type === "emby") {
-        return await emby.search(server, query);
+        const result = await emby.search(server, query);
+        return request.current() ? result : { artists: [], albums: [], songs: [] };
       } else if (server.type === "webdav") {
-        return await webdav.search(server, query);
+        const result = await webdav.search(server, query);
+        return request.current() ? result : { artists: [], albums: [], songs: [] };
       } else {
-        return await subsonic.search(server, query);
+        const result = await subsonic.search(server, query);
+        return request.current() ? result : { artists: [], albums: [], songs: [] };
       }
     } catch (error) {
+      if (!request.current()) return { artists: [], albums: [], songs: [] };
       console.error("Failed to search:", requestFailureCategory(error));
       return { artists: [], albums: [], songs: [] };
+    } finally {
+      request.finish();
     }
   };
 
@@ -521,14 +617,17 @@ const createStreamingStore = () => {
    * 获取歌词
    */
   const fetchLyrics = async (song: SongType): Promise<string> => {
-    const server = activeServer.value;
-    if (!server || !isConnected.value) return "";
+    const request = beginRequest("fetchLyrics", false);
+    const server = request.server;
+    if (!server || !isConnected.value) { request.finish(); return ""; }
 
     try {
       if (server.type === "jellyfin" && song.originalId) {
-        return await jellyfin.getLyrics(server, song.originalId);
+        const result = await jellyfin.getLyrics(server, song.originalId);
+        return request.current() ? result : "";
       } else if (server.type === "emby" && song.originalId) {
-        return await emby.getLyrics(server, song.originalId);
+        const result = await emby.getLyrics(server, song.originalId);
+        return request.current() ? result : "";
       } else if (server.type === "webdav") {
         // WebDAV 没有歌词接口
         return "";
@@ -536,13 +635,16 @@ const createStreamingStore = () => {
         // 优先使用 ID 获取
         if (song.originalId) {
           const lyrics = await subsonic.getLyricsBySongId(server, song.originalId);
-          if (lyrics) return lyrics;
+          if (lyrics) return request.current() ? lyrics : "";
         }
         return "";
       }
     } catch (error) {
+      if (!request.current()) return "";
       console.error("Failed to fetch lyrics:", requestFailureCategory(error));
       return "";
+    } finally {
+      request.finish();
     }
   };
 
@@ -607,6 +709,8 @@ const createStreamingStore = () => {
     search,
     fetchLyrics,
     getSongUrl,
+    getCacheScope,
+    sessionRevision,
   };
 };
 

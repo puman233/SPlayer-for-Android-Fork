@@ -26,6 +26,8 @@ import { radioSub } from "@/api/radio";
 import router from "@/router";
 import { usePlayerController } from "@/core/player/PlayerController";
 
+class AccountIdentityError extends Error {}
+
 type BackgroundSyncTask = {
   name: string;
   task: () => Promise<unknown>;
@@ -52,30 +54,39 @@ export const isLogin = (): 0 | 1 | 2 => {
   return getCookie("MUSIC_U") ? 1 : 0;
 };
 
-// 退出登录
-export const toLogout = async (clearUserList = false): Promise<void> => {
+let logoutInProgress: Promise<void> | null = null;
+
+// Local logout is authoritative; remote logout is bounded, best effort only.
+export const toLogout = (clearUserList = false): Promise<void> => {
   const dataStore = useDataStore();
-  await logout();
-  // 去除 cookie
+  if (clearUserList) dataStore.userList = [];
+  if (logoutInProgress) return logoutInProgress;
+  if (!dataStore.userLoginStatus && !getCookie("MUSIC_U")) return Promise.resolve();
+  const cookie = getCookie("MUSIC_U");
+  void logout(cookie || undefined).catch(() => console.warn("Remote logout failed"));
   removeCookie("MUSIC_U");
   removeCookie("__csrf");
-  sessionStorage.clear();
-  // 清除用户数据
-  // 注意：如果是切换账号，不应该清除 userList
-  await dataStore.clearUserData();
-  if (clearUserList) {
-    dataStore.userList = [];
-  }
-  // 跳转首页
-  router.push("/");
-  window.$message.success("成功退出登录");
-  // 退出登录后静默热重载，让 UI 立即刷新为未登录状态（跳过 beforeunload 拦截）
-  (window as unknown as { __splayerHotReloading?: boolean }).__splayerHotReloading = true;
-  setTimeout(() => window.location.reload(), 600);
+  removeCookie("NMTID");
+  localStorage.removeItem("lastLoginTime");
+  const cleared = dataStore.clearUserData();
+  const token = dataStore.getAccountToken();
+  logoutInProgress = (async () => {
+    await cleared;
+    if (!dataStore.isAccountCurrent(token)) return;
+    router.push("/");
+    window.$message.success("成功退出登录");
+    (window as unknown as { __splayerHotReloading?: boolean }).__splayerHotReloading = true;
+    setTimeout(() => {
+      if (dataStore.isAccountCurrent(token)) window.location.reload();
+    }, 600);
+  })().finally(() => { logoutInProgress = null; });
+  return logoutInProgress;
 };
 
 // 刷新登录
 export const refreshLoginData = async () => {
+  const dataStore = useDataStore();
+  const token = dataStore.getAccountToken();
   // lastLoginTime 是否超过 3 天
   const lastLoginTime = localStorage.getItem("lastLoginTime");
   // 超时时长
@@ -83,6 +94,7 @@ export const refreshLoginData = async () => {
   if (lastLoginTime && Date.now() - Number(lastLoginTime) > timeout) {
     // 刷新登录
     const result = await refreshLogin();
+    if (!dataStore.isAccountCurrent(token)) return;
     if (result?.code === 200) {
       setCookies(result.cookie);
       localStorage.setItem("lastLoginTime", Date.now().toString());
@@ -167,7 +179,10 @@ export const switchAccount = async (userId: number) => {
   // 清除当前状态 (但不清除 userList)
   removeCookie("MUSIC_U");
   removeCookie("__csrf");
-  await dataStore.clearUserData();
+  const cleared = dataStore.clearUserData();
+  const switchingToken = dataStore.getAccountToken();
+  await cleared;
+  if (!dataStore.isAccountCurrent(switchingToken)) return;
   // 设置新 Cookies
   Object.entries(account.cookies).forEach(([key, value]) => {
     // 直接写入 document.cookie 以保持原始值 (类似 cookie.ts 的 setCookies)
@@ -186,6 +201,9 @@ export const switchAccount = async (userId: number) => {
   dataStore.userData.name = account.name;
   dataStore.userData.avatarUrl = account.avatarUrl;
 
+  const token = dataStore.getAccountToken();
+  await dataStore.loadAccountData();
+  if (!dataStore.isAccountCurrent(token)) return;
   // 刷新页面
   // window.location.reload();
   // 重新获取用户数据
@@ -196,18 +214,27 @@ export const switchAccount = async (userId: number) => {
       localStorage.setItem("lastLoginTime", account.lastLoginTime.toString());
     }
     await refreshLoginData();
+    if (!dataStore.isAccountCurrent(token)) return;
     await updateUserData();
+    if (!dataStore.isAccountCurrent(token)) return;
     window.$message.success("切换账号成功");
     // 跳转首页
     router.push("/");
     // 切换账号后静默热重载，让 UI 立即以新账号刷新（跳过 beforeunload 拦截）
     (window as unknown as { __splayerHotReloading?: boolean }).__splayerHotReloading = true;
-    setTimeout(() => window.location.reload(), 600);
-  } catch {
-    console.error("Failed to switch account:");
-    window.$message.error("切换账号失败");
-    // 回滚或踢出
-    dataStore.userLoginStatus = false;
+    setTimeout(() => { if (dataStore.isAccountCurrent(token)) window.location.reload(); }, 600);
+  } catch (error) {
+    if (!dataStore.isAccountCurrent(token)) return;
+    if (error instanceof AccountIdentityError) {
+      removeCookie("MUSIC_U"); removeCookie("__csrf"); removeCookie("NMTID");
+      localStorage.removeItem("lastLoginTime");
+      await dataStore.clearUserData();
+      window.$message.error("账号凭据与所选账号不一致，请重新登录");
+      router.push("/");
+      return;
+    }
+    console.warn("Account selected; remote synchronization unavailable");
+    window.$message.warning("已切换账号，暂时无法同步在线数据");
     router.push("/");
   }
 };
@@ -227,14 +254,20 @@ export const removeAccount = (userId: number) => {
 
 // 更新用户信息
 export const updateUserData = async () => {
+  const dataStore = useDataStore();
+  const token = dataStore.getAccountToken();
   try {
     if (!isLogin()) return;
-    const dataStore = useDataStore();
     // userId
-    const { profile } = await userAccount();
+    const result = await userAccount();
+    if (!dataStore.isAccountCurrent(token)) return;
+    const profile = result?.profile;
+    if (!profile?.userId) throw new Error("Account profile unavailable");
     const userId = profile.userId;
+    if (dataStore.userData.userId && dataStore.userData.userId !== userId) throw new AccountIdentityError("Account identity mismatch");
     // 获取用户信息
     const [userDetailData, subcountData] = await Promise.all([userDetail(userId), userSubcount()]);
+    if (!dataStore.isAccountCurrent(token)) return;
     const userData = Object.assign(profile, userDetailData);
 
     // 获取用户订阅信息
@@ -258,6 +291,9 @@ export const updateUserData = async () => {
       subPlaylistCount: subcountData.subPlaylistCount,
       createdPlaylistCount: subcountData.createdPlaylistCount,
     };
+    const restoredToken = dataStore.getAccountToken();
+    await dataStore.loadAccountData();
+    if (!dataStore.isAccountCurrent(restoredToken)) return;
     // 获取用户喜欢数据
     const allUserLikeResult = await Promise.allSettled([
       updateUserLikeSongs(),
@@ -280,12 +316,14 @@ export const updateUserData = async () => {
 
 // 更新用户信息 - 特殊登录模式
 export const updateSpecialUserData = async (userData?: any) => {
+  const dataStore = useDataStore();
+  const token = dataStore.getAccountToken();
   try {
-    const dataStore = useDataStore();
     if (!userData) {
       const result = await userDetail(dataStore.userData.userId);
       userData = result?.profile;
     }
+    if (!dataStore.isAccountCurrent(token)) return;
     // 更改用户信息
     dataStore.userData = {
       userId: userData.userId,
@@ -298,6 +336,9 @@ export const updateSpecialUserData = async (userData?: any) => {
       createTime: userData.createTime,
       createDays: userData.createDays,
     };
+    const restoredToken = dataStore.getAccountToken();
+    await dataStore.loadAccountData();
+    if (!dataStore.isAccountCurrent(restoredToken)) return;
     // 获取用户喜欢数据
     await updateUserLikePlaylist();
   } catch (error) {
@@ -310,25 +351,27 @@ export const updateSpecialUserData = async (userData?: any) => {
 export const updateUserLikeSongs = async () => {
   const dataStore = useDataStore();
   if (!isLogin() || !dataStore.userData.userId) return;
+  const token = dataStore.getAccountToken();
   const result = await userLike(dataStore.userData.userId);
-  dataStore.setUserLikeData("songs", result.ids);
+  await dataStore.setUserLikeData("songs", result.ids, token);
 };
 
 // 更新用户喜欢歌单
 export const updateUserLikePlaylist = async () => {
   const dataStore = useDataStore();
   const userId = dataStore.userData.userId;
+  const token = dataStore.getAccountToken();
   if (!isLogin() || !userId) return;
   if (dataStore.loginType === "uid") {
     const result = await userPlaylist(30, 0, userId);
-    await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist));
+    await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist), token);
     return;
   }
   // 计算数量
   const { createdPlaylistCount, subPlaylistCount } = dataStore.userData;
   const number = (createdPlaylistCount || 0) + (subPlaylistCount || 0) || 50;
   const result = await userPlaylist(number, 0, userId);
-  await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist));
+  await dataStore.setUserLikeData("playlists", formatCoverList(result.playlist), token);
 };
 
 // 更新用户喜欢歌手
@@ -371,7 +414,9 @@ export const toLikeSong: DebouncedFunc<(song: SongType, like: boolean) => Promis
       }
       const likeList = dataStore.userLikeData.songs;
       const exists = likeList.includes(id);
+      const token = dataStore.getAccountToken();
       await likeSong(id, like);
+      if (!dataStore.isAccountCurrent(token)) return;
       if (like && !exists) {
         window.$message.success("已添加到我喜欢的音乐");
       } else if (!like && exists) {
@@ -411,7 +456,10 @@ const toLikeSomething = (
         return;
       }
       // 请求
+      const dataStore = useDataStore();
+      const token = dataStore.getAccountToken();
       const { code } = await request()(id, like ? 1 : 2);
+      if (!dataStore.isAccountCurrent(token)) return;
       if (code === 200) {
         window.$message.success((like ? "" : "取消") + actionName + thingName + "成功");
         // 更新
@@ -455,6 +503,7 @@ const setUserLikeDataLoop = async <T>(
 ) => {
   const dataStore = useDataStore();
   const userId = dataStore.userData.userId;
+  const token = dataStore.getAccountToken();
   if (!isLogin() || !userId) return;
 
   let offset = 0;
@@ -463,7 +512,9 @@ const setUserLikeDataLoop = async <T>(
 
   while (true) {
     try {
+      if (!dataStore.isAccountCurrent(token)) return;
       const result = await apiFunction(limit, offset);
+      if (!dataStore.isAccountCurrent(token)) return;
       // 根据不同 API 提取数据字段
       let data: any[] = [];
       if (key === "djs") {
@@ -495,9 +546,9 @@ const setUserLikeDataLoop = async <T>(
   }
   // 保存数据
   if (key === "artists") {
-    await dataStore.setUserLikeData(key, allData as ArtistType[]);
+    await dataStore.setUserLikeData(key, allData as ArtistType[], token);
   } else if (key === "playlists" || key === "albums" || key === "mvs" || key === "djs") {
-    await dataStore.setUserLikeData(key, allData as CoverType[]);
+    await dataStore.setUserLikeData(key, allData as CoverType[], token);
   }
 
   console.log(`✅ Fetched ${allData.length} ${key} for user ${userId}`);
@@ -509,6 +560,8 @@ const setUserLikeDataLoop = async <T>(
  * @param refresh 是否强制刷新
  */
 export const updateDailySongsData = async (refresh = false) => {
+  const dataStore = useDataStore();
+  const token = dataStore.getAccountToken();
   try {
     const musicStore = useMusicStore();
     if (!isLogin()) {
@@ -520,9 +573,10 @@ export const updateDailySongsData = async (refresh = false) => {
     if (!refresh && list.length > 0 && timestamp && !isBeforeSixAM(timestamp)) return;
     // 获取每日推荐
     const result = await dailyRecommend("songs");
+    if (!dataStore.isAccountCurrent(token)) return;
     const songsData = formatSongsList(result.data.dailySongs);
     // 更新数据
-    musicStore.dailySongsData = { timestamp: Date.now(), list: songsData };
+    await dataStore.setDailySongsData({ timestamp: Date.now(), list: songsData }, token);
     if (refresh) window.$message.success("每日推荐更新成功");
   } catch (error) {
     console.error("❌ Error updating daily songs data:");

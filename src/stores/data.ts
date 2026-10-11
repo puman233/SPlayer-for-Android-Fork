@@ -16,8 +16,11 @@ import { isLogin } from "@/utils/auth";
 import { formatCategoryList } from "@/utils/format";
 import localforage from "localforage";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
+import { useMusicStore } from "./music";
+import { useStatusStore } from "./status";
 
 interface ListState {
+  accountRevision: number;
   playList: SongType[];
   originalPlayList: SongType[];
   historyList: SongType[];
@@ -62,6 +65,10 @@ type UserDataKeys = keyof ListState["userLikeData"];
 let isLoadingData = false;
 const dirtyMusicKeys = new Set<string>();
 const dirtyUserKeys = new Set<UserDataKeys>();
+const accountWriteVersions = new Map<string, number>();
+const markAccountWrite = (key: string) => {
+  accountWriteVersions.set(key, (accountWriteVersions.get(key) || 0) + 1);
+};
 const markMusicDirty = (key: string) => {
   if (isLoadingData) dirtyMusicKeys.add(key);
 };
@@ -108,6 +115,7 @@ const getBackgroundDB = () => {
 
 export const useDataStore = defineStore("data", {
   state: (): ListState => ({
+    accountRevision: 0,
     // 播放列表
     playList: [],
     // 原始播放列表
@@ -165,6 +173,47 @@ export const useDataStore = defineStore("data", {
     isLikeSong: (state) => (id: number) => state.userLikeData.songs.includes(id),
   },
   actions: {
+    getAccountToken(): string {
+      return `${this.accountRevision}:${this.userLoginStatus}:${this.loginType}:${this.userData.userId}`;
+    },
+    isAccountCurrent(token: string): boolean {
+      return token === this.getAccountToken();
+    },
+    accountDataKey(name: string): string | null {
+      if (!this.userLoginStatus || !this.userData.userId) return null;
+      return `account-v1:${this.loginType}:${this.userData.userId}:${name}`;
+    },
+    async loadAccountData() {
+      const token = this.getAccountToken();
+      const names = ["songs", "playlists", "artists", "albums", "mvs", "djs", "cloudPlayList", "likeSongsList", "dailySongsData"];
+      await Promise.all(names.map(async (name) => {
+        const key = this.accountDataKey(name);
+        if (!key) return;
+        const version = accountWriteVersions.get(key) || 0;
+        const data = await getUserDB().getItem(key);
+        if (!this.isAccountCurrent(token)) return;
+        if (version !== (accountWriteVersions.get(key) || 0)) return;
+        if (name === "dailySongsData") {
+          const daily = data as { timestamp: number | null; list: SongType[] } | null;
+          useMusicStore().dailySongsData = daily && Array.isArray(daily.list) ? daily : { timestamp: null, list: [] };
+        } else if (name === "likeSongsList") {
+          const liked = data as ListState["likeSongsList"] | null;
+          if (liked?.detail && Array.isArray(liked.data)) this.likeSongsList = liked;
+        } else if (name === "cloudPlayList") {
+          this.cloudPlayList = Array.isArray(data) ? markRaw(data) : [];
+        } else {
+          (this.userLikeData as Record<string, unknown>)[name] = Array.isArray(data) ? data : [];
+        }
+      }));
+    },
+    async setDailySongsData(data: { timestamp: number | null; list: SongType[] }, token = this.getAccountToken()) {
+      if (!this.isAccountCurrent(token)) return;
+      const key = this.accountDataKey("dailySongsData");
+      if (!key) return;
+      markAccountWrite(key);
+      useMusicStore().dailySongsData = data;
+      await getUserDB().setItem(key, cloneDeep(toRaw(data)));
+    },
     /**
      * 加载本地持久化数据：playList / 历史 / 喜欢列表 / 用户喜欢数据等。
      * 必须在 player.playSong 之前 await 完成，
@@ -185,22 +234,12 @@ export const useDataStore = defineStore("data", {
           "playList",
           "originalPlayList",
           "historyList",
-          "cloudPlayList",
           "localPlayList",
           "downloadingSongs",
         ] as const;
         // music-data 其它结构键
-        const MUSIC_OTHER_KEYS = ["likeSongsList"] as const;
+        const MUSIC_OTHER_KEYS: readonly string[] = [];
         const musicAllowed = new Set<string>([...MUSIC_ARRAY_KEYS, ...MUSIC_OTHER_KEYS]);
-        // user-data 键白名单
-        const USER_ALLOWED_KEYS = new Set<UserDataKeys>([
-          "songs",
-          "playlists",
-          "artists",
-          "albums",
-          "mvs",
-          "djs",
-        ]);
 
         // music-data
         const musicDataKeys = await getMusicDB().keys();
@@ -213,28 +252,11 @@ export const useDataStore = defineStore("data", {
               (this as unknown as Record<string, unknown>)[key] = data
                 ? markRaw(data as object)
                 : [];
-            } else if (key === "likeSongsList" && data) {
-              // 特殊处理嵌套对象中的 data
-              const listData = data as ListState["likeSongsList"];
-              this.likeSongsList = {
-                detail: listData.detail,
-                data: markRaw(listData.data || []),
-              };
             }
           }),
         );
 
-        // user-data
-        const userDataKeys = await getUserDB().keys();
-        await Promise.all(
-          userDataKeys.map(async (key) => {
-            const userDataKey = key as UserDataKeys;
-            if (!USER_ALLOWED_KEYS.has(userDataKey)) return;
-            const data = await getUserDB().getItem(key);
-            if (dirtyUserKeys.has(userDataKey)) return;
-            (this.userLikeData as Record<string, unknown>)[key] = data;
-          }),
-        );
+        await this.loadAccountData();
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
@@ -377,14 +399,18 @@ export const useDataStore = defineStore("data", {
      * @param detail 歌曲详情
      * @param data 歌曲列表
      */
-    async setLikeSongsList(detail: CoverType, data: SongType[]) {
+    async setLikeSongsList(detail: CoverType, data: SongType[], token = this.getAccountToken()) {
+      if (!this.isAccountCurrent(token)) return;
+      const key = this.accountDataKey("likeSongsList");
+      if (!key) return;
+      markAccountWrite(key);
       const listData = {
         detail: { ...detail },
         data: toRaw(data),
       };
       markMusicDirty("likeSongsList");
       this.likeSongsList = { detail: detail, data: markRaw(data) };
-      await getMusicDB().setItem("likeSongsList", cloneDeep(toRaw(listData)));
+      await getUserDB().setItem(key, cloneDeep(toRaw(listData)));
     },
     /**
      * 获取我喜欢的歌单数据
@@ -392,17 +418,25 @@ export const useDataStore = defineStore("data", {
      */
     async getUserLikePlaylist() {
       if (!isLogin() || !this.userData.userId) return;
-      const result = await getMusicDB().getItem("likeSongsList");
+      const token = this.getAccountToken();
+      const key = this.accountDataKey("likeSongsList");
+      if (!key) return null;
+      const result = await getUserDB().getItem(key);
+      if (!this.isAccountCurrent(token)) return null;
       return result as { detail: CoverType; data: SongType[] } | null;
     },
     /**
      * 设置云盘歌单
      * @param data 云盘歌单
      */
-    async setCloudPlayList(data: SongType[]) {
+    async setCloudPlayList(data: SongType[], token = this.getAccountToken()) {
+      if (!this.isAccountCurrent(token)) return;
+      const key = this.accountDataKey("cloudPlayList");
+      if (!key) return;
+      markAccountWrite(key);
       markMusicDirty("cloudPlayList");
       this.cloudPlayList = markRaw(data);
-      await getMusicDB().setItem("cloudPlayList", cloneDeep(toRaw(data)));
+      await getUserDB().setItem(key, cloneDeep(toRaw(data)));
     },
     /**
      * 设置用户喜欢数据
@@ -412,11 +446,16 @@ export const useDataStore = defineStore("data", {
     async setUserLikeData<K extends UserDataKeys>(
       name: K,
       data: ListState["userLikeData"][K],
+      token = this.getAccountToken(),
     ): Promise<void> {
       try {
+        if (!this.isAccountCurrent(token)) return;
+        const key = this.accountDataKey(name);
+        if (!key) return;
+        markAccountWrite(key);
         markUserDirty(name);
-        await getUserDB().setItem(name, toRaw(data));
         this.userLikeData[name] = data;
+        await getUserDB().setItem(key, cloneDeep(toRaw(data)));
       } catch (error) {
         console.error("Error updating user data:", error);
         throw error;
@@ -427,6 +466,7 @@ export const useDataStore = defineStore("data", {
      */
     async clearUserData() {
       try {
+        ++this.accountRevision;
         this.userLoginStatus = false;
         this.loginType = "qr";
         this.userData = {
@@ -435,13 +475,18 @@ export const useDataStore = defineStore("data", {
           vipType: 0,
           name: "",
         };
-        await Promise.all(
-          Object.keys(this.userLikeData).map(async (key) => {
-            const userDataKey = key as UserDataKeys;
-            await this.setUserLikeData(userDataKey, []);
-            this.userLikeData[userDataKey] = [];
-          }),
-        );
+        for (const key of Object.keys(this.userLikeData) as UserDataKeys[]) {
+          this.userLikeData[key] = [];
+        }
+        this.cloudPlayList = [];
+        this.likeSongsList = {
+          detail: { id: 0, name: "我喜欢的音乐", cover: "/images/album.jpg?asset" },
+          data: [],
+        };
+        const musicStore = useMusicStore();
+        musicStore.dailySongsData = { timestamp: null, list: [] };
+        musicStore.personalFM = { playIndex: 0, list: [] };
+        useStatusStore().personalFmMode = false;
       } catch (error) {
         console.error("Error clearing user data:", error);
         throw error;

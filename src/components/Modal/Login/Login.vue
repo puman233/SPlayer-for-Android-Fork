@@ -57,7 +57,9 @@ const dataStore = useDataStore();
 const qrPause = ref(false);
 
 const hydrateCoreUserData = async () => {
+  const token = dataStore.getAccountToken();
   const accountResult = await userAccount();
+  if (!dataStore.isAccountCurrent(token)) return false;
   const profile = accountResult?.profile;
   const userId = profile?.userId;
 
@@ -66,6 +68,7 @@ const hydrateCoreUserData = async () => {
   }
 
   const [detailResult, subcountResult] = await Promise.all([userDetail(userId), userSubcount()]);
+  if (!dataStore.isAccountCurrent(token)) return false;
   const userData = Object.assign(profile, detailResult);
 
   dataStore.userData = {
@@ -84,6 +87,7 @@ const hydrateCoreUserData = async () => {
     subPlaylistCount: subcountResult?.subPlaylistCount,
     createdPlaylistCount: subcountResult?.createdPlaylistCount,
   };
+  return true;
 };
 
 const saveLogin = async (loginData: any, type: LoginType = "qr") => {
@@ -93,6 +97,10 @@ const saveLogin = async (loginData: any, type: LoginType = "qr") => {
   }
 
   emit("close");
+  const clearing = dataStore.clearUserData();
+  const revision = dataStore.accountRevision;
+  await clearing;
+  if (revision !== dataStore.accountRevision) return;
   dataStore.userLoginStatus = true;
   dataStore.loginType = type;
 
@@ -104,15 +112,17 @@ const saveLogin = async (loginData: any, type: LoginType = "qr") => {
 
   try {
     if (type !== "uid") {
-      await hydrateCoreUserData();
+      if (!(await hydrateCoreUserData())) return;
       void updateUserData().catch((error) => {
         console.error("Deferred user sync failed:");
       });
     } else {
       await updateSpecialUserData(loginData?.profile);
     }
+    if (revision !== dataStore.accountRevision) return;
     window.$message.success("登录成功");
   } catch (error) {
+    if (revision !== dataStore.accountRevision) return;
     console.error("Post-login sync failed:");
     window.$message.warning("登录成功，但账号数据同步较慢，稍后会继续刷新");
   }
@@ -120,7 +130,7 @@ const saveLogin = async (loginData: any, type: LoginType = "qr") => {
   emit("success");
   // 登录成功后静默热重载，让 UI 立即以登录状态刷新（跳过 beforeunload 拦截）
   (window as unknown as { __splayerHotReloading?: boolean }).__splayerHotReloading = true;
-  setTimeout(() => window.location.reload(), 800);
+  setTimeout(() => { if (revision === dataStore.accountRevision) window.location.reload(); }, 800);
 };
 
 const specialLogin = (type: "uid" | "cookie" = "uid") => {

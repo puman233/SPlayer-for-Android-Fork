@@ -62,6 +62,7 @@ const harness = () => {
     "@/utils/auth": { isLogin: unavailable },
     "@/utils/format": { formatCategoryList: unavailable },
     "@/core/player/PlayerController": { usePlayerController: () => ({}) },
+    "./music": { useMusicStore: unavailable }, "./status": { useStatusStore: unavailable },
     "@/api/song": { songDetail: unavailable },
     "@/utils/env": { isElectron: false, isCapacitorNative: true, isCapacitorAndroid: true },
     "@/core/player/PlayerIpc": {}, "naive-ui": { NA: {} },
@@ -108,7 +109,7 @@ const harness = () => {
         }
         if (specifier.startsWith(".")) return load(resolve(dirname(path), specifier + ".ts"));
         return require(specifier);
-    }, console: fakeConsole, URLSearchParams, localStorage: { getItem: () => null, setItem: unavailable, removeItem: unavailable }, window: browser,
+    }, console: fakeConsole, crypto: globalThis.crypto, URLSearchParams, localStorage: { getItem: () => null, setItem: unavailable, removeItem: unavailable }, window: browser,
       Date: class extends Date { static now() { return now; } },
       fetch: async (url: string) => { requests.push({ url }); return { ok: true, status: 200, json: async () => fetchReply.body }; },
       setTimeout: (callback: () => void) => { const id = timers.size + 1; timers.set(id, callback); return id; },

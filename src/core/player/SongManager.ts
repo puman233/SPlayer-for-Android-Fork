@@ -799,18 +799,22 @@ class SongManager {
    * @returns 是否成功
    */
   public async initPersonalFM(playNext: boolean = false) {
+    const dataStore = useDataStore();
+    const token = dataStore.getAccountToken();
     const musicStore = useMusicStore();
     const statusStore = useStatusStore();
 
     try {
       const fetchFM = async () => {
         const res = await personalFm();
+        if (!dataStore.isAccountCurrent(token)) return;
         musicStore.personalFM.list = formatSongsList(res.data);
         musicStore.personalFM.playIndex = 0;
       };
 
       // 若列表为空或已播放到最后，获取新列表
       if (musicStore.personalFM.list.length === 0) await fetchFM();
+      if (!dataStore.isAccountCurrent(token)) return;
       // 如果需要播放下一首
       if (playNext) {
         statusStore.personalFmMode = true;
@@ -823,6 +827,7 @@ class SongManager {
         }
       }
     } catch (error) {
+      if (!dataStore.isAccountCurrent(token)) return;
       console.error("❌ 私人 FM 初始化失败", requestFailureCategory(error));
     }
   }
@@ -831,6 +836,8 @@ class SongManager {
    * 私人 FM 垃圾桶
    */
   public async personalFMTrash(id: number, onSuccess?: () => void) {
+    const dataStore = useDataStore();
+    const token = dataStore.getAccountToken();
     if (!isLogin()) {
       openUserLogin(true);
       return;
@@ -839,9 +846,11 @@ class SongManager {
     statusStore.personalFmMode = true;
     try {
       await personalFmToTrash(id);
+      if (!dataStore.isAccountCurrent(token)) return;
       window.$message.success("已移至垃圾桶");
       onSuccess?.();
     } catch (error) {
+      if (!dataStore.isAccountCurrent(token)) return;
       window.$message.error("移至垃圾桶失败，请重试");
       console.error("❌ 私人 FM 垃圾桶失败", requestFailureCategory(error));
     }
@@ -851,6 +860,8 @@ class SongManager {
    * 刷新私人 FM
    */
   public async refreshPersonalFM() {
+    const dataStore = useDataStore();
+    const token = dataStore.getAccountToken();
     const musicStore = useMusicStore();
     if (!isLogin()) {
       window.$message.error("请先登录");
@@ -858,6 +869,7 @@ class SongManager {
     }
     try {
       const res = await personalFm();
+        if (!dataStore.isAccountCurrent(token)) return;
       const newList = formatSongsList(res.data);
       if (!newList || newList.length === 0) {
         throw new Error("加载私人漫游列表失败");
@@ -866,6 +878,7 @@ class SongManager {
       musicStore.personalFM.playIndex = 0;
       window.$message.success("刷新成功");
     } catch (error) {
+      if (!dataStore.isAccountCurrent(token)) return;
       console.error("❌ 刷新私人 FM 失败", requestFailureCategory(error));
       window.$message.error("刷新失败，请重试");
     }

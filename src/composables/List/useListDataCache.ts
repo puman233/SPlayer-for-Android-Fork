@@ -14,6 +14,8 @@ export type ListType = "playlist" | "album" | "radio" | "streaming-playlist" | "
  * 列表缓存数据结构
  */
 export interface ListCacheData {
+  /** Opaque server/account namespace; never credentials or authentication URLs. */
+  scope?: string;
   /** 缓存版本号 */
   version: number;
   /** 缓存时间戳 */
@@ -45,7 +47,11 @@ export const useListDataCache = () => {
    * @param type 列表类型
    * @param id 列表 ID
    */
-  const getCacheKey = (type: ListType, id: number | string): string => {
+  const getCacheKey = (type: ListType, id: number | string, scope?: string): string | null => {
+    if (type === "streaming-playlist") {
+      if (!scope || !/^[a-zA-Z0-9-]+$/.test(scope)) return null;
+      return `streaming-v1-${scope}-${encodeURIComponent(String(id))}.json`;
+    }
     return `${type}-${id}.json`;
   };
 
@@ -62,6 +68,7 @@ export const useListDataCache = () => {
     detail: CoverType,
     songs: SongType[],
     complete: boolean = true,
+    scope?: string,
   ): Promise<void> => {
     const cacheData: ListCacheData = {
       version: CACHE_VERSION,
@@ -71,9 +78,11 @@ export const useListDataCache = () => {
       id,
       detail,
       songs,
+      ...(type === "streaming-playlist" ? { scope } : {}),
     };
 
-    const key = getCacheKey(type, id);
+    const key = getCacheKey(type, id, scope);
+    if (!key) return;
     const jsonStr = JSON.stringify(cacheData);
 
     try {
@@ -90,8 +99,9 @@ export const useListDataCache = () => {
    * @param id 列表 ID
    * @returns 缓存数据，如果不存在或已过期则返回 null
    */
-  const loadCache = async (type: ListType, id: number | string): Promise<ListCacheData | null> => {
-    const key = getCacheKey(type, id);
+  const loadCache = async (type: ListType, id: number | string, scope?: string): Promise<ListCacheData | null> => {
+    const key = getCacheKey(type, id, scope);
+    if (!key) return null;
 
     try {
       const result = await cacheManager.get("list-data", key);
@@ -102,11 +112,13 @@ export const useListDataCache = () => {
       // 将 Uint8Array 转换为字符串
       const jsonStr = new TextDecoder().decode(result.data);
       const cacheData: ListCacheData = JSON.parse(jsonStr);
+      if (cacheData.type !== type || String(cacheData.id) !== String(id) || !Array.isArray(cacheData.songs)) return null;
+      if (type === "streaming-playlist" && cacheData.scope !== scope) return null;
 
       // 检查版本
       if (cacheData.version !== CACHE_VERSION) {
         console.log(`⚠️ Cache version mismatch: ${key}, removing old cache`);
-        await removeCache(type, id);
+        await removeCache(type, id, scope);
         return null;
       }
 
@@ -167,8 +179,9 @@ export const useListDataCache = () => {
    * @param type 列表类型
    * @param id 列表 ID
    */
-  const removeCache = async (type: ListType, id: number | string): Promise<void> => {
-    const key = getCacheKey(type, id);
+  const removeCache = async (type: ListType, id: number | string, scope?: string): Promise<void> => {
+    const key = getCacheKey(type, id, scope);
+    if (!key) return;
 
     try {
       await cacheManager.remove("list-data", key);

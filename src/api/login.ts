@@ -98,11 +98,14 @@ export const refreshLogin = () => {
   });
 };
 
-export const logout = () => {
+export const logout = (cookie?: string) => {
   return request({
     url: "/logout",
-    timeout: LOGIN_REQUEST_TIMEOUT,
+    timeout: 5000,
+    headers: cookie ? { "X-SPlayer-Cookie": `MUSIC_U=${cookie};os=pc;` } : undefined,
+    "axios-retry": { retries: 0 },
     params: {
+      noCookie: true,
       timestamp: Date.now(),
     },
   });

@@ -91,6 +91,7 @@
 </template>
 
 <script setup lang="ts">
+import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import type { SongType } from "@/types/main";
 import type { DropdownOption } from "naive-ui";
 import { useDataStore } from "@/stores";
@@ -141,9 +142,22 @@ const moreOptions = computed<DropdownOption[]>(() => [
   },
 ]);
 
+let requestRevision = 0;
+watch(() => dataStore.getAccountToken(), () => {
+  ++requestRevision;
+  cloudData.value = []; cloudCount.value = 0; cloudSize.value = { size: 0, maxSize: 0 };
+  searchData.value = []; searchValue.value = ""; loading.value = false;
+}, { flush: "sync" });
+onBeforeUnmount(() => { ++requestRevision; });
+
 // 获取全部云盘歌曲
 const getAllCloudMusic = async () => {
+  const token = dataStore.getAccountToken();
+  const revision = ++requestRevision;
+  const current = () => revision === requestRevision && dataStore.isAccountCurrent(token);
+  if (!dataStore.userLoginStatus) return;
   loading.value = true;
+  try {
   // 必要数据
   let offset: number = 0;
   const limit: number = 500;
@@ -151,6 +165,7 @@ const getAllCloudMusic = async () => {
   // 循环获取
   do {
     const result = await userCloud(limit, offset);
+    if (!current()) return;
     const songData = formatSongsList(result.data);
     // 歌曲总数
     cloudCount.value = result.count;
@@ -165,8 +180,12 @@ const getAllCloudMusic = async () => {
     offset += limit;
   } while (offset < cloudCount.value && isCloudPage.value);
   // 更新云盘数据
-  dataStore.setCloudPlayList(cloudData.value);
-  loading.value = false;
+  await dataStore.setCloudPlayList(cloudData.value, token);
+  } catch (error) {
+    if (current()) console.warn("Cloud synchronization failed", requestFailureCategory(error));
+  } finally {
+    if (current()) loading.value = false;
+  }
 };
 
 watchDebounced(

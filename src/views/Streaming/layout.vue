@@ -141,6 +141,17 @@ const player = usePlayerController();
 const { isPhone } = useDevice();
 
 const loading = ref<boolean>(false);
+let viewRevision = 0;
+const beginViewAction = () => {
+  const revision = ++viewRevision;
+  const session = streamingStore.sessionRevision.value;
+  const route = router.currentRoute.value.name;
+  return () => revision === viewRevision && session === streamingStore.sessionRevision.value && route === router.currentRoute.value.name;
+};
+watch(() => streamingStore.sessionRevision.value, () => {
+  ++viewRevision; loading.value = false;
+}, { flush: "sync" });
+onBeforeUnmount(() => { ++viewRevision; });
 
 // 路由类型
 const streamingType = ref<string>((router.currentRoute.value?.name as string) || "streaming-songs");
@@ -221,9 +232,12 @@ const serverOptions = computed(() => {
 const handleServerChange = async (serverId: string) => {
   if (serverId === streamingStore.activeServer.value?.id) return;
 
+  const pending = streamingStore.connectToServer(serverId);
+  const current = beginViewAction();
   loading.value = true;
   try {
-    const success = await streamingStore.connectToServer(serverId);
+    const success = await pending;
+    if (!current()) return;
     if (success) {
       window.$message.success("已切换服务器");
       await loadData();
@@ -231,9 +245,10 @@ const handleServerChange = async (serverId: string) => {
       window.$message.error(streamingStore.connectionStatus.value.error || "切换失败");
     }
   } catch (error) {
+    if (!current()) return;
     window.$message.error("切换失败，请检查配置和网络");
   } finally {
-    loading.value = false;
+    if (current()) loading.value = false;
   }
 };
 
@@ -275,16 +290,24 @@ const openServerConfig = () => {
     editingServer = streamingStore.servers.value[0];
   }
   openStreamingServerConfig(editingServer, async (config) => {
+    let expectedSession = streamingStore.sessionRevision.value;
     try {
       let serverId: string;
       if (editingServer) {
-        await streamingStore.updateServer(editingServer.id, config);
+        const updating = streamingStore.updateServer(editingServer.id, config);
+        expectedSession = streamingStore.sessionRevision.value;
+        await updating;
+        if (expectedSession !== streamingStore.sessionRevision.value) return;
         serverId = editingServer.id;
       } else {
         const newServer = await streamingStore.addServer(config);
+        if (expectedSession !== streamingStore.sessionRevision.value) return;
         serverId = newServer.id;
       }
-      const success = await streamingStore.connectToServer(serverId);
+      const pending = streamingStore.connectToServer(serverId);
+      expectedSession = streamingStore.sessionRevision.value;
+      const success = await pending;
+      if (expectedSession !== streamingStore.sessionRevision.value) return;
       if (success) {
         window.$message.success("连接成功");
         await loadData();
@@ -292,6 +315,7 @@ const openServerConfig = () => {
         window.$message.error(streamingStore.connectionStatus.value.error || "连接失败");
       }
     } catch (error) {
+      if (expectedSession !== streamingStore.sessionRevision.value) return;
       window.$message.error("连接失败，请检查配置和网络");
     }
   });
@@ -313,14 +337,17 @@ const handleDisconnect = () => {
 
 // 加载数据
 const loadData = async () => {
+  const current = beginViewAction();
   loading.value = true;
   try {
     await streamingStore.fetchSongs(0, 500);
+          if (!current()) return;
   } catch (error) {
+    if (!current()) return;
     console.error("Failed to load data:", requestFailureCategory(error));
     window.$message.error("加载流媒体数据失败");
   } finally {
-    loading.value = false;
+    if (current()) loading.value = false;
   }
 };
 
@@ -348,19 +375,20 @@ const handleTabUpdate = (name: string) => {
 };
 
 // 递归获取剩余歌曲
-const fetchRemainingSongs = async (startOffset: number) => {
+const fetchRemainingSongs = async (startOffset: number, current: () => boolean) => {
   const limit = 500;
   let offset = startOffset;
   let hasMore = true;
 
   while (
-    hasMore &&
+    current() && hasMore &&
     streamingStore.isConnected.value &&
     streamingStore.activeServer.value &&
     router.currentRoute.value?.name === "streaming-songs"
   ) {
     try {
       const result = await streamingStore.fetchSongs(offset, limit, true);
+      if (!current()) return;
       if (result.length < limit) {
         hasMore = false;
       } else {
@@ -375,6 +403,7 @@ const fetchRemainingSongs = async (startOffset: number) => {
 
 // 刷新当前 Tab 数据
 const refreshCurrentTab = async () => {
+  const current = beginViewAction();
   const routeName = router.currentRoute.value?.name as string;
   loading.value = true;
   try {
@@ -383,44 +412,52 @@ const refreshCurrentTab = async () => {
         if (streamingStore.songs.value.length === 0) {
           const limit = 500;
           const firstBatch = await streamingStore.fetchSongs(0, limit);
+          if (!current()) return;
           if (firstBatch.length === limit) {
-            loading.value = false;
-            fetchRemainingSongs(limit);
+            if (current()) loading.value = false;
+            void fetchRemainingSongs(limit, current);
           }
         }
         break;
       case "streaming-artists":
         if (streamingStore.artists.value.length === 0) {
           await streamingStore.fetchArtists();
+          if (!current()) return;
           if (streamingStore.songs.value.length === 0) {
             await streamingStore.fetchRandomSongs(50);
+          if (!current()) return;
           }
         }
         break;
       case "streaming-albums":
         if (streamingStore.albums.value.length === 0) {
           await streamingStore.fetchAlbums();
+          if (!current()) return;
           if (streamingStore.songs.value.length === 0) {
             await streamingStore.fetchRandomSongs(50);
+          if (!current()) return;
           }
         }
         break;
       case "streaming-playlists":
         if (streamingStore.playlists.value.length === 0) {
           await streamingStore.fetchPlaylists();
+          if (!current()) return;
         }
         break;
     }
   } catch (error) {
+    if (!current()) return;
     console.error("Failed to refresh tab data:", requestFailureCategory(error));
     window.$message.error("加载数据失败");
   } finally {
-    if (loading.value) loading.value = false;
+    if (current() && loading.value) loading.value = false;
   }
 };
 
 // 强制刷新当前 Tab
 const forceRefreshCurrentTab = async () => {
+  const current = beginViewAction();
   const routeName = router.currentRoute.value?.name as string;
   loading.value = true;
   try {
@@ -434,29 +471,36 @@ const forceRefreshCurrentTab = async () => {
         const limit = 500;
         // 获取第一页
         const firstBatch = await streamingStore.fetchSongs(0, limit);
+          if (!current()) return;
         // 获取剩余数据
         if (firstBatch.length === limit) {
-          loading.value = false;
-          fetchRemainingSongs(limit);
+          if (current()) loading.value = false;
+          void fetchRemainingSongs(limit, current);
         }
         break;
       }
       case "streaming-artists":
         await streamingStore.fetchArtists();
+          if (!current()) return;
         await streamingStore.fetchRandomSongs(50);
+          if (!current()) return;
         break;
       case "streaming-albums":
         await streamingStore.fetchAlbums();
+          if (!current()) return;
         await streamingStore.fetchRandomSongs(50);
+          if (!current()) return;
         break;
       case "streaming-playlists":
         await streamingStore.fetchPlaylists();
+          if (!current()) return;
         break;
     }
   } catch (error) {
+    if (!current()) return;
     console.error("Failed to force refresh tab data:", requestFailureCategory(error));
   } finally {
-    if (loading.value) loading.value = false;
+    if (current() && loading.value) loading.value = false;
   }
 };
 

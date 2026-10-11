@@ -100,9 +100,25 @@ const moreOptions = computed<DropdownOption[]>(() => [
   },
 ]);
 
+let requestRevision = 0;
+const clearIdentityView = () => {
+  ++requestRevision;
+  setDetailData(null); setListData([]); clearSearch(); setLoading(false);
+};
+watch(() => [streamingStore.sessionRevision.value, streamingStore.getCacheScope(), streamingStore.isConnected.value], () => {
+  clearIdentityView();
+  if (playlistId.value && streamingStore.getCacheScope()) void getPlaylistDetail(playlistId.value);
+}, { flush: "sync" });
+onBeforeUnmount(clearIdentityView);
+
 // 获取歌单详情
 const getPlaylistDetail = async (id: string, refresh: boolean = false) => {
   if (!id) return;
+  const revision = ++requestRevision;
+  const scope = streamingStore.getCacheScope();
+  const session = streamingStore.sessionRevision.value;
+  const current = () => revision === requestRevision && session === streamingStore.sessionRevision.value && scope === streamingStore.getCacheScope();
+  if (!scope) { clearIdentityView(); return; }
 
   setLoading(true);
   clearSearch();
@@ -110,14 +126,15 @@ const getPlaylistDetail = async (id: string, refresh: boolean = false) => {
 
   // 1. 先尝试本地缓存（流媒体可能离线，缓存命中可立即显示）
   if (!refresh) {
-    const cached = await loadCache("streaming-playlist", id);
+    const cached = await loadCache("streaming-playlist", id, scope);
+    if (!current()) return;
     if (cached) {
       setDetailData(cached.detail);
       setListData(cached.songs);
       setLoading(false);
       // 后台刷新（仅当流媒体已连接）
       if (streamingStore.isConnected.value) {
-        void backgroundRefresh(id);
+        void backgroundRefresh(id, scope, current);
       }
       return;
     }
@@ -144,6 +161,7 @@ const getPlaylistDetail = async (id: string, refresh: boolean = false) => {
 
     // 获取歌单歌曲
     const songs = await streamingStore.fetchPlaylistSongs(id);
+    if (!current()) return;
     setListData(songs);
 
     // 如果之前没有获取到歌单信息，更新歌曲数量
@@ -153,18 +171,20 @@ const getPlaylistDetail = async (id: string, refresh: boolean = false) => {
 
     // 写入本地缓存（仅当 detail 存在）
     if (detailData.value) {
-      saveCache("streaming-playlist", id, detailData.value, songs);
+      await saveCache("streaming-playlist", id, detailData.value, songs, true, scope);
     }
   } catch (error) {
+    if (!current()) return;
     console.error("Failed to fetch streaming playlist:", requestFailureCategory(error));
     window.$message.error("获取歌单详情失败");
   } finally {
-    setLoading(false);
+    if (current()) setLoading(false);
   }
 };
 
 // 后台静默刷新：缓存命中时使用，不阻塞 UI
-const backgroundRefresh = async (id: string) => {
+const backgroundRefresh = async (id: string, scope: string, current: () => boolean) => {
+  if (!current()) return;
   try {
     const playlist = streamingStore.playlists.value.find((p) => p.id === id);
     if (playlist) {
@@ -177,11 +197,13 @@ const backgroundRefresh = async (id: string) => {
       } as CoverType);
     }
     const songs = await streamingStore.fetchPlaylistSongs(id);
+    if (!current()) return;
     setListData(songs);
     if (detailData.value) {
-      saveCache("streaming-playlist", id, detailData.value, songs);
+      await saveCache("streaming-playlist", id, detailData.value, songs, true, scope);
     }
   } catch (e) {
+    if (!current()) return;
     // 后台刷新失败不打扰用户：缓存数据仍可用
     console.warn("[streaming-playlist] background refresh failed", requestFailureCategory(e));
   }

@@ -8,12 +8,15 @@ import axios, {
 import axiosRetry from "axios-retry";
 import { useSettingStore } from "@/stores";
 import { getCookie } from "./cookie";
-import { isLogin } from "./auth";
 import { isCapacitorAndroid, isCapacitorNative, isDev } from "./env";
 import { EMBEDDED_API_BASE_URL, recoverEmbeddedApi, waitForEmbeddedApiReady } from "./embeddedApi";
 import { createNetworkFailureNotice } from "./requestRecovery";
 
 declare module "axios" {
+  interface AxiosRequestConfig {
+    /** Fixed at dispatch intent, preserved across startup waits and retries. */
+    _splayerCookieSnapshot?: string | null;
+  }
   interface InternalAxiosRequestConfig {
     _embeddedApiRetried?: boolean;
     /** 请求发起时间戳（性能诊断用） */
@@ -140,8 +143,8 @@ server.interceptors.request.use(
     const settingStore = useSettingStore();
     if (!request.params) request.params = {};
 
-    if (!request.params.noCookie && (isLogin() || getCookie("MUSIC_U") !== null)) {
-      const cookie = `MUSIC_U=${getCookie("MUSIC_U")};os=pc;`;
+    if (!request.params.noCookie && request._splayerCookieSnapshot) {
+      const cookie = `MUSIC_U=${request._splayerCookieSnapshot};os=pc;`;
       request.headers.set("X-SPlayer-Cookie", cookie);
     }
 
@@ -240,7 +243,8 @@ server.interceptors.response.use(
 );
 
 const request = async <T = any>(config: AxiosRequestConfig): Promise<T> => {
-  const { data } = await server.request(config);
+  const snapshot = config.params?.noCookie ? null : getCookie("MUSIC_U");
+  const { data } = await server.request({ ...config, _splayerCookieSnapshot: snapshot });
   return data as T;
 };
 

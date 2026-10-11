@@ -27,6 +27,8 @@ export type WebDavAuthType = "basic" | "digest" | "anonymous";
  * 流媒体服务器配置
  */
 export interface StreamingServerConfig {
+  /** Opaque namespace rotated whenever server or account identity changes. */
+  cacheScope?: string;
   /** 服务器唯一标识（用于区分多个服务器配置） */
   id: string;
   /** 服务器名称（用户自定义） */

@@ -173,7 +173,7 @@ export const useMusicStore = defineStore("music", {
   persist: {
     key: "music-store",
     storage: musicStoreStorage,
-    pick: ["playSong", "playPlaylistId", "personalFM", "dailySongsData"],
+    pick: ["playSong", "playPlaylistId"],
   },
 });
 

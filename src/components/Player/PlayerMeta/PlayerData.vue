@@ -432,7 +432,7 @@ const jumpToRadio = debounce(
   display: flex;
   flex-direction: column;
   width: 70%;
-  max-width: 50vh;
+  max-width: calc(var(--desktop-player-height, 100vh) * 0.5);
   margin-top: 24px;
   padding: 0 2px;
   // mix-blend-mode: plus-lighter;

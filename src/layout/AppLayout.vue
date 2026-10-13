@@ -56,7 +56,7 @@
           :style="{
             height:
               musicStore.isHasPlayer && statusStore.showPlayBar
-                ? 'calc(var(--page-zoom-100dvh, 100dvh) - 80px)'
+                ? 'calc(var(--page-zoom-100dvh, 100dvh) - 80px - var(--safe-area-bottom))'
                 : 'var(--page-zoom-100dvh, 100dvh)',
             ...padSiderBg,
           }"
@@ -536,6 +536,8 @@ onBeforeUnmount(() => {
 }
 
 #pad-main {
+  --app-header-height: calc(70px + var(--safe-area-top));
+  --desktop-nav-padding: var(--safe-area-top) 1rem 0;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -544,11 +546,7 @@ onBeforeUnmount(() => {
   #main-layout {
     min-width: 0;
     overflow: hidden;
-    background: linear-gradient(
-      180deg,
-      rgba(var(--background), 0.86),
-      rgba(var(--background), 0.78)
-    );
+    background-color: rgb(var(--background));
   }
 
   #main-content {

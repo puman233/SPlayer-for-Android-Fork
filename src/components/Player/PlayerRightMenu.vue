@@ -62,7 +62,7 @@
     <!-- 其他控制 -->
     <n-dropdown
       v-model:show="controlsOpen"
-      :trigger="phoneLandscape ? 'click' : 'hover'"
+      :trigger="isPad || phoneLandscape ? 'click' : 'hover'"
       v-if="(controlsOnly || !phoneLandscape) && settingStore.fullscreenPlayerElements.moreSettings"
       :options="controlsOptions"
       :show-arrow="false"
@@ -76,7 +76,7 @@
     <n-popover
       v-if="!controlsOnly"
       v-model:show="volumeOpen"
-      :trigger="phoneLandscape ? 'click' : 'hover'"
+      :trigger="isPad || phoneLandscape ? 'click' : 'hover'"
       :show-arrow="false"
       :style="{ padding: 0 }"
     >
@@ -126,6 +126,7 @@ import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
+import { useDevice } from "@/composables/useDevice";
 
 defineProps<{ persistent?: boolean; phoneLandscape?: boolean; controlsOnly?: boolean }>();
 
@@ -134,6 +135,7 @@ const statusStore = useStatusStore();
 const settingStore = useSettingStore();
 const musicStore = useMusicStore();
 const player = usePlayerController();
+const { isPad } = useDevice();
 
 const {
   currentPlayingLevel,

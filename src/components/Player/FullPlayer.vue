@@ -18,7 +18,11 @@
         }"
         :class="[
           'full-player',
-          { 'fullscreen-comment': isFullscreenComment, landscape: isMobileLandscape },
+          {
+            'fullscreen-comment': isFullscreenComment,
+            landscape: isMobileLandscape,
+            'pad-desktop': isPad,
+          },
         ]"
         :data-orientation-phase="orientationPhase"
         @mouseleave="playerLeave"
@@ -231,8 +235,8 @@ const showComment = computed<boolean>(
 /** 评论显示模式 */
 const commentDisplayMode = computed(() => settingStore.commentDisplayMode);
 
-/** 沉浸式 / 平板强制左侧半屏评论，忽略 commentDisplayMode */
-const forceLeftHalfComment = computed(() => statusStore.isImmersiveFullscreen || isPad.value);
+/** 手机沉浸式保持左侧评论，平板沿用桌面端的评论位置设置。 */
+const forceLeftHalfComment = computed(() => statusStore.isImmersiveFullscreen);
 
 /** 评论是否在右侧 */
 const commentOnRight = computed(
@@ -479,6 +483,13 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(80px);
   overflow: hidden;
   z-index: 1000;
+  &.pad-desktop {
+    // 子组件仍用桌面端的 50vh / 46vh 上限，只补偿 #app 的整体缩放。
+    --desktop-player-height: var(--page-zoom-100vh, 100vh);
+    :deep(.player-control) {
+      container: desktop-player-controls / inline-size;
+    }
+  }
   // 全屏透明拦截层：吞掉首次触摸 + 合成 click
   .tap-restore-overlay {
     position: absolute;

@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   width: 70%;
-  max-width: 50vh;
+  max-width: calc(var(--desktop-player-height, 100vh) * 0.5);
   height: auto;
   aspect-ratio: 1 / 1;
   transition:
@@ -320,7 +320,7 @@ onBeforeUnmount(() => {
   }
   &.record {
     position: relative;
-    max-width: 46vh;
+    max-width: calc(var(--desktop-player-height, 100vh) * 0.46);
     margin-bottom: 4%;
     .pointer {
       position: absolute;

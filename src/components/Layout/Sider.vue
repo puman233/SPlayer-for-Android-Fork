@@ -10,7 +10,7 @@
       :style="{
         maxHeight: `calc(var(--page-zoom-100vh, 100vh) - ${
           musicStore.isHasPlayer && statusStore.showPlayBar ? 150 : 70
-        }px)`,
+        }px - var(--safe-area-top, 0px) - var(--safe-area-bottom, 0px))`,
       }"
     >
       <Menu />
@@ -34,8 +34,8 @@ const statusStore = useStatusStore();
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 70px;
-    padding: 0 1rem;
+    height: calc(70px + var(--safe-area-top, 0px));
+    padding: var(--safe-area-top, 0px) 1rem 0;
     transition: transform 0.3s;
     cursor: pointer;
     .n-text {

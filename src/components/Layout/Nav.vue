@@ -3,7 +3,7 @@
     <!-- 页面导航 -->
     <n-flex class="page-control">
       <Logo v-if="isPhone" :size="40" @click="router.push('/')" />
-      <template v-if="!isLandscape && !isPhone">
+      <template v-if="isPad">
         <n-button :focusable="false" tertiary circle @click="router.go(-1)">
           <template #icon>
             <SvgIcon name="NavigateBefore" :size="26" />
@@ -324,7 +324,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   height: var(--app-header-height);
-  padding: calc(10px + var(--safe-area-top)) 1rem 10px;
+  padding: var(--desktop-nav-padding, calc(10px + var(--safe-area-top)) 1rem 10px);
   background-color: transparent;
   -webkit-app-region: drag;
 

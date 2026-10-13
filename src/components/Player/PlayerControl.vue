@@ -2,8 +2,20 @@
   <div class="player-control">
     <Transition name="fade" mode="out-in">
       <div v-show="persistent || statusStore.playerMetaShow" class="control-content" @click.stop>
-        <n-flex class="left" align="center" :wrap="!persistent" :size="persistent ? 0 : 12">
-          <!-- 收起：沉浸式横屏 / 平板下改为隐藏页面 UI（用 WindowHide 图标区分，再次轻触播放器主体恢复）；其他场景关闭全屏播放器 -->
+        <n-flex
+          class="left"
+          :class="{
+            'pad-download-actions':
+              isPad &&
+              statusStore.isDeveloperMode &&
+              !musicStore.playSong.path &&
+              settingStore.fullscreenPlayerElements.download,
+          }"
+          align="center"
+          :wrap="!persistent"
+          :size="persistent ? 0 : 12"
+        >
+          <!-- 桌面式播放器沿用收起行为；手机沉浸式保留隐藏 UI。 -->
           <div class="menu-icon" @click.stop="onDownClick">
             <SvgIcon :name="hideUiOnly ? 'WindowHide' : 'Down'" />
           </div>
@@ -168,13 +180,12 @@ const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const settingStore = useSettingStore();
-
 const { isPad } = useDevice();
 
-// 沉浸式 / 平板下 Down 仅藏 UI（轻触屏幕恢复）；其他场景关闭全屏
+// 手机沉浸式 Down 仅藏 UI；平板沿用桌面端收起播放器。
 const props = defineProps<{ persistent?: boolean; phoneLandscape?: boolean }>();
 const hideUiOnly = computed(
-  () => !props.persistent && (statusStore.isImmersiveFullscreen || isPad.value),
+  () => !props.persistent && statusStore.isImmersiveFullscreen,
 );
 const onDownClick = () => {
   if (hideUiOnly.value) {
@@ -314,6 +325,13 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 80px;
   overflow: hidden;
+  // 第六个快捷入口出现时，仅在平板控制栏确实不足 1080px 时压缩间距。
+  @container desktop-player-controls (max-width: 1079px) {
+    .left.pad-download-actions {
+      column-gap: 8px !important;
+      row-gap: 8px !important;
+    }
+  }
   .control-content {
     width: 100%;
     height: 100%;

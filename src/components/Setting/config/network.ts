@@ -6,7 +6,7 @@ import { computed, ref, h, markRaw } from "vue";
 import { debounce } from "lodash-es";
 import { NA } from "naive-ui";
 import { disableDiscordRpc, enableDiscordRpc, updateDiscordConfig } from "@/core/player/PlayerIpc";
-import { getAuthToken, getAuthUrl, getSession } from "@/api/lastfm";
+import { disconnect, getAuthToken, getAuthUrl, getSession } from "@/api/lastfm";
 import StreamingServerList from "../components/StreamingServerList.vue";
 
 interface SocketActionResult {
@@ -277,8 +277,7 @@ export const useNetworkSettings = (): SettingConfig => {
       positiveText: "确定",
       negativeText: "取消",
       onPositiveClick: () => {
-        settingStore.lastfm.sessionKey = "";
-        settingStore.lastfm.username = "";
+        disconnect();
         window.$message.success("已断开与 Last.fm 的连接");
       },
     });

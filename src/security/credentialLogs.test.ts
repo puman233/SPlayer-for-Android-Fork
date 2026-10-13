@@ -214,9 +214,9 @@ test("Last.fm successful authorization and scrobble responses and signatures are
   assert.equal(h.logs.length, 0);
 });
 
-test("Last.fm unauthorized response retains existing disconnect behavior", async () => {
+test("Last.fm current authenticated unauthorized response retains disconnect behavior", async () => {
   const h = harness(); h.fail("ERR_BAD_RESPONSE", 401);
-  await assert.rejects(h.load("src/api/lastfm.ts").getSession(fixture.token), error => error === h.failure());
+  await assert.rejects(h.load("src/api/lastfm.ts").scrobbleTrack(fixture.session, "Fixture track", "Fixture artist", 1), error => error === h.failure());
   assert.equal(h.settings.lastfm.sessionKey, "");
   assert.equal(h.settings.lastfm.username, "");
   assertSafe(h.logs);

@@ -1,4 +1,5 @@
 import type { ComputedRef, Ref } from "vue";
+import { routeLocationKey } from "vue-router";
 import type VirtualScroll from "@/components/UI/VirtualScroll.vue";
 
 export interface DragSortOptions {
@@ -36,6 +37,11 @@ export const useDragSort = (options: DragSortOptions) => {
 
   let listRect: DOMRect | null = null;
   let autoScrollRafId: number | null = null;
+  let pointerKind: "mouse" | "touch" | null = null;
+  let touchIdentifier: number | null = null;
+  let generation = 0;
+  let disposed = false;
+  let active = true;
 
   // 长按相关
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,10 +54,20 @@ export const useDragSort = (options: DragSortOptions) => {
   // ---- 核心拖拽逻辑 ----
 
   const getPointerPos = (e: MouseEvent | TouchEvent) => {
-    if ("touches" in e && e.touches.length > 0) {
-      return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if ("touches" in e) {
+      if (pointerKind !== "touch") return null;
+      if (e.touches.length !== 1) {
+        cancelDrag();
+        return null;
+      }
+      const touch = Array.from(e.touches).find((touch) => touch.identifier === touchIdentifier);
+      if (!touch) {
+        cancelDrag();
+        return null;
+      }
+      return { x: touch.clientX, y: touch.clientY };
     }
-    return { x: (e as MouseEvent).clientX, y: (e as MouseEvent).clientY };
+    return pointerKind === "mouse" ? { x: e.clientX, y: e.clientY } : null;
   };
 
   const activateDrag = (e: MouseEvent | TouchEvent, index: number, labelText: string) => {
@@ -71,14 +87,19 @@ export const useDragSort = (options: DragSortOptions) => {
 
     updateDragLabelPosition(e);
 
-    window.addEventListener("mousemove", handleDragMove);
-    window.addEventListener("touchmove", handleDragMove, { passive: false });
-    window.addEventListener("mouseup", handleDragEnd);
-    window.addEventListener("touchend", handleDragEnd);
+    if (pointerKind === "touch") {
+      window.addEventListener("touchmove", handleDragMove, { passive: false });
+      window.addEventListener("touchend", handleDragEnd);
+    } else {
+      window.addEventListener("mousemove", handleDragMove);
+      window.addEventListener("mouseup", handleDragEnd);
+    }
   };
 
   const handleDragMove = (e: MouseEvent | TouchEvent) => {
     if (!isDragging.value) return;
+    const pos = getPointerPos(e);
+    if (!pos) return;
     if (e.cancelable) e.preventDefault();
 
     updateDragLabelPosition(e);
@@ -90,21 +111,29 @@ export const useDragSort = (options: DragSortOptions) => {
     }
 
     if (!listRect) return;
-    const { y: clientY } = getPointerPos(e);
+    const { y: clientY } = pos;
 
     handleAutoScroll(clientY, listRect);
     calculateTargetIndex(clientY);
   };
 
-  const handleDragEnd = () => {
-    if (draggedIndex.value !== targetIndex.value && targetIndex.value !== -1) {
-      onReorder(draggedIndex.value, targetIndex.value);
+  const handleDragEnd = (e: MouseEvent | TouchEvent) => {
+    if (pointerKind === "touch") {
+      if (!("changedTouches" in e)) return;
+      if (!Array.from(e.changedTouches).some((touch) => touch.identifier === touchIdentifier)) return;
+    } else if (pointerKind !== "mouse" || "touches" in e) {
+      return;
     }
-
+    const from = draggedIndex.value;
+    const to = targetIndex.value;
+    const commit = isDragging.value && from >= 0 && to >= 0 && from !== to;
+    // Release before calling external code: throws or a new drag cannot leave/reuse this session.
     cleanupDragState();
+    if (commit) onReorder(from, to);
   };
 
   const cleanupDragState = () => {
+    generation += 1;
     stopAutoScroll();
     cancelLongPress();
 
@@ -114,6 +143,15 @@ export const useDragSort = (options: DragSortOptions) => {
     dropIndicator.index = -1;
     dropIndicator.position = "none";
     dragLabelData.value = null;
+    listRect = null;
+    pendingIndex = -1;
+    pendingLabelText = "";
+    pointerStartX = 0;
+    pointerStartY = 0;
+    pointerKind = null;
+    touchIdentifier = null;
+    dragLabelPosition.top = 0;
+    dragLabelPosition.left = 0;
 
     window.removeEventListener("mousemove", handleDragMove);
     window.removeEventListener("touchmove", handleDragMove);
@@ -123,6 +161,23 @@ export const useDragSort = (options: DragSortOptions) => {
     window.removeEventListener("touchmove", handleLongPressMove);
     window.removeEventListener("mouseup", handleLongPressCancel);
     window.removeEventListener("touchend", handleLongPressCancel);
+    window.removeEventListener("touchcancel", cancelDrag);
+    window.removeEventListener("touchstart", handleTouchStart);
+    window.removeEventListener("blur", cancelDrag);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  };
+
+  const cancelDrag = () => cleanupDragState();
+  const route = inject(routeLocationKey, null);
+  if (route) {
+    // Cancel on committed navigation, before a cached page's leave transition finishes.
+    watch(() => route.fullPath, cancelDrag, { flush: "sync" });
+  }
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") cancelDrag();
+  };
+  const handleTouchStart = (e: TouchEvent) => {
+    if (pointerKind === "touch" && e.touches.length !== 1) cancelDrag();
   };
 
   const calculateTargetIndex = (clientY: number, overrideScrollTop?: number) => {
@@ -160,7 +215,9 @@ export const useDragSort = (options: DragSortOptions) => {
   };
 
   const updateDragLabelPosition = (e: MouseEvent | TouchEvent) => {
-    const { x, y } = getPointerPos(e);
+    const pos = getPointerPos(e);
+    if (!pos) return;
+    const { x, y } = pos;
     dragLabelPosition.left = x;
     dragLabelPosition.top = y;
   };
@@ -184,9 +241,10 @@ export const useDragSort = (options: DragSortOptions) => {
     if (autoScrollRafId !== null) return;
 
     let expectedScroll = virtualScrollRef.value?.getScrollTop() || 0;
+    const session = generation;
 
     const scrollStep = () => {
-      if (!isDragging.value) return stopAutoScroll();
+      if (session !== generation || !isDragging.value) return;
 
       const actualScroll = virtualScrollRef.value?.getScrollTop() || 0;
       if (Math.abs(actualScroll - expectedScroll) > Math.abs(amount) * 3) {
@@ -203,7 +261,9 @@ export const useDragSort = (options: DragSortOptions) => {
       }
       calculateTargetIndex(dragLabelPosition.top, expectedScroll);
 
-      autoScrollRafId = requestAnimationFrame(scrollStep);
+      if (session === generation && isDragging.value) {
+        autoScrollRafId = requestAnimationFrame(scrollStep);
+      }
     };
     autoScrollRafId = requestAnimationFrame(scrollStep);
   };
@@ -225,44 +285,58 @@ export const useDragSort = (options: DragSortOptions) => {
   };
 
   const handleLongPressMove = (e: MouseEvent | TouchEvent) => {
-    const { x, y } = getPointerPos(e);
+    const pos = getPointerPos(e);
+    if (!pos) return;
+    const { x, y } = pos;
     const dx = x - pointerStartX;
     const dy = y - pointerStartY;
 
     if (Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD) {
-      cancelLongPress();
-      window.removeEventListener("mousemove", handleLongPressMove);
-      window.removeEventListener("touchmove", handleLongPressMove);
-      window.removeEventListener("mouseup", handleLongPressCancel);
-      window.removeEventListener("touchend", handleLongPressCancel);
+      cancelDrag();
     }
   };
 
-  const handleLongPressCancel = () => {
-    cancelLongPress();
-    window.removeEventListener("mousemove", handleLongPressMove);
-    window.removeEventListener("touchmove", handleLongPressMove);
-    window.removeEventListener("mouseup", handleLongPressCancel);
-    window.removeEventListener("touchend", handleLongPressCancel);
-  };
+  const handleLongPressCancel = (e: MouseEvent | TouchEvent) => handleDragEnd(e);
 
   // ---- 统一入口 ----
 
   const handlePointerDown = (e: MouseEvent | TouchEvent, index: number, labelText: string) => {
+    if (disposed || !active) return;
+    if (pointerKind !== null) {
+      // A second pointer cancels rather than replacing the first session.
+      cancelDrag();
+      return;
+    }
+    if ("touches" in e) {
+      if (e.touches.length !== 1) return;
+      pointerKind = "touch";
+      touchIdentifier = e.touches[0].identifier;
+    } else {
+      if (e.button !== 0) return;
+      pointerKind = "mouse";
+    }
+    window.addEventListener("touchcancel", cancelDrag);
+    window.addEventListener("touchstart", handleTouchStart);
+    window.addEventListener("blur", cancelDrag);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     if (triggerMode === "handle") {
       activateDrag(e, index, labelText);
       return;
     }
 
     // 长按模式
-    const { x, y } = getPointerPos(e);
+    const pos = getPointerPos(e);
+    if (!pos) return;
+    const { x, y } = pos;
     pointerStartX = x;
     pointerStartY = y;
     pendingIndex = index;
     pendingLabelText = labelText;
 
     cancelLongPress();
+    const session = generation;
     longPressTimer = setTimeout(() => {
+      if (disposed || session !== generation || pendingIndex < 0) return;
       longPressTimer = null;
       // 震动反馈
       navigator.vibrate?.(50);
@@ -276,14 +350,26 @@ export const useDragSort = (options: DragSortOptions) => {
       window.removeEventListener("touchend", handleLongPressCancel);
     }, longPressDelay);
 
-    window.addEventListener("mousemove", handleLongPressMove);
-    window.addEventListener("touchmove", handleLongPressMove, { passive: false });
-    window.addEventListener("mouseup", handleLongPressCancel);
-    window.addEventListener("touchend", handleLongPressCancel);
+    if (pointerKind === "touch") {
+      window.addEventListener("touchmove", handleLongPressMove, { passive: false });
+      window.addEventListener("touchend", handleLongPressCancel);
+    } else {
+      window.addEventListener("mousemove", handleLongPressMove);
+      window.addEventListener("mouseup", handleLongPressCancel);
+    }
   };
 
   onUnmounted(() => {
-    cleanupDragState();
+    disposed = true;
+    cancelDrag();
+  });
+
+  onDeactivated(() => {
+    active = false;
+    cancelDrag();
+  });
+  onActivated(() => {
+    if (!disposed) active = true;
   });
 
   return {
@@ -294,5 +380,6 @@ export const useDragSort = (options: DragSortOptions) => {
     dragLabelPosition,
     handlePointerDown,
     cleanupDragState,
+    cancelDrag,
   };
 };

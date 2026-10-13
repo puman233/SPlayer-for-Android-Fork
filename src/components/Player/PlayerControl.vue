@@ -58,19 +58,21 @@
           <PlayerQuickActionsMenu v-if="!phoneLandscape" variant="control" />
         </n-flex>
         <div class="center">
-          <div class="btn">
+          <div class="btn" @keydown.enter.stop @keydown.space.stop>
             <!-- 随机按钮 -->
             <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="btn-icon mode-icon" @click.stop="player.toggleShuffle()">
+              <button type="button" class="btn-icon mode-icon" :aria-label="statusStore.shuffleMode === 'heartbeat' ? '随机播放：心动模式' : '随机播放'" :aria-pressed="statusStore.shuffleMode !== 'off'" @click.stop="player.toggleShuffle()">
                 <SvgIcon
                   :name="statusStore.shuffleIcon"
                   :size="20"
                   :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
                 />
-              </div>
+              </button>
             </template>
             <!-- 不喜欢 -->
-            <div
+            <button
+              type="button"
+              aria-label="不喜欢这首歌"
               v-if="statusStore.personalFmMode"
               class="btn-icon"
               v-debounce="
@@ -81,16 +83,15 @@
               "
             >
               <SvgIcon class="icon" :size="18" name="ThumbDown" />
-            </div>
+            </button>
             <!-- 上一曲 -->
-            <div v-else class="btn-icon" v-debounce="() => player.nextOrPrev('prev')">
+            <button type="button" aria-label="上一曲" v-else class="btn-icon" v-debounce="() => player.nextOrPrev('prev')">
               <SvgIcon :size="26" name="SkipPrev" />
-            </div>
+            </button>
             <!-- 播放暂停 -->
             <n-button
               :loading="statusStore.playLoading"
-              :focusable="false"
-              :keyboard="false"
+              :aria-label="statusStore.playStatus ? '暂停' : '播放'"
               class="play-pause"
               type="primary"
               strong
@@ -109,18 +110,18 @@
               </template>
             </n-button>
             <!-- 下一曲 -->
-            <div class="btn-icon" v-debounce="() => player.nextOrPrev('next')">
+            <button type="button" aria-label="下一曲" class="btn-icon" v-debounce="() => player.nextOrPrev('next')">
               <SvgIcon :size="26" name="SkipNext" />
-            </div>
+            </button>
             <!-- 循环按钮 -->
             <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-              <div class="btn-icon mode-icon" @click.stop="player.toggleRepeat()">
+              <button type="button" class="btn-icon mode-icon" :aria-label="repeatLabel" @click.stop="player.toggleRepeat()">
                 <SvgIcon
                   :name="statusStore.repeatIcon"
                   :size="20"
                   :depth="statusStore.repeatMode === 'off' ? 3 : 1"
                 />
-              </div>
+              </button>
             </template>
           </div>
           <!-- 进度条 -->
@@ -185,6 +186,7 @@ const onDownClick = () => {
 
 const songManager = useSongManager();
 const player = usePlayerController();
+const repeatLabel = computed(() => `循环模式：${{ off: "关闭", list: "列表循环", one: "单曲循环" }[statusStore.repeatMode]}`);
 
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
@@ -379,6 +381,12 @@ onBeforeUnmount(() => {
       flex-direction: row;
       align-items: center;
       .btn-icon {
+        appearance: none;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        font: inherit;
+        color: inherit;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -391,6 +399,10 @@ onBeforeUnmount(() => {
           transform 0.3s;
         cursor: pointer;
         margin: 0 var(--play-control-gap, 4px);
+        &:focus-visible {
+          outline: 2px solid rgb(var(--main-cover-color));
+          outline-offset: -2px;
+        }
         .n-icon {
           color: rgb(var(--main-cover-color));
         }
@@ -403,6 +415,10 @@ onBeforeUnmount(() => {
         }
       }
       .play-pause {
+        &:focus-visible {
+          outline: 2px solid rgb(var(--main-cover-color));
+          outline-offset: -2px;
+        }
         --n-width: var(--play-control-touch-size, 44px);
         --n-height: var(--play-control-touch-size, 44px);
         --n-color: rgba(var(--main-cover-color), 0.14);

@@ -1,5 +1,6 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+import axios, { AxiosError, AxiosInstance, type AxiosRequestConfig } from "axios";
 import md5 from "md5";
+import { effectScope, watch } from "vue";
 import { useSettingStore } from "@/stores";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
 
@@ -15,6 +16,48 @@ interface LastfmErrorResponse {
 }
 
 const LASTFM_API_URL = "https://ws.audioscrobbler.com/2.0/";
+
+type ConnectionState = { id: number; revision: number };
+type RequestIdentity = ConnectionState & { ownsSession: boolean };
+type LastfmRequestConfig = AxiosRequestConfig & { lastfmIdentity?: RequestIdentity };
+const connections = new WeakMap<ReturnType<typeof useSettingStore>, ConnectionState>();
+let nextConnectionId = 0;
+
+const connectionState = () => {
+  const store = useSettingStore();
+  let state = connections.get(store);
+  if (!state) {
+    state = { id: ++nextConnectionId, revision: 0 };
+    connections.set(store, state);
+    const connection = state;
+    // Store-lifetime observation, not owned by the component making the first request.
+    // Synchronous observation also invalidates A -> B -> A within a single tick.
+    effectScope(true).run(() => watch(
+      () => [store.lastfm.sessionKey, store.lastfm.username, store.lastfm.apiKey, store.lastfm.apiSecret],
+      () => { connection.revision++; },
+      { flush: "sync" },
+    ));
+  }
+  return state;
+};
+
+const requestIdentity = (params: Record<string, string | number>): RequestIdentity => ({
+  ...connectionState(),
+  ownsSession: typeof params.sk === "string" && params.sk !== "" && params.sk === useSettingStore().lastfm.sessionKey,
+});
+
+const handleAuthenticationFailure = (error: AxiosError, message: string) => {
+  const identity = (error.config as LastfmRequestConfig | undefined)?.lastfmIdentity;
+  const current = connectionState();
+  if (!identity || identity.id !== current.id || identity.revision !== current.revision) return;
+  if (identity.ownsSession) {
+    disconnect();
+    window.$message.error(message);
+  } else {
+    // Token authorization and public requests do not own an existing session.
+    window.$message.error("Last.fm 认证请求失败，请检查授权状态和 API 配置");
+  }
+};
 
 // Last.fm API 客户端
 const lastfmClient: AxiosInstance = axios.create({
@@ -38,16 +81,14 @@ lastfmClient.interceptors.response.use(
       case 403: {
         const code = data?.error;
         if (code === 9 || code === 4 || code === 26) {
-          window.$message.error("Last.fm 认证失败，需要重新授权，已断开与 Last.fm 的连接！");
-          disconnect();
+          handleAuthenticationFailure(error, "Last.fm 认证失败，需要重新授权，已断开与 Last.fm 的连接！");
         } else {
           window.$message.error("Last.fm 认证失败，可能需要重新授权");
         }
         break;
       }
       case 401:
-        window.$message.error("Last.fm 未授权，已断开与 Last.fm 的连接！");
-        disconnect();
+        handleAuthenticationFailure(error, "Last.fm 未授权，已断开与 Last.fm 的连接！");
         break;
       case 429:
         window.$message.error("Last.fm 请求过于频繁，请稍后再试");
@@ -69,6 +110,7 @@ lastfmClient.interceptors.response.use(
  * 断开与 Last.fm 的连接
  */
 export const disconnect = () => {
+  connectionState().revision++;
   const settingStore = useSettingStore();
   settingStore.lastfm.sessionKey = "";
   settingStore.lastfm.username = "";
@@ -135,7 +177,8 @@ const lastfmRequest = async (
   }
 
   try {
-    const response = await lastfmClient.get("", { params: requestParams });
+    const config: LastfmRequestConfig = { params: requestParams, lastfmIdentity: requestIdentity(requestParams) };
+    const response = await lastfmClient.get("", config);
     return response.data;
   } catch (error) {
     console.error("Last.fm API 错误:", requestFailureCategory(error));
@@ -159,11 +202,13 @@ const lastfmPostRequest = async (method: string, params: Record<string, string |
       formData.append(key, String(value));
     });
 
-    const response = await lastfmClient.post("", formData, {
+    const config: LastfmRequestConfig = {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-    });
+      lastfmIdentity: requestIdentity(requestParams),
+    };
+    const response = await lastfmClient.post("", formData, config);
     return response.data;
   } catch (error) {
     console.error("Last.fm API POST 错误:", requestFailureCategory(error));
@@ -175,6 +220,8 @@ const lastfmPostRequest = async (method: string, params: Record<string, string |
  * 获取认证令牌
  */
 export const getAuthToken = async () => {
+  // Explicit authorization intent distinguishes even a reconnect with the same key.
+  connectionState().revision++;
   return await lastfmRequest("auth.getToken", {}, true);
 };
 

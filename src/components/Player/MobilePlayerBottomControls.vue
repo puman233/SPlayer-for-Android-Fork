@@ -6,21 +6,21 @@
       <span class="time" @click="toggleTimeFormat">{{ timeDisplay[1] }}</span>
     </div>
 
-    <div class="control-section">
+    <div class="control-section" @keydown.enter.stop @keydown.space.stop>
       <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-        <div class="mode-btn" aria-label="切换随机播放" @click.stop="player.toggleShuffle()">
+        <button type="button" class="mode-btn" :aria-label="statusStore.shuffleMode === 'heartbeat' ? '随机播放：心动模式' : '随机播放'" :aria-pressed="statusStore.shuffleMode !== 'off'" @click.stop="player.toggleShuffle()">
           <SvgIcon
             :name="statusStore.shuffleIcon"
             :size="24"
             :depth="statusStore.shuffleMode === 'off' ? 3 : 1"
           />
-        </div>
+        </button>
       </template>
       <div v-else class="placeholder" />
 
-      <div class="ctrl-btn" aria-label="上一曲" @click.stop="player.nextOrPrev('prev')">
+      <button type="button" class="ctrl-btn" aria-label="上一曲" @click.stop="player.nextOrPrev('prev')">
         <SvgIcon name="SkipPrev" :size="36" />
-      </div>
+      </button>
 
       <n-button
         :loading="statusStore.playLoading"
@@ -43,35 +43,39 @@
         </template>
       </n-button>
 
-      <div class="ctrl-btn" aria-label="下一曲" @click.stop="player.nextOrPrev('next')">
+      <button type="button" class="ctrl-btn" aria-label="下一曲" @click.stop="player.nextOrPrev('next')">
         <SvgIcon name="SkipNext" :size="36" />
-      </div>
+      </button>
 
       <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-        <div class="mode-btn" aria-label="切换循环模式" @click.stop="player.toggleRepeat()">
+        <button type="button" class="mode-btn" :aria-label="repeatLabel" @click.stop="player.toggleRepeat()">
           <SvgIcon
             :name="statusStore.repeatIcon"
             :size="24"
             :depth="statusStore.repeatMode === 'off' ? 3 : 1"
           />
-        </div>
+        </button>
       </template>
       <div v-else class="placeholder" />
     </div>
 
-    <div class="pagination" :aria-label="`播放器第 ${pageIndex + 1} 页，共 ${pageCount} 页`">
-      <div
+    <div
+      class="pagination"
+      :aria-label="`播放器第 ${pageIndex + 1} 页，共 ${pageCount} 页`"
+      @keydown.enter.stop
+      @keydown.space.stop
+    >
+      <button
         v-for="i in pageCount"
         :key="i"
+        type="button"
         :class="['dot', { active: pageIndex === i - 1 }]"
-        role="button"
-        tabindex="0"
         :aria-label="`切换到第 ${i} 页`"
         :aria-current="pageIndex === i - 1 ? 'page' : undefined"
         @click="emit('update:pageIndex', i - 1)"
-        @keydown.enter="emit('update:pageIndex', i - 1)"
-        @keydown.space.prevent="emit('update:pageIndex', i - 1)"
-      />
+      >
+        <span class="dot-marker" aria-hidden="true" />
+      </button>
     </div>
   </div>
 </template>
@@ -97,6 +101,7 @@ const emit = defineEmits<{
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const player = usePlayerController();
+const repeatLabel = computed(() => `循环模式：${{ off: "关闭", list: "列表循环", one: "单曲循环" }[statusStore.repeatMode]}`);
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 </script>
 
@@ -109,7 +114,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   padding: 4px clamp(16px, 5vw, 24px) calc(10px + var(--mobile-safe-bottom));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(24px, auto) 60px 16px;
+  grid-template-rows: minmax(24px, auto) 60px 48px;
   row-gap: clamp(6px, 1.5vh, 14px);
   background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
 
@@ -145,17 +150,28 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
     .placeholder,
     .mode-btn {
-      width: 40px;
-      height: 40px;
-      flex: 0 0 40px;
+      width: 48px;
+      height: 48px;
+      flex: 0 0 48px;
     }
 
     .mode-btn,
     .ctrl-btn {
+      appearance: none;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      font: inherit;
+      color: inherit;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid rgb(var(--main-cover-color));
+        outline-offset: -2px;
+      }
 
       .n-icon {
         color: rgb(var(--main-cover-color));
@@ -173,6 +189,10 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
     }
 
     .play-btn {
+      &:focus-visible {
+        outline: 2px solid rgb(var(--main-cover-color));
+        outline-offset: -2px;
+      }
       width: 60px;
       height: 60px;
       flex: 0 0 60px;
@@ -193,24 +213,46 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
       }
     }
 
-    // 窄视口按可用宽度收缩按钮，避免默认最小内容宽度撑出安全区
+    // 保留实际触控目标；320px视口仍能容纳五个控件及间距。
     .placeholder,
     .mode-btn,
     .ctrl-btn,
     .play-btn {
-      min-width: 0;
-      flex-shrink: 1;
+      min-width: 48px;
+      min-height: 48px;
+      flex-shrink: 0;
     }
   }
 
   .pagination {
-    height: 16px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
 
     .dot {
+      appearance: none;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      min-height: 48px;
+      flex: 0 0 48px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+
+      &:focus-visible {
+        outline: 2px solid rgb(var(--main-cover-color));
+        outline-offset: -2px;
+      }
+    }
+
+    .dot-marker {
       width: 6px;
       height: 6px;
       flex: 0 0 auto;
@@ -223,19 +265,20 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
         background-color 0.3s,
         opacity 0.3s;
 
-      &.active {
+    }
+
+    .dot.active .dot-marker {
         width: 16px;
         border-radius: 4px;
         background-color: rgb(var(--main-cover-color));
         opacity: 0.8;
-      }
     }
   }
 
   &.large {
     padding-right: clamp(32px, 6vw, 56px);
     padding-left: clamp(32px, 6vw, 56px);
-    grid-template-rows: minmax(28px, auto) 76px 18px;
+    grid-template-rows: minmax(28px, auto) 76px 48px;
 
     .progress-section {
       .time {
@@ -275,13 +318,14 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
     .pagination {
       gap: 10px;
 
-      .dot {
+      .dot-marker {
         width: 8px;
         height: 8px;
 
-        &.active {
-          width: 22px;
-        }
+      }
+
+      .dot.active .dot-marker {
+        width: 22px;
       }
     }
   }

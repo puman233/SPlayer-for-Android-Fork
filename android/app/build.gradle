@@ -43,8 +43,8 @@ android {
         applicationId "top.imsyy.splayer.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode providers.gradleProperty('previewVersionCode').map { it.toInteger() }.getOrElse(30023)
-        versionName providers.gradleProperty('previewVersion').getOrElse("3.0.15")
+        versionCode providers.gradleProperty('previewVersionCode').map { it.toInteger() }.getOrElse(30029)
+        versionName providers.gradleProperty('previewVersion').getOrElse("3.0.16-beta.6")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

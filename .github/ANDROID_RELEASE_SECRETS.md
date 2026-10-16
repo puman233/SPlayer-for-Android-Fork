@@ -42,9 +42,15 @@ Tag 去掉 v 后必须与 Android 和前端版本完全相同；不会自动改�
 
 从 `android/app/build/outputs/apk/**/output-metadata.json` 读取所有 release 最终 APK，校验真实清单版本/包名、非 debuggable 属性、签名证书 SHA-256 与正式 keystore 相同，拒绝标准 Android Debug 证书。不会 glob 整个 build 目录；独立 `release/` 目录仅包含已验证 APK，附件 glob 为 `release/*.apk`。保留 Gradle 最终文件名，例如 `app-arm64-v8a-release.apk`；flavor 的名称也保留在原文件名中，发生重名时停止发布。
 
-发布正文沿用历史版本格式，模板位于 `.github/RELEASE_TEMPLATE.md`：下载与安装表格、当前版本的分类更新日志、Full Changelog 链接。脚本从 Tag 源码的 `CHANGELOG.md` 提取该版本内容，缺少日志时停止创建 Release；GitHub 自动生成记录继续追加在正文后。
+发布正文默认简体中文，覆盖当前版本全部用户可感知变化，而非仅选取 Highlights。`CHANGELOG.md` 保存完整项目记录；`.github/release-notes/<tag>.json` 保存整理后的 `changes` 和内部 `coverage` 映射；构建、测试、签名与验收证据留在内部报告，不进入正文。每个 ReleaseChange 包含唯一 `id`、`category` 和中文 `summary`；分类可选主要更新、新增功能、修复与优化、Android、已知问题、注意事项，空分类不生成标题，同一变化不能重复。
 
-Release 标题为 Tag，自动生成 GitHub Release Notes；包含 alpha/beta/rc（忽略大小写）时为 prerelease，否则正式版本。使用 --verify-tag，不创建或移动 Tag。
+模板 `.github/RELEASE_TEMPLATE.md` 仅负责整理后的章节和唯一的 previous_tag...current_tag compare 链接，不固定插入 ABI 表。默认从 GitHub 已公开 Release 中选择当前 Tag 最近的祖先版本，排除草稿和当前版本；确有需要时可在 JSON 显式指定 `previous_tag`，仍须通过 Git 祖先关系校验。无法确定时停止，不猜测。版本范围、当前 Tag 的 CHANGELOG 条目及全部范围内提交共同构成来源快照。
+
+Coverage Audit 要求逐来源分类为 `user-visible`、`internal` 或 `ambiguous`。用户变化必须映射到存在的 ReleaseChange ID，并记录代码或事实证据；内部来源必须说明排除原因且不得映射到正文；任何来源缺失、来源过期、未确认条目或无来源的公开条目都会阻止生成。恢复时使用当前发布工具中的数据，审计的应用源码仍来自原 Tag；Tag、提交或 CHANGELOG 变化后必须重新审核映射。生成器返回完整内部矩阵；Actions 中另写入 `RUNNER_TEMP/release-notes-coverage.json`，不拼入公开正文。分类和语义完整性仍需维护者逐项审核，自动检查不能证明自由文本的全部语义。
+
+脚本不复制整个 CHANGELOG，也不追加 GitHub 自动 PR/贡献者记录。正文必须通过中文、唯一链接、标题、重复内容、内部信息及无证据比例/绝对化表述检查；任何检查失败时，在创建、上传、更新之前停止。恢复已有草稿也使用经过检查的项目正文。同版本修复的内部提交信息保留在执行记录中。
+
+Release 标题为 Tag，使用项目生成的 `--notes-file`，不使用 `--generate-notes`；包含 alpha/beta/rc（忽略大小写）时为 prerelease，否则正式版本。使用 --verify-tag，不创建或移动 Tag。修改模板或精选说明后运行 `python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'`，其中包含正文质量正反例和发布保护回归。
 
 ## 重跑与签名安全
 

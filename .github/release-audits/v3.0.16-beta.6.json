@@ -1,0 +1,61 @@
+{
+  "tag": "v3.0.16-beta.6",
+  "commit": "646c9db0658ce8931129c5c91ae8f975805be751",
+  "draftId": 414006574,
+  "stableTag": "v3.0.15",
+  "certificateSha256": "d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea",
+  "artifact": {
+    "id": 11989925268,
+    "runId": 38765090679,
+    "attempt": 1,
+    "name": "release-verified-v3.0.16-beta.6-38765090679-1",
+    "digest": "sha256:50d4831efee0bdc9551f45159775a77837f4b5a8f8e613f93c4a3c3b9d624302"
+  },
+  "apks": {
+    "app-arm64-v8a-release.apk": {
+      "sha256": "284f1661f8d463574def4a221e34eb56e68e4c42ac7625737af5568f4fd92859",
+      "size": 60077504
+    },
+    "app-armeabi-v7a-release.apk": {
+      "sha256": "96a024aaedf02e81a00aa2b0f7b6a4d38b61d83976cb78fdcb679bbe10117ca7",
+      "size": 59281846
+    },
+    "app-x86_64-release.apk": {
+      "sha256": "e693b86dfaaf3a85fdd6e092b30fa1fcf61e61882c52210b7454669e6266cc5f",
+      "size": 65631151
+    },
+    "app-x86-release.apk": {
+      "sha256": "e0c48b5e95fc2e006922afb01a4c93cd2a921587f4c9df8f6e87258a7b974b6d",
+      "size": 62384062
+    }
+  },
+  "riskAcceptance": {
+    "code": "THIRD_PARTY_FONT_LICENSE_UNCONFIRMED",
+    "file": "android/app/src/main/assets/iconfont_notification.ttf",
+    "gitBlob": "ce36d59d06853c0e340c42b43fa804efcd1d2cfd",
+    "accepted": true,
+    "acceptedOn": "2026-10-16",
+    "acceptedBy": "Repository maintainer, explicit instruction in this task",
+    "statement": "用户知情并接受该 P1 风险，仅授权继续发布本次 v3.0.16-beta.6；来源/许可证证据不足不被改写为已确认授权或已确认侵权。其他安全检查不豁免。"
+  },
+  "sourceArchives": [
+    {
+      "file": "ffmpeg-audio-player-38f1664e.tar.gz",
+      "source": "https://codeload.github.com/apoint123/ffmpeg-audio-player/tar.gz/38f1664ea3f9cb32007eb90dc13e25be84b34b6b",
+      "size": 67528,
+      "sha256": "96a7f52a0a511cf6ffcc297ebbbc41445c8ce44988ef9415c46d04056e7753b7"
+    },
+    {
+      "file": "ffmpeg-n8.0.1-894da5ca.tar.gz",
+      "source": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/894da5ca7d742e4429ffb2af534fcda0103ef593",
+      "size": 16422004,
+      "sha256": "9dad3557314f1b7923b61aff15e30079e964c3b41276bbd43dd8bb15b8028b5f"
+    },
+    {
+      "file": "soundtouch-2.4.0.tar.gz",
+      "source": "https://codeberg.org/soundtouch/soundtouch/archive/2.4.0.tar.gz",
+      "size": 607897,
+      "sha256": "b54ca9724afcf0b8c5326a0afb1b1676f2b892ee01c57d5312232ce4bc27a077"
+    }
+  ]
+}

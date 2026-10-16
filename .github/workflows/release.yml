@@ -21,6 +21,18 @@ on:
         required: true
         default: false
         type: boolean
+      reuse_artifact_id:
+        description: 保留原 APK 字节的受保护恢复（已审核 Artifact ID；留空正常构建）
+        required: false
+        type: string
+      reuse_artifact_digest:
+        description: 已审核 Artifact 的完整 sha256 摘要（恢复时必填）
+        required: false
+        type: string
+      resume_release_id:
+        description: 恢复的已存在草稿 ID（恢复时必填，不创建新发行版）
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -28,6 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ inputs.reuse_artifact_id == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: android-release
@@ -45,6 +58,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.repair_ref || format('refs/tags/{0}', inputs.tag || github.ref_name) }}
+          fetch-depth: 0
           persist-credentials: false
       - name: 检出当前工作流的发布工具
         uses: actions/checkout@v4
@@ -64,6 +78,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .release-tools/.github/scripts/android-release.py probe
+      - name: 验证中文更新说明与完整性
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .release-tools/.github/scripts/android-release.py notes
       - uses: ./.release-tools/.github/actions/setup-android
         if: steps.existing.outputs.exists == 'false'
       - name: 注入签名并验证版本
@@ -130,3 +149,66 @@ jobs:
       - name: 清理签名材料
         if: always()
         run: rm -f "$RUNNER_TEMP/splayer-release.keystore" "$RUNNER_TEMP/splayer-release-cert.der"
+  resume:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.reuse_artifact_id != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: android-release
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_REPAIR_REF: ${{ inputs.repair_ref }}
+      RELEASE_REPLACE_ID: ${{ inputs.replace_release_id }}
+      RELEASE_AUTHORIZED: ${{ inputs.authorize_publish && 'true' || 'false' }}
+      REQUIRE_ANDROID_UI: ${{ vars.ANDROID_UI_REQUIRED || 'false' }}
+      RELEASE_TOOLS_COMMIT: ${{ github.sha }}
+      RELEASE_REUSE_ARTIFACT_ID: ${{ inputs.reuse_artifact_id }}
+      RELEASE_REUSE_ARTIFACT_DIGEST: ${{ inputs.reuse_artifact_digest }}
+      RELEASE_RESUME_ID: ${{ inputs.resume_release_id }}
+      EXPECTED_ANDROID_CERT_SHA256: ${{ vars.ANDROID_RELEASE_CERT_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', inputs.tag) }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            .github
+            public/licenses
+          persist-credentials: false
+      - name: 确认原 Tag 提交及全部原 CI/UI 门禁
+        run: |
+          echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          export RELEASE_COMMIT=$(git rev-parse HEAD)
+          python3 -B .release-tools/.github/scripts/development-checks.py release-gate
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: 安装只读 APK 校验工具
+        run: sdkmanager --install 'build-tools;36.0.0'
+      - name: 校验来源、原 APK、历史签名及固定源码配套材料
+        run: python3 -B .release-tools/.github/scripts/resume-release.py prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-resume-verified-${{ inputs.tag }}-${{ github.run_id }}
+          path: |
+            release/
+            ${{ runner.temp }}/approved-payload.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: 保持正文及 APK 字节恢复发布
+        run: python3 -B .release-tools/.github/scripts/resume-release.py publish
+      - name: 验证公开附件、Pre-release 及稳定版保护
+        run: python3 -B .release-tools/.github/scripts/resume-release.py verify

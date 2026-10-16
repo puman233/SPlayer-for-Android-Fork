@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,21 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+
+
+RELEASE_NOTES_ROOT = Path(__file__).resolve().parent.parent / "release-notes"
+RELEASE_TEMPLATE = Path(__file__).resolve().parent.parent / "RELEASE_TEMPLATE.md"
+NOTE_SECTIONS = {
+    "highlights": "## ✨ 主要更新",
+    "features": "## 🚀 新增功能",
+    "fixes": "## 🛠 修复与优化",
+    "android": "## 📱 Android",
+    "known_issues": "## ⚠️ 已知问题",
+    "notes": "## 📌 注意事项",
+}
+_audit_spec = importlib.util.spec_from_file_location("notes_audit", Path(__file__).with_name("release_notes_audit.py"))
+notes_audit = importlib.util.module_from_spec(_audit_spec)
+_audit_spec.loader.exec_module(notes_audit)
 
 
 def run(*args):
@@ -104,12 +120,13 @@ def replace_release(current):
         path = Path("release-backup") / asset["name"]
         if not path.is_file() or path.stat().st_size != asset["size"] or "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest() != asset.get("digest"):
             raise ValueError("旧发行版备份已损坏，禁止替换")
+    body = release_notes()
     run("gh", "release", "edit", tag(), "--draft=true")
     for apk in files:
         run("gh", "release", "upload", tag(), str(apk), "--clobber")
     with tempfile.TemporaryDirectory() as directory:
         notes = Path(directory) / "notes.md"
-        notes.write_text(release_notes() + "\n\n同版本修复提交：" + os.environ["RELEASE_COMMIT"], encoding="utf-8")
+        notes.write_text(body, encoding="utf-8")
         run("gh", "release", "edit", tag(), "--notes-file", str(notes), "--target", os.environ["RELEASE_COMMIT"], "--draft=false")
     print(f"已替换 {tag()} 的 {len(files)} 个附件，原 Tag 保留")
 
@@ -184,17 +201,92 @@ def collect():
     print(f"已验证并收集 {count} 个正式 APK。")
 
 
+def compare_url(previous, current):
+    if (not re.fullmatch(r"v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", previous)
+            or previous == current):
+        raise ValueError("Release Notes 必须指定不同的有效 previous_tag")
+    repository = os.environ["GH_REPO"]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        raise ValueError("Release Notes 仓库名称无效")
+    return f"https://github.com/{repository}/compare/{previous}...{current}"
+
+
+def validate_release_notes(body, previous, current):
+    footer = f"**完整更新日志：** [{previous}...{current}]({compare_url(previous, current)})"
+    if len(re.findall(r"完整更新日志|full\s+changelog", body, re.IGNORECASE)) != 1 or not body.endswith(footer + "\n"):
+        raise ValueError("Release Notes 必须以唯一且正确的 Full Changelog compare 链接结尾")
+    content = body[:-len(footer + "\n")].strip()
+    headings = re.findall(r"^[ \t]*#+.*$", content, re.MULTILINE)
+    expected = [heading for heading in NOTE_SECTIONS.values() if heading in headings]
+    if not headings or headings != expected:
+        raise ValueError("Release Notes 仅允许按顺序使用非重复的二级用户更新标题")
+    for section in re.split(r"^## .*\n", content, flags=re.MULTILINE)[1:]:
+        if not section.strip():
+            raise ValueError("Release Notes 不允许空章节")
+    if not content.startswith(headings[0] + "\n") or "{{" in body or "}}" in body:
+        raise ValueError("Release Notes 模板结构无效")
+    entries = [line.removeprefix("- ").strip() for line in content.splitlines() if line.strip() and not line.startswith("## ")]
+    if len(entries) != len(set(entries)) or any(not re.search(r"[\u4e00-\u9fff]", entry) for entry in entries):
+        raise ValueError("Release Notes 必须使用中文且不得重复条目")
+    if re.search(r"<[^>]+>|```|完全修复|无脑|[★⭐]{2,}|\d+(?:\.\d+)?\s*%", content):
+        raise ValueError("Release Notes 存在多余 HTML、代码或未经证实的绝对化/比例措辞")
+    # 精选内容仍需人工审核；自动门禁阻止常见内部过程和发布证据泄漏。
+    forbidden = (
+        r"\b(?:CI|GitHub\s+Actions|(?:Android\s+)?UI\s+Test|test\s+(?:evidence|matrix)|"
+        r"(?:simulated|mock)\s+data|runners?|artifacts?|build\s+pipeline|release\s+gate|"
+        r"environments?|keystore|signing\s+verification|certificate\s+fingerprint)\b",
+        r"\bSHA[-\s]?256\b|\b[0-9a-f]{40}\b|\b[0-9a-f]{64}\b",
+        r"(?<![A-Za-z])[A-Za-z]:[\\/]|\\\\[^\s\\]+\\|(?<![:/])/(?:tmp|home|Users|private|var|opt|mnt|workspace|root|etc)/(?:[^\s]*)|file://",
+        r"blob/dev/CHANGELOG\.md|CPU[-\s]?Z|99\s*%|2015|⭐⭐|\|.*ABI.*\|",
+        r"开发检查|独立测试构建|内部验收|测试设备|截图数量|内部待办|模拟数据|合成音频|"
+        r"签名验证|签名校验|签名证书|证书指纹|发布门禁|测试范围|测试矩阵|Codex|本(?:次|轮)发布不|已验收|"
+        r"\b\d+\s+(?:screenshots?|test\s+devices?)\b|"
+        r"\b(?:internal\s+(?:commit|verification|process)|this\s+release\s+(?:does\s+not|doesn't)\s+(?:change|modify))\b",
+    )
+    if any(re.search(pattern, body, re.IGNORECASE) for pattern in forbidden):
+        raise ValueError("Release Notes 包含内部发布信息、本地路径或非正式下载说明")
+    if re.search(r"(?<![\w.])v?" + re.escape(current[1:]) + r"(?![\w.-])", content):
+        raise ValueError("Release Notes 不应在正文机械重复当前版本号")
+
+
+def prepare_release_notes():
+    current = tag()
+    source = RELEASE_NOTES_ROOT / (current + ".json")
+    if not source.is_file():
+        raise ValueError(f"缺少精选用户更新说明：{current}.json，停止发布")
+    data = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or set(data) - {"previous_tag", "changes", "coverage"}:
+        raise ValueError("Release Notes 数据字段无效")
+    previous = notes_audit.previous_tag(current, data.get("previous_tag"))
+    url = compare_url(previous, current)
+    sources = notes_audit.collect_sources(previous, current)
+    matrix = notes_audit.audit(data, sources)
+    sections = []
+    for key, heading in NOTE_SECTIONS.items():
+        entries = [change["summary"] for change in data["changes"] if change["category"] == key]
+        if not isinstance(entries, list) or any(not isinstance(item, str) or not item.strip() or "\n" in item or "\r" in item for item in entries):
+            raise ValueError("Release Notes 条目必须是非空的单行文本列表")
+        if entries:
+            separator = "\n\n" if key == "notes" else "\n"
+            lines = [item.strip() if key == "notes" else "- " + item.strip() for item in entries]
+            sections.append(heading + "\n\n" + separator.join(lines))
+    body = (RELEASE_TEMPLATE.read_text(encoding="utf-8")
+            .replace("{{SECTIONS}}", "\n\n".join(sections))
+            .replace("{{PREVIOUS_TAG}}", previous)
+            .replace("{{CURRENT_TAG}}", current)
+            .replace("{{COMPARE_URL}}", url).strip() + "\n")
+    validate_release_notes(body, previous, current)
+    return body, {"previous_tag": previous, "current_tag": current, "compare_url": url, "matrix": matrix,
+                  "user_visible": sum(row["classification"] == "user-visible" for row in matrix),
+                  "internal": sum(row["classification"] == "internal" for row in matrix), "ambiguous": 0}
+
+
 def release_notes():
-    value = tag()
-    changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"^## " + re.escape(value) + r"\s*\n(.*?)(?=^## |\Z)", changelog, re.MULTILINE | re.DOTALL)
-    if not match or not match.group(1).strip():
-        raise ValueError(f"CHANGELOG.md 缺少 {value} 的更新日志，停止发布")
-    changes = re.sub(r"\n---\s*$", "", match.group(1).strip()).strip()
-    template = Path(__file__).resolve().parent.parent / "RELEASE_TEMPLATE.md"
-    return (template.read_text(encoding="utf-8")
-            .replace("{{CHANGELOG}}", changes)
-            .replace("{{FULL_CHANGELOG_URL}}", f"https://github.com/{os.environ['GH_REPO']}/blob/dev/CHANGELOG.md"))
+    body, coverage = prepare_release_notes()
+    if os.environ.get("RUNNER_TEMP"):
+        (Path(os.environ["RUNNER_TEMP"]) / "release-notes-coverage.json").write_text(
+            json.dumps(coverage, ensure_ascii=False, indent=2), encoding="utf-8")
+    return body
 
 
 def publish():
@@ -206,14 +298,15 @@ def publish():
     if current and not current["draft"]:
         print("Release 已发布，跳过上传。")
         return
+    body = release_notes()
     prerelease = bool(re.search(r"alpha|beta|rc", value, re.IGNORECASE))
     commit = os.environ.get("RELEASE_COMMIT", os.environ["GITHUB_SHA"])
     if current is None:
         with tempfile.TemporaryDirectory() as directory:
             notes_file = Path(directory) / "release-notes.md"
-            notes_file.write_text(release_notes(), encoding="utf-8")
+            notes_file.write_text(body, encoding="utf-8")
             args = ["gh", "release", "create", value, "--verify-tag", "--title", value,
-                    "--generate-notes", "--notes-file", str(notes_file), "--draft", "--target", commit]
+                    "--notes-file", str(notes_file), "--draft", "--target", commit]
             if prerelease:
                 args.append("--prerelease")
             run(*args)
@@ -236,13 +329,16 @@ def publish():
                     raise ValueError(f"已有附件与本次构建不同，请人工检查草稿: {apk.name}")
         else:
             run("gh", "release", "upload", value, str(apk))
-    run("gh", "release", "edit", value, "--draft=false", f"--prerelease={str(prerelease).lower()}")
+    with tempfile.TemporaryDirectory() as directory:
+        notes_file = Path(directory) / "release-notes.md"
+        notes_file.write_text(body, encoding="utf-8")
+        run("gh", "release", "edit", value, "--notes-file", str(notes_file), "--draft=false", f"--prerelease={str(prerelease).lower()}")
     print(f"已发布 {value}，APK 数量: {len(files)}")
 
 
 if __name__ == "__main__":
     try:
-        {"probe": probe, "signing": signing, "collect": collect, "backup": backup, "publish": publish}[sys.argv[1]]()
+        {"probe": probe, "notes": release_notes, "signing": signing, "collect": collect, "backup": backup, "publish": publish}[sys.argv[1]]()
     except Exception as error:
         # 外部命令的完整输出可能包含敏感信息，仅显示异常类型
         if isinstance(error, ValueError):

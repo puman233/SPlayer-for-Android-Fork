@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "artifacts": [
+    {
+      "id": "ffmpeg",
+      "file": "public/wasm/ffmpeg.wasm",
+      "size": 3123047,
+      "sha256": "102c85e234dd3ddf115f2b021194939a8fd2d30a790120b989a66995fd91e7fb",
+      "gitBlob": "3907946cdec5a0b581abbc36c75328cb6b2907c6",
+      "vendoredBy": "SPlayer-Dev/SPlayer",
+      "vendoringRevision": "765d11b5ef52d48654e7f310eaa9697da0c569cd",
+      "producingProjectSource": "https://github.com/apoint123/ffmpeg-audio-player/tree/38f1664ea3f9cb32007eb90dc13e25be84b34b6b",
+      "sourceConfirmed": true,
+      "licenseConfirmed": true,
+      "licenseTextIncluded": true,
+      "sourceAvailable": true,
+      "sourceOfferRequired": true,
+      "sourceOfferAlreadyPresent": false,
+      "sourceOfferMissing": true,
+      "sourceOfferMeaning": "Applicable corresponding-source delivery/access, not necessarily a written offer; release delivery remains unverified.",
+      "reproducibleBuildVerified": false,
+      "details": "WASM_SOURCES.md"
+    },
+    {
+      "id": "opencc",
+      "file": "native/ferrous-opencc-wasm/pkg/ferrous_opencc_wasm_bg.wasm",
+      "size": 1151332,
+      "sha256": "f41603e59e3804663a69f48625d8a96bd691c6a680e612b818a644d3d84eb85b",
+      "gitBlob": "2fef19e9489bfa2fae07deb2732381fcb8500a9c",
+      "vendoredBy": "SPlayer-Dev/SPlayer",
+      "vendoringRevision": "142a0c5690a7c606a021c6ed10b81726758a90f0",
+      "producingProjectSource": "https://github.com/apoint123/ferrous-opencc/tree/398daf0ec19a5535278d147f46441337efb530a4",
+      "sourceConfirmed": true,
+      "licenseConfirmed": true,
+      "licenseTextIncluded": true,
+      "sourceAvailable": true,
+      "sourceOfferRequired": false,
+      "sourceOfferAlreadyPresent": null,
+      "sourceOfferMissing": false,
+      "sourceOfferMeaning": "No corresponding-source offer required by identified permissive licenses.",
+      "reproducibleBuildVerified": false,
+      "details": "WASM_SOURCES.md"
+    }
+  ],
+  "embeddedArtifacts": [
+    {
+      "id": "quickjs",
+      "file": "@tootallnate/quickjs-emscripten/dist/generated/emscripten-module.WASM_RELEASE_SYNC.js",
+      "encoding": "Base64 data URL in JavaScript",
+      "npmVersion": "0.23.0",
+      "quickjsVersion": "2021-03-27",
+      "size": 456202,
+      "sha256": "64a0922ad271e4b20a4bc238bf1a9fdc0561113789257813b2bfadb3378b10f7",
+      "sourceRevision": "75fcb3fc27d4857207266ef9c621d93eb79b868d",
+      "unresolvedScopedPackageGitHead": "891a55e8df93a667e5980863f2995e8bfef54872",
+      "producingProjectSource": "https://github.com/justjake/quickjs-emscripten/tree/75fcb3fc27d4857207266ef9c621d93eb79b868d",
+      "sourceConfirmed": true,
+      "sourceEvidence": "WASM bytes equal both official scoped and unscoped npm 0.23.0 archives; source revision is from the unscoped package.",
+      "licenseConfirmed": true,
+      "licenseTextIncluded": true,
+      "sourceAvailable": true,
+      "sourceOfferRequired": false,
+      "sourceOfferAlreadyPresent": null,
+      "sourceOfferMissing": false,
+      "reproducibleBuildVerified": false,
+      "details": "WASM_SOURCES.md"
+    }
+  ]
+}

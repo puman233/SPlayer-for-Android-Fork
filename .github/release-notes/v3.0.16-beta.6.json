@@ -1,0 +1,343 @@
+{
+  "changes": [
+    {
+      "id": "tablet",
+      "category": "highlights",
+      "summary": "恢复 Android 平板横屏的桌面式布局，统一侧栏、浏览区、封面、歌词和播放控制的排布，并恢复桌面式收起播放器的操作。"
+    },
+    {
+      "id": "overlay-sync",
+      "category": "highlights",
+      "summary": "改进桌面歌词与原生播放进度、暂停和恢复状态的同步，减少后台歌词更新延迟。"
+    },
+    {
+      "id": "overlay-restore",
+      "category": "fixes",
+      "summary": "重新打开应用或返回前台时恢复已开启的桌面歌词，并根据悬浮窗口的实际状态更新开关。"
+    },
+    {
+      "id": "overlay-error",
+      "category": "fixes",
+      "summary": "悬浮歌词窗口未能显示或关闭失败时给出明确提示，避免错误显示为已开启或已关闭。"
+    },
+    {
+      "id": "mobile",
+      "category": "fixes",
+      "summary": "修复手机及较窄平板的专辑、歌手和歌手专辑页在长文本、大字号、分页标签及滚动场景下的头部对齐问题。"
+    },
+    {
+      "id": "controls",
+      "category": "fixes",
+      "summary": "改进播放控件的触摸操作区域、键盘操作和无障碍标签。"
+    },
+    {
+      "id": "playback",
+      "category": "fixes",
+      "summary": "修复快速切歌、切换音质或音源期间旧请求覆盖当前歌曲的问题；保留最新的暂停状态和播放进度，并避免延迟重试意外恢复播放。"
+    },
+    {
+      "id": "lyrics",
+      "category": "fixes",
+      "summary": "修复逐字时间、翻译或罗马音变化未及时刷新，以及旧歌曲歌词覆盖当前歌曲的问题；正确应用 LRC 文件中的时间偏移。"
+    },
+    {
+      "id": "download",
+      "category": "fixes",
+      "summary": "改进下载暂停、继续、取消、并发和进度恢复，处理断点续传异常，并加强下载文件及已有用户文件的保护。"
+    },
+    {
+      "id": "download-lyrics",
+      "category": "fixes",
+      "summary": "改进歌词文件保存与失败重试，歌词处理失败时保留已下载的音频，并保留任务原有下载目录和设置。"
+    },
+    {
+      "id": "account",
+      "category": "fixes",
+      "summary": "修复切换账号或退出后旧请求及缓存影响收藏、推荐和云盘数据的问题，改善离线退出与账号切换；切换流媒体服务器或账号时隔离列表与缓存。"
+    },
+    {
+      "id": "lastfm",
+      "category": "fixes",
+      "summary": "Last.fm 听歌记录按实际播放时长计算，不计入暂停和缓冲时间；减少重复上报，并避免旧账号的请求影响新授权。"
+    },
+    {
+      "id": "navigation",
+      "category": "fixes",
+      "summary": "修复导航被限制时等待不结束、云盘搜索保留旧结果、拖拽排序在切页或多指操作后残留，以及永久缓存被提前判定过期的问题。"
+    },
+    {
+      "id": "security",
+      "category": "fixes",
+      "summary": "加强账号敏感信息在诊断输出和系统备份中的保护，并过滤应用内更新说明中的不安全内容。"
+    },
+    {
+      "id": "android",
+      "category": "android",
+      "summary": "本版本适用于 Android 10 及以上，提供 arm64-v8a、armeabi-v7a、x86_64 和 x86 架构 APK。"
+    },
+    {
+      "id": "discover",
+      "category": "known_issues",
+      "summary": "发现音乐的歌单广场收到空响应时，仍可能缺少明确的空态提示。"
+    },
+    {
+      "id": "beta",
+      "category": "notes",
+      "summary": "这是 Beta 测试版本，可能仍存在未发现的问题。"
+    },
+    {
+      "id": "upgrade",
+      "category": "notes",
+      "summary": "本测试版与稳定版使用相同包名，安装时可能升级已有应用。请先备份重要数据；不保证可以直接降级。"
+    }
+  ],
+  "coverage": [
+    {
+      "source": "changelog:751708353e0ba9e4",
+      "classification": "user-visible",
+      "release_ids": [
+        "beta"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 beta"
+    },
+    {
+      "source": "changelog:3cba217ddb6311af",
+      "classification": "user-visible",
+      "release_ids": [
+        "tablet"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 tablet"
+    },
+    {
+      "source": "changelog:d8042ba6cd5f0508",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-sync"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-sync"
+    },
+    {
+      "source": "changelog:fd7acde058fa25da",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-restore"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-restore"
+    },
+    {
+      "source": "changelog:4fc7b6cb92bf39be",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-error"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-error"
+    },
+    {
+      "source": "changelog:4b0e87083257b227",
+      "classification": "user-visible",
+      "release_ids": [
+        "mobile"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 mobile"
+    },
+    {
+      "source": "changelog:6475e1ee363ab90e",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "changelog:f5e3adcef3d31fe5",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "changelog:ce1c492a6e0dc45f",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "changelog:1f7cbeb379593f7b",
+      "classification": "user-visible",
+      "release_ids": [
+        "discover"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 discover"
+    },
+    {
+      "source": "changelog:79bd1f6348e18439",
+      "classification": "user-visible",
+      "release_ids": [
+        "android"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 android"
+    },
+    {
+      "source": "changelog:120ede89c723f21c",
+      "classification": "user-visible",
+      "release_ids": [
+        "upgrade"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 upgrade"
+    },
+    {
+      "source": "commit:53512d72c484288e9e2033d7848969edc6f28e87",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:adcc49224a0bc2e115a92e838a3649e2912c3f3d",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-sync"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-sync"
+    },
+    {
+      "source": "commit:38f4942b602bac3ebc3c731f5a50a74d0bad9669",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:32209e918a38f43f08ed38f41b29e0aeec7fbd91",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:8c80a5401189190147838701e35d2d42fb514851",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:924fd94525f103aad0aa6891f82f2e602a0de642",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:a39a584ac0b4c641df3ea1050db3a0b2083c0350",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-restore",
+        "mobile"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-restore, mobile"
+    },
+    {
+      "source": "commit:d74657b2b7dd5c507ec9360bdf1bee9676c239be",
+      "classification": "user-visible",
+      "release_ids": [
+        "mobile"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 mobile"
+    },
+    {
+      "source": "commit:f1a9d266492f838766892ad2c23b71377afd42aa",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "开发辅助、测试夹具或验证范围/执行过程说明，不是用户功能变化；原记录保留。"
+    },
+    {
+      "source": "commit:84f84fc7154cd54f61b92fe7eac38e73b338d5aa",
+      "classification": "user-visible",
+      "release_ids": [
+        "mobile"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 mobile"
+    },
+    {
+      "source": "commit:93f6a92e63d4dac9f32fbc8aa8ffecdcfde36fc1",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay-error"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 overlay-error"
+    },
+    {
+      "source": "commit:a5a87399f08a066a9a35cbba5d6aaa5311a48a04",
+      "classification": "user-visible",
+      "release_ids": [
+        "download"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 download"
+    },
+    {
+      "source": "commit:1b9a8cd15e5fb67c98fb84ac096983e070a8afdf",
+      "classification": "user-visible",
+      "release_ids": [
+        "security"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 security"
+    },
+    {
+      "source": "commit:aa9db62575036d6c57234a6577de70b45bedc630",
+      "classification": "user-visible",
+      "release_ids": [
+        "playback"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 playback"
+    },
+    {
+      "source": "commit:a77c79c83e520350fad0ed706dcd8fb1e7dcddd4",
+      "classification": "user-visible",
+      "release_ids": [
+        "account"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 account"
+    },
+    {
+      "source": "commit:265f92a2fca74cd118b11f015b167713d94af591",
+      "classification": "user-visible",
+      "release_ids": [
+        "download-lyrics",
+        "download"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 download-lyrics, download"
+    },
+    {
+      "source": "commit:7e5aa682998ecf0fb98c3ed99dc6d14e00f885aa",
+      "classification": "user-visible",
+      "release_ids": [
+        "lastfm",
+        "lyrics",
+        "navigation"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 lastfm, lyrics, navigation"
+    },
+    {
+      "source": "commit:b3c60f0dd4eb7b7303c7f9376b2c04167f6d9a59",
+      "classification": "user-visible",
+      "release_ids": [
+        "controls",
+        "lastfm",
+        "playback"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 controls, lastfm, playback"
+    },
+    {
+      "source": "commit:55df6c593714fec0811011845e2c4a809634d949",
+      "classification": "user-visible",
+      "release_ids": [
+        "tablet"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 tablet"
+    },
+    {
+      "source": "commit:646c9db0658ce8931129c5c91ae8f975805be751",
+      "classification": "user-visible",
+      "release_ids": [
+        "beta",
+        "upgrade",
+        "android",
+        "discover"
+      ],
+      "evidence": "Tag 源码、版本差异及对应功能回归断言；该来源的用户影响映射到 beta, upgrade, android, discover"
+    }
+  ]
+}

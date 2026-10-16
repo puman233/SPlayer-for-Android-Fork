@@ -31,6 +31,21 @@ class ReleaseTests(unittest.TestCase):
         Path("package.json").write_text('{"version":"1.3.0"}', encoding="utf-8")
         Path("CHANGELOG.md").write_text('## v1.3.0\n\n### 更新\n\n- 测试更新\n\n## v1.2.0\n\n- 旧版内容\n', encoding="utf-8")
         os.environ["GH_REPO"] = "owner/repo"
+        notes_root = Path(self.temporary.name) / "notes"
+        notes_root.mkdir()
+        notes_patch = patch.object(module, "RELEASE_NOTES_ROOT", notes_root)
+        notes_patch.start()
+        self.addCleanup(notes_patch.stop)
+        for value in ("v1.3.0", "v1.3.0-rc.1"):
+            (notes_root / (value + ".json")).write_text(json.dumps({
+                "previous_tag": "v1.2.0",
+                "changes": [{"id": "lyrics", "category": "fixes", "summary": "修复歌词对齐问题。"}],
+                "coverage": [{"source": "fixture", "classification": "user-visible", "release_ids": ["lyrics"], "evidence": "歌词修复"}],
+            }), encoding="utf-8")
+        for name, value in (("previous_tag", "v1.2.0"), ("collect_sources", {"fixture": "歌词修复"})):
+            audit_patch = patch.object(module.notes_audit, name, return_value=value)
+            audit_patch.start()
+            self.addCleanup(audit_patch.stop)
 
     def fixture(self, variant="release", version="1.3.0", filename="app-arm64-v8a-release.apk"):
         root = Path("android/app/build/outputs/apk") / variant
@@ -121,7 +136,7 @@ class ReleaseTests(unittest.TestCase):
             module.publish()
             commands = [call.args for call in calls.call_args_list]
             self.assertIn("--draft", commands[0])
-            self.assertIn("--generate-notes", commands[0])
+            self.assertNotIn("--generate-notes", commands[0])
             self.assertIn("--verify-tag", commands[0])
             self.assertIn("--notes-file", commands[0])
             self.assertIn("--prerelease", commands[0])
@@ -173,20 +188,45 @@ class ReleaseTests(unittest.TestCase):
             module.publish()
             self.assertIn("--draft=false", command.call_args.args)
 
-    def test_notes_follow_previous_format_and_only_current_version(self):
+    def test_notes_are_curated_and_use_one_compare_link(self):
         notes = module.release_notes()
-        self.assertIn("## 📦 下载与安装", notes)
-        self.assertIn("# 更新日志", notes)
-        self.assertIn("### 更新", notes)
-        self.assertIn("测试更新", notes)
+        self.assertIn("## 🛠 修复与优化", notes)
+        self.assertIn("修复歌词对齐问题。", notes)
+        self.assertNotIn("测试更新", notes)
         self.assertNotIn("旧版内容", notes)
-        self.assertIn("https://github.com/owner/repo/blob/dev/CHANGELOG.md", notes)
+        self.assertEqual(notes.count("完整更新日志"), 1)
+        self.assertIn("https://github.com/owner/repo/compare/v1.2.0...v1.3.0", notes)
         self.assertNotIn("{{", notes)
 
-    def test_missing_changelog_stops_publishing(self):
-        Path("CHANGELOG.md").write_text('## v1.2.0\n\n- 旧版内容\n', encoding="utf-8")
+    def test_missing_curated_notes_stops_publishing(self):
+        (module.RELEASE_NOTES_ROOT / "v1.3.0.json").unlink()
         with self.assertRaises(ValueError):
             module.release_notes()
+
+    def test_internal_notes_stop_before_any_release_mutation(self):
+        (module.RELEASE_NOTES_ROOT / "v1.3.0.json").write_text(json.dumps({
+            "previous_tag": "v1.2.0",
+            "changes": [{"id": "ci", "category": "fixes", "summary": "CI 已通过。"}],
+            "coverage": [{"source": "fixture", "classification": "user-visible", "release_ids": ["ci"], "evidence": "fixture"}],
+        }), encoding="utf-8")
+        for current in (None, {"draft": True, "target_commitish": "abc", "assets": []}):
+            with self.subTest(current=current), patch.object(module, "release", return_value=current), \
+                    patch.object(module, "run") as command, self.assertRaises(ValueError):
+                module.publish()
+            command.assert_not_called()
+
+    def test_resumed_draft_receives_only_project_notes(self):
+        Path("release").mkdir()
+        Path("release/app.apk").write_bytes(b"apk")
+        saved_notes = []
+        def command(*args):
+            if "--notes-file" in args:
+                saved_notes.append(Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8"))
+            return ""
+        current = {"draft": True, "target_commitish": "abc", "assets": []}
+        with patch.object(module, "release", return_value=current), patch.object(module, "run", side_effect=command):
+            module.publish()
+        self.assertEqual(saved_notes, [module.release_notes()])
 
     def test_flavor_preserves_gradle_output_name(self):
         self.fixture("demoRelease", filename="app-demo-arm64-v8a-release.apk")
@@ -207,11 +247,16 @@ class ReplacementTests(unittest.TestCase):
                 Path("release-backup/app.apk").write_bytes(b"old")
                 current = {"id": 42, "tag_name": "v3.0.14", "assets": [{"name": "app.apk", "size": 3, "digest": "sha256:" + hashlib.sha256(b"old").hexdigest()}]}
                 Path("release-backup/metadata.json").write_text(json.dumps(current), encoding="utf-8")
-                with patch.dict(os.environ, {"RELEASE_TAG": "v3.0.14", "RELEASE_REPLACE_ID": "42", "RELEASE_REPAIR_REF": "a" * 40, "RELEASE_COMMIT": "a" * 40}), patch.object(module, "run") as commands, patch.object(module, "release_notes", return_value="repair"):
+                notes_written = []
+                def command(*args):
+                    if "--notes-file" in args:
+                        notes_written.append(Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8"))
+                with patch.dict(os.environ, {"RELEASE_TAG": "v3.0.14", "RELEASE_REPLACE_ID": "42", "RELEASE_REPAIR_REF": "a" * 40, "RELEASE_COMMIT": "a" * 40}), patch.object(module, "run", side_effect=command) as commands, patch.object(module, "release_notes", return_value="repair"):
                     module.replace_release(current)
                     self.assertEqual(commands.call_args_list[0].args, ("gh", "release", "edit", "v3.0.14", "--draft=true"))
                     self.assertEqual(commands.call_args_list[1].args, ("gh", "release", "upload", "v3.0.14", str(Path("release/app.apk")), "--clobber"))
                     self.assertIn("--draft=false", commands.call_args_list[-1].args)
+                    self.assertEqual(notes_written, ["repair"])
                     commands.reset_mock()
                     Path("release-backup/app.apk").write_bytes(b"bad")
                     with self.assertRaises(ValueError):

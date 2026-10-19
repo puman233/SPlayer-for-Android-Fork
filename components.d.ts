@@ -43,6 +43,7 @@ declare module 'vue' {
     FullPlayerMobileLandscape: typeof import('./src/components/Player/FullPlayerMobileLandscape.vue')['default']
     FullscreenPlayerManager: typeof import('./src/components/Modal/Setting/FullscreenPlayerManager.vue')['default']
     HomePageSectionManager: typeof import('./src/components/Modal/Setting/HomePageSectionManager.vue')['default']
+    HomeRecommendationCard: typeof import('./src/components/Card/HomeRecommendationCard.vue')['default']
     JumpArtist: typeof import('./src/components/Modal/JumpArtist.vue')['default']
     ListComment: typeof import('./src/components/List/ListComment.vue')['default']
     ListDetail: typeof import('./src/components/List/ListDetail.vue')['default']

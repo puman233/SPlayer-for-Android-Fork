@@ -29,30 +29,27 @@
         <Transition name="fade">
           <div
             v-if="!settingStore.hiddenCovers.player"
-            :key="musicStore.playSong.cover"
+            :key="musicStore.songCover"
             class="cover"
             @click.stop="statusStore.showFullPlayer = true"
           >
-            <n-image
+            <s-image
               :src="musicStore.songCover"
-              :alt="musicStore.songCover"
+              :fallback-src="musicStore.getSongCover('cover') || '/images/song.jpg?asset'"
+              :alt="musicStore.playSong.name"
               class="cover-img"
-              preview-disabled
+              cache-type="covers"
+              :observe-visibility="false"
+              :native-lazy="false"
               @load="coverLoaded"
-            >
-              <template #placeholder>
-                <div class="cover-loading">
-                  <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
-                </div>
-              </template>
-            </n-image>
+            />
             <!-- 打开播放器 -->
             <SvgIcon name="Expand" :size="30" />
           </div>
         </Transition>
         <!-- 信息 -->
         <Transition name="left-sm" mode="out-in">
-          <div :key="musicStore.playSong.id" class="info">
+          <div :key="isPhone ? 'phone-info' : musicStore.playSong.id" class="info">
             <div class="data">
               <!-- 名称 -->
               <TextContainer
@@ -292,8 +289,14 @@ const { isPhone, isPadDevice } = useDevice();
 
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 
+const emit = defineEmits<{ heightChange: [height: number] }>();
 const playerRef = ref<HTMLElement | null>(null);
 const playerBodyRef = ref<HTMLElement | null>(null);
+useResizeObserver(playerRef, ([entry]) => {
+  if (!entry) return;
+  const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+  emit("heightChange", isPhone.value ? Math.ceil(height) : 64);
+});
 
 // 触摸滑动切换歌曲 / 上滑跟手开启全屏播放器（自实现 Pointer 事件，配合 setPointerCapture）
 let dragOpenActive = false;
@@ -882,7 +885,6 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
       :deep(img) {
         width: 56px;
         height: 56px;
-        opacity: 0;
         transition:
           transform 0.3s,
           opacity 0.3s,
@@ -1167,11 +1169,12 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
 
   // 手机浮岛模式：圆角悬浮在底栏之上
   &.phone-floating {
-    --phone-bar-height: 64px;
+    --phone-bar-height: var(--phone-player-height, 64px);
     left: 10px;
     right: 10px;
     width: auto;
-    height: var(--phone-bar-height);
+    height: auto;
+    min-height: 64px;
     padding: 0 10px;
     border-radius: 18px;
     background-color: var(--surface-container-hex);
@@ -1195,19 +1198,27 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
       --n-handle-size: 12px;
     }
 
+    .main-player-body {
+      min-height: 64px;
+      height: auto;
+      padding: 8px 0;
+    }
+
     .play-data {
-      padding-left: 56px;
+      height: auto;
+      min-height: 48px;
+      padding-left: 60px;
 
       .cover {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
         border-radius: 7px;
         margin-right: 10px;
 
         :deep(img) {
-          width: 44px;
-          height: 44px;
+          width: 48px;
+          height: 48px;
         }
       }
 
@@ -1222,10 +1233,21 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
           }
         }
         .lyric-container {
-          height: 18px;
+          display: grid;
+          height: auto;
+          min-height: 1.5em;
+          font-size: 11px;
           .lyric,
           .artists {
-            font-size: 11px;
+            grid-area: 1 / 1;
+            position: relative;
+            height: auto;
+            min-height: 1.5em;
+            line-height: 1.5;
+            font-size: inherit;
+          }
+          .ar-item {
+            font-size: inherit;
           }
         }
       }
@@ -1234,8 +1256,8 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
     .play-control {
       margin: 0 0 0 8px;
       .play-pause {
-        --n-width: 38px;
-        --n-height: 38px;
+        --n-width: 48px;
+        --n-height: 48px;
         margin: 0 2px;
       }
       @media (orientation: portrait) {
@@ -1246,10 +1268,10 @@ const showCreatorTip = () => window.$message.info("暂不支持查看主播主�
     }
   }
 
-  // 平板竖屏（phone-floating + pad-device）：横向空间充足，恢复上下首/随机/循环
+  // 平板竖屏仅在窗口空间充足时恢复扩展控制，Compact仍优先保留歌曲信息。
   &.phone-floating.pad-device {
     .play-control {
-      @media (orientation: portrait) {
+      @media (orientation: portrait) and (min-width: 600px) {
         .play-icon {
           display: flex;
         }

@@ -1,7 +1,7 @@
 {
   "name": "splayer",
   "productName": "SPlayer for Android",
-  "version": "3.0.16-beta.6",
+  "version": "3.0.16-beta.7",
   "packageManager": "pnpm@10.28.1",
   "description": "Android-first SPlayer build with Capacitor and embedded local API",
   "main": "./out/main/index.js",
@@ -134,6 +134,9 @@
     ],
     "ignoredBuiltDependencies": [
       "register-scheme"
-    ]
+    ],
+    "patchedDependencies": {
+      "@applemusic-like-lyrics/core@0.5.1": "patches/@applemusic-like-lyrics__core@0.5.1.patch"
+    }
   }
 }

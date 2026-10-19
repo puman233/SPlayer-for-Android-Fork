@@ -177,14 +177,26 @@ class SongManager {
    * 预加载封面图片
    * @param song 歌曲信息
    */
-  private prefetchCover(song: SongType): void {
+  public prefetchCover(song: SongType): void {
     if (!song || song.path) return; // 本地歌曲跳过
+
+    if (isCapacitorAndroid) {
+      // 只准备底栏和播放页实际使用的两种尺寸，复用缓存下载和显示中的在途请求。
+      const primary = song.coverSize?.l || song.coverSize?.xl || song.coverSize?.m || song.cover;
+      for (const url of new Set([song.coverSize?.s || song.cover, primary])) {
+        void prefetchCoverToCache(url, "covers").catch((error) => {
+          console.warn("预加载封面失败:", requestFailureCategory(error));
+        });
+      }
+      return;
+    }
 
     const coverUrls: string[] = [];
 
     // 收集需要预加载的封面 URL
     if (song.coverSize) {
-      // 优先预加载大尺寸封面
+      // 同时预热底栏缩略图和播放页大封面。
+      if (song.coverSize.s) coverUrls.push(song.coverSize.s);
       if (song.coverSize.xl) coverUrls.push(song.coverSize.xl);
       if (song.coverSize.l) coverUrls.push(song.coverSize.l);
     }
@@ -204,24 +216,12 @@ class SongManager {
       img.onerror = cleanup;
       img.src = url.replace(/^http:/, "https:");
     });
-    // Android 额外写入 covers/ 本地缓存：下一首切过去 s-image 立刻命中 blob URL、
-    // 不依赖浏览器 HTTP 缓存（Capacitor WebView 的 disk cache 在重启后会丢）。
-    // 只预下载主封面（列表组件主要用 coverSize.s/m，s-image 用 coverSize.l/xl）。
-    if (isCapacitorAndroid) {
-      const primary = song.coverSize?.l || song.coverSize?.xl || song.coverSize?.m || song.cover;
-      void prefetchCoverToCache(primary, "covers");
-    }
   }
 
   /**
-   * 检查本地音频缓存 —— Android-only 架构下交由 ExoPlayer SimpleCache 自动处理。
-   * 返 null 让上层走原始 URL，底层 CacheDataSource 会自动命中本地缓存文件不重走网络。
+   * Auto解锁可复用已完整缓存的原始地址；已解析的在线音质不走此回退。
    */
-  private checkLocalCache = async (
-    id: number,
-    _quality?: QualityType,
-    _md5?: string,
-  ): Promise<string | null> => {
+  private checkLocalCache = async (id: number): Promise<string | null> => {
     if (isCapacitorAndroid) {
       const cachedUrl = this.readAndroidAudioUrlCache()[String(id)];
       if (!cachedUrl) return null;
@@ -245,7 +245,37 @@ class SongManager {
    * @param id 歌曲id
    * @returns 在线播放信息
    */
-  public getOnlineUrl = async (id: number, isPc: boolean = false): Promise<AudioSource> => {
+  private sourceRequests = new Map<string, Promise<AudioSource>>();
+
+  private shareSourceRequest(
+    key: string,
+    resolve: () => Promise<AudioSource>,
+  ): Promise<AudioSource> {
+    const pending = this.sourceRequests.get(key);
+    if (pending) return pending;
+    const request = resolve();
+    this.sourceRequests.set(key, request);
+    const clear = () => {
+      if (this.sourceRequests.get(key) === request) this.sourceRequests.delete(key);
+    };
+    request.then(clear, clear);
+    return request;
+  }
+
+  public getOnlineUrl = (id: number, isPc: boolean = false): Promise<AudioSource> => {
+    const settingStore = useSettingStore();
+    const key = JSON.stringify([
+      "official",
+      id,
+      isPc,
+      settingStore.songLevel,
+      settingStore.disableAiAudio,
+      useDataStore().getAccountToken(),
+    ]);
+    return this.shareSourceRequest(key, () => this.resolveOnlineUrl(id, isPc));
+  };
+
+  private resolveOnlineUrl = async (id: number, isPc: boolean): Promise<AudioSource> => {
     const settingStore = useSettingStore();
     let level: SongUrlLevel = normalizeSongUrlLevel(
       isPc ? "exhigh" : settingStore.songLevel,
@@ -284,7 +314,8 @@ class SongManager {
       }
     }
 
-    if (!qualityData && level !== "standard" && level !== "exhigh") {
+    // 常规音质由取源接口返回实际level，不先串行查询元数据；AI/杜比保留兼容检查。
+    if (!qualityData && AI_AUDIO_LEVELS.includes(level)) {
       try {
         const quality = await getQualityData();
         if (!isPlayableQualityLevel(quality, level)) {
@@ -313,7 +344,10 @@ class SongManager {
           break;
         }
       } catch (error) {
-        console.warn(`🔽 [${id}] ${requestLevel} 音质地址获取失败，尝试降级`, requestFailureCategory(error));
+        console.warn(
+          `🔽 [${id}] ${requestLevel} 音质地址获取失败，尝试降级`,
+          requestFailureCategory(error),
+        );
       }
     }
 
@@ -341,13 +375,7 @@ class SongManager {
       quality = handleSongQuality(songData, "online");
     }
 
-    // 检查本地缓存
-    if (cacheableUrl && quality) {
-      const cachedUrl = await this.checkLocalCache(id, quality, songData?.md5);
-      if (cachedUrl) {
-        return { id, url: cachedUrl, isTrial, quality };
-      }
-    }
+    // API已确定当前音质的地址；原生按媒体身份命中缓存，不能改用同歌曲旧音质URL。
     // 缓存对应音质音乐（非试听才缓存）
     if (cacheableUrl) {
       this.rememberAndroidAudioUrl(id, cacheableUrl);
@@ -372,7 +400,25 @@ class SongManager {
    * @param specificSource 指定解锁源
    * @returns
    */
-  public getUnlockSongUrl = async (
+  public getUnlockSongUrl = (song: SongType, specificSource?: string): Promise<AudioSource> => {
+    const settings = useSettingStore();
+    const servers = settings.songUnlockServer.filter((s) => s.enabled).map((s) => s.key);
+    const artists = Array.isArray(song.artists) ? song.artists.map((a) => a.name) : song.artists;
+    const key = JSON.stringify([
+      "unlock",
+      song.id,
+      song.name,
+      artists,
+      specificSource || "auto",
+      servers,
+      settings.songLevel,
+      settings.disableAiAudio,
+      useDataStore().getAccountToken(),
+    ]);
+    return this.shareSourceRequest(key, () => this.resolveUnlockSongUrl(song, specificSource));
+  };
+
+  private resolveUnlockSongUrl = async (
     song: SongType,
     specificSource?: string,
   ): Promise<AudioSource> => {
@@ -417,7 +463,7 @@ class SongManager {
       return { id: songId, url: undefined };
     }
 
-    // 单个音源请求超时：避免慢速/失效音源阻塞播放（Promise.allSettled 会等待所有源）
+    // 单源超时限制高优先级失效源的等待；较低优先级不阻塞已成功的结果。
     const UNLOCK_REQUEST_TIMEOUT_MS = 8000;
     const withUnlockTimeout = <T>(promise: Promise<T>): Promise<T> =>
       new Promise<T>((resolve, reject) => {
@@ -437,12 +483,10 @@ class SongManager {
         );
       });
 
-    // 并发执行（带单源超时，失败源被跳过、继续按优先级取下一成功源）
-    const results = await Promise.allSettled(
-      servers.map((server) =>
-        withUnlockTimeout(
-          unlockSongUrl(songId, keyWord, server, song.name, String(artistName || "")),
-        ).then((result) => {
+    // 并发启动并立即接住失败；按优先级消费，不等待成功项之后的慢源。
+    const results = servers.map((server) =>
+      withUnlockTimeout(unlockSongUrl(songId, keyWord, server, song.name, String(artistName || "")))
+        .then((result) => {
           // 记录每个音源返回，便于 logcat 排查解锁链路
           console.log("Unlock source response received");
           return {
@@ -451,12 +495,16 @@ class SongManager {
             // 仅接受有效且非试听的完整链接
             success: result.code === 200 && !!result.url && !this.isTrialLikeUrl(result.url),
           };
-        }),
-      ),
+        })
+        .then(
+          (value) => ({ status: "fulfilled" as const, value }),
+          () => ({ status: "rejected" as const }),
+        ),
     );
 
-    // 按顺序找成功项
-    for (const r of results) {
+    // 仍保留配置的优先级，不能由较低优先级的快响应抢先覆盖。
+    for (const pending of results) {
+      const r = await pending;
       if (r.status === "fulfilled" && r.value.success) {
         const unlockUrl = r.value?.result?.url;
         // 解锁成功后，触发下载
@@ -869,7 +917,7 @@ class SongManager {
     }
     try {
       const res = await personalFm();
-        if (!dataStore.isAccountCurrent(token)) return;
+      if (!dataStore.isAccountCurrent(token)) return;
       const newList = formatSongsList(res.data);
       if (!newList || newList.length === 0) {
         throw new Error("加载私人漫游列表失败");

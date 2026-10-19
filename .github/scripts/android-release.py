@@ -27,6 +27,9 @@ NOTE_SECTIONS = {
 _audit_spec = importlib.util.spec_from_file_location("notes_audit", Path(__file__).with_name("release_notes_audit.py"))
 notes_audit = importlib.util.module_from_spec(_audit_spec)
 _audit_spec.loader.exec_module(notes_audit)
+_assets_spec = importlib.util.spec_from_file_location("release_assets", Path(__file__).with_name("release_assets.py"))
+release_assets = importlib.util.module_from_spec(_assets_spec)
+_assets_spec.loader.exec_module(release_assets)
 
 
 def run(*args):
@@ -260,6 +263,11 @@ def prepare_release_notes():
     previous = notes_audit.previous_tag(current, data.get("previous_tag"))
     url = compare_url(previous, current)
     sources = notes_audit.collect_sources(previous, current)
+    # A committed notes file cannot contain its own SHA. Resolve only the exact Tag commit;
+    # every commit and changelog source still passes the existing complete-coverage audit.
+    for record in data.get("coverage", []):
+        if record.get("source") == "commit:CURRENT":
+            record["source"] = "commit:" + notes_audit.git("rev-parse", current + "^{commit}")
     matrix = notes_audit.audit(data, sources)
     sections = []
     for key, heading in NOTE_SECTIONS.items():
@@ -316,24 +324,45 @@ def publish():
     if current["target_commitish"] != commit:
         raise ValueError("已有草稿不是本工作流当前提交创建的，请人工检查，禁止覆盖")
     assets = {item["name"] for item in current["assets"]}
-    files = sorted(Path("release").glob("*.apk"))
+    files = release_assets.publication_files()
     if not files or assets - {item.name for item in files}:
         raise ValueError("草稿包含不属于本次构建的附件，或未找到 APK，停止发布")
     for apk in files:
         if apk.name in assets:
-            # 中断重试时验证已上传附件，禁止静默覆盖或重复上传
-            with tempfile.TemporaryDirectory() as directory:
-                run("gh", "release", "download", value, "--pattern", apk.name, "--dir", directory)
-                existing = Path(directory) / apk.name
-                if hashlib.sha256(existing.read_bytes()).digest() != hashlib.sha256(apk.read_bytes()).digest():
-                    raise ValueError(f"已有附件与本次构建不同，请人工检查草稿: {apk.name}")
+            # 中断重试时验证已上传附件，禁止静默覆盖或重复上传。
+            if release_assets.manifest_path().is_file():
+                asset = next(item for item in current["assets"] if item["name"] == apk.name)
+                release_assets.verify_remote({"assets": [asset]}, [apk])
+            else:
+                with tempfile.TemporaryDirectory() as directory:
+                    run("gh", "release", "download", value, "--pattern", apk.name, "--dir", directory)
+                    existing = Path(directory) / apk.name
+                    if hashlib.sha256(existing.read_bytes()).digest() != hashlib.sha256(apk.read_bytes()).digest():
+                        raise ValueError(f"已有附件与本次构建不同，请人工检查草稿: {apk.name}")
         else:
-            run("gh", "release", "upload", value, str(apk))
+            if release_assets.manifest_path().is_file():
+                # Address the authenticated draft by ID; /releases/tags may hide drafts.
+                upload_url = f"https://uploads.github.com/repos/{os.environ['GH_REPO']}/releases/{current['id']}/assets?name={urllib.parse.quote(apk.name)}"
+                run("gh", "api", "-X", "POST", upload_url, "-H", "Content-Type: application/octet-stream", "--input", str(apk))
+            else:
+                run("gh", "release", "upload", value, str(apk))
+    if release_assets.manifest_path().is_file():
+        verified = release()
+        if (not verified or not verified["draft"] or verified["id"] != current["id"]
+                or verified["target_commitish"] != commit):
+            raise ValueError("Draft identity changed before publication")
+        release_assets.publication_files()
+        release_assets.verify_remote(verified, files)
     with tempfile.TemporaryDirectory() as directory:
         notes_file = Path(directory) / "release-notes.md"
         notes_file.write_text(body, encoding="utf-8")
-        run("gh", "release", "edit", value, "--notes-file", str(notes_file), "--draft=false", f"--prerelease={str(prerelease).lower()}")
-    print(f"已发布 {value}，APK 数量: {len(files)}")
+        if release_assets.manifest_path().is_file():
+            run("gh", "api", "-X", "PATCH", f"repos/{os.environ['GH_REPO']}/releases/{current['id']}",
+                "-F", "body=@" + str(notes_file), "-F", "draft=false",
+                "-F", "prerelease=" + str(prerelease).lower(), "-f", "make_latest=false")
+        else:
+            run("gh", "release", "edit", value, "--notes-file", str(notes_file), "--draft=false", f"--prerelease={str(prerelease).lower()}")
+    print(f"已发布 {value}，附件数量: {len(files)}")
 
 
 if __name__ == "__main__":

@@ -66,6 +66,86 @@ class ReleaseTests(unittest.TestCase):
             return "Signer #1 certificate SHA-256 digest: " + hashlib.sha256(b"certificate").hexdigest()
         return "package: name='app.id' versionCode='7' versionName='1.3.0'"
 
+    def companion_fixture(self):
+        import zipfile
+        root = Path(".github/release-audits")
+        root.mkdir(parents=True)
+        (root / "v1.3.0.json").write_text(json.dumps({"tag": "v1.3.0"}), encoding="utf-8")
+        destination = Path("release")
+        destination.mkdir()
+        for abi in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64"):
+            (destination / f"app-{abi}-release.apk").write_bytes(b"apk-" + abi.encode())
+        for suffix in ("corresponding-source", "third-party-notices"):
+            with zipfile.ZipFile(destination / f"SPlayer-v1.3.0-{suffix}.zip", "w") as archive:
+                archive.writestr("source.txt", "source")
+        (destination / "SHA256SUMS").write_text("".join(
+            hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n"
+            for p in sorted(destination.iterdir(), key=lambda p: p.name)), encoding="utf-8")
+        return destination
+
+    def test_all_required_assets_are_verified_before_publication(self):
+        destination = self.companion_fixture()
+        uploaded = []
+        def command(*args):
+            if "--input" in args:
+                uploaded.append(Path(args[-1]).name)
+            if "draft=false" in args:
+                self.assertEqual(set(uploaded), {p.name for p in destination.iterdir()})
+            return ""
+        draft = {"id": 7, "draft": True, "target_commitish": "abc", "assets": []}
+        verified = {**draft, "assets": [{"name": p.name, "size": p.stat().st_size,
+            "digest": "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()}
+            for p in destination.iterdir()]}
+        with patch.object(module, "release", side_effect=[draft, verified]), patch.object(module, "run", side_effect=command):
+            module.publish()
+        self.assertEqual(len(uploaded), 7)
+
+    def test_missing_corrupt_or_extra_assets_never_publish(self):
+        destination = self.companion_fixture()
+        source = destination / "SPlayer-v1.3.0-corresponding-source.zip"
+        original = source.read_bytes()
+        draft = {"id": 7, "draft": True, "target_commitish": "abc", "assets": []}
+        for fault in ("missing", "corrupt", "extra"):
+            with self.subTest(fault=fault):
+                source.write_bytes(original)
+                if fault == "missing":
+                    source.unlink()
+                elif fault == "corrupt":
+                    source.write_bytes(b"changed")
+                else:
+                    (destination / "mapping.txt").write_text("junk")
+                with patch.object(module, "release", return_value=draft), patch.object(module, "run") as calls:
+                    with self.assertRaises(ValueError):
+                        module.publish()
+                    self.assertFalse(any(("--draft=false" in call.args or "draft=false" in call.args) for call in calls.call_args_list))
+        (destination / "mapping.txt").unlink()
+
+    def test_remote_digest_mismatch_keeps_complete_upload_draft(self):
+        destination = self.companion_fixture()
+        draft = {"id": 7, "draft": True, "target_commitish": "abc", "assets": []}
+        remote = {**draft, "assets": [{"name": p.name, "size": p.stat().st_size,
+            "digest": "sha256:" + "0" * 64} for p in destination.iterdir()]}
+        with patch.object(module, "release", side_effect=[draft, remote]), patch.object(module, "run") as calls:
+            with self.assertRaises(ValueError):
+                module.publish()
+            self.assertEqual(sum("--input" in call.args for call in calls.call_args_list), 7)
+            self.assertFalse(any(("--draft=false" in call.args or "draft=false" in call.args) for call in calls.call_args_list))
+
+    def test_current_commit_alias_still_requires_complete_coverage(self):
+        path = module.RELEASE_NOTES_ROOT / "v1.3.0.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["coverage"][0]["source"] = "commit:CURRENT"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with patch.object(module.notes_audit, "git", return_value="a" * 40), patch.object(
+                module.notes_audit, "collect_sources", return_value={"commit:" + "a" * 40: "歌词修复"}):
+            body, coverage = module.prepare_release_notes()
+            self.assertIn("修复歌词对齐", body)
+            self.assertEqual(coverage["matrix"][0]["source"], "commit:" + "a" * 40)
+        with patch.object(module.notes_audit, "git", return_value="a" * 40), patch.object(
+                module.notes_audit, "collect_sources", return_value={"commit:" + "a" * 40: "歌词修复", "commit:" + "b" * 40: "遗漏"}):
+            with self.assertRaises(ValueError):
+                module.prepare_release_notes()
+
     def test_final_release_only_and_stable_name(self):
         self.fixture()
         self.fixture("debug", "1.3.0-debug", "app-debug.apk")

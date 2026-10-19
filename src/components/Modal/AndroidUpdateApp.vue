@@ -1,10 +1,13 @@
 <template>
   <div class="android-update-app">
-    <n-flex align="center" :wrap="false">
-      <n-tag type="primary">v{{ packageJson.version }}</n-tag>
+    <n-flex align="center" class="version-summary">
+      <n-tag type="primary">v{{ currentVersion }}</n-tag>
       <SvgIcon name="Right" />
       <n-tag type="warning">{{ data.version }}</n-tag>
     </n-flex>
+    <n-tag :type="data.prerelease ? 'warning' : 'success'" class="channel-label">{{
+      data.prerelease ? "Beta / Pre-release" : "Stable 正式版"
+    }}</n-tag>
 
     <n-alert v-if="data.prerelease" type="warning" :bordered="false">
       这是预发布版本，可能包含未完成的功能或已知问题。
@@ -69,6 +72,7 @@ import {
 import "github-markdown-css/github-markdown.css";
 
 const props = defineProps<{ data: UpdateLogType }>();
+const currentVersion = ref(packageJson.version);
 const safeChangelog = computed(() => sanitizeUpdateHtml(props.data.changelog || ""));
 const emit = defineEmits<{ close: [] }>();
 const openReleasePage = () => {
@@ -86,6 +90,10 @@ const contentLength = ref(0);
 const awaitingInstallPermission = ref(false);
 let appListener: PluginListenerHandle | null = null;
 let progressListener: PluginListenerHandle | null = null;
+let disposed = false;
+const removeListener = (listener: PluginListenerHandle | null) => {
+  void listener?.remove().catch((error) => console.warn("移除更新监听失败", error));
+};
 
 const resolveAsset = async () => {
   errorMessage.value = "";
@@ -94,6 +102,7 @@ const resolveAsset = async () => {
       AndroidAppUpdate.getSupportedAbis(),
       fetchAndroidReleaseAssets(props.data.version),
     ]);
+    if (disposed) return;
     asset.value = selectAndroidApkAsset(assets, abis);
     if (!asset.value) errorMessage.value = "该版本没有适合本设备且带 SHA-256 摘要的 APK";
     else {
@@ -101,7 +110,7 @@ const resolveAsset = async () => {
         fileName: asset.value.name,
         sha256: asset.value.sha256,
       });
-      if (cached.available) {
+      if (!disposed && cached.available) {
         downloaded.value = true;
         progress.value = 100;
         bytesRead.value = cached.bytesRead;
@@ -109,13 +118,14 @@ const resolveAsset = async () => {
       }
     }
   } catch (error) {
+    if (disposed) return;
     console.error("识别 Android 更新包失败", error);
     errorMessage.value = "无法读取版本附件，请检查网络后重试";
   }
 };
 
 const downloadUpdate = async () => {
-  if (!asset.value || downloading.value) return;
+  if (disposed || !asset.value || downloading.value) return;
   errorMessage.value = "";
   progress.value = 0;
   bytesRead.value = 0;
@@ -129,10 +139,12 @@ const downloadUpdate = async () => {
       sha256: asset.value.sha256,
       size: asset.value.size,
     });
+    if (disposed) return;
     downloaded.value = true;
     progress.value = 100;
     window.$message.success("安装包下载并校验完成");
   } catch (error) {
+    if (disposed) return;
     const message = String((error as { message?: string })?.message || error);
     const code = String((error as { code?: string })?.code || "");
     if (code !== "UPDATE_DOWNLOAD_CANCELLED") {
@@ -152,9 +164,10 @@ const cancelDownload = async () => {
 };
 
 const installUpdate = async () => {
-  if (!asset.value) return;
+  if (disposed || !asset.value) return;
   try {
     const result = await AndroidAppUpdate.installApk({ fileName: asset.value.name });
+    if (disposed) return;
     awaitingInstallPermission.value = result.needsPermission;
     if (result.needsPermission) {
       window.$message.info("请允许此来源安装应用，返回后将继续安装");
@@ -187,30 +200,57 @@ const installUpdate = async () => {
 };
 
 onMounted(async () => {
-  progressListener = await AndroidAppUpdate.addListener("downloadProgress", (event) => {
-    bytesRead.value = event.bytesRead;
-    contentLength.value = event.contentLength;
-    if (event.percent >= 0) progress.value = Number(event.percent.toFixed(1));
-  });
-  appListener = await App.addListener("appStateChange", async ({ isActive }) => {
-    if (isActive && awaitingInstallPermission.value && downloaded.value) {
-      awaitingInstallPermission.value = false;
-      try {
-        const { allowed } = await AndroidAppUpdate.canInstallApk();
-        if (allowed) await installUpdate();
-      } catch (error) {
-        console.error("检查安装授权失败", error);
-        errorMessage.value = "无法检查安装授权，请再次点击安装更新";
-      }
+  try {
+    const info = await App.getInfo();
+    if (disposed) return;
+    currentVersion.value = info.id.includes(".debug")
+      ? info.version.replace(/-debug$/, "")
+      : info.version;
+    const progressHandle = await AndroidAppUpdate.addListener("downloadProgress", (event) => {
+      if (disposed) return;
+      bytesRead.value = event.bytesRead;
+      contentLength.value = event.contentLength;
+      if (event.percent >= 0) progress.value = Number(event.percent.toFixed(1));
+    });
+    if (disposed) {
+      removeListener(progressHandle);
+      return;
     }
-  });
-  await resolveAsset();
+    progressListener = progressHandle;
+    const appHandle = await App.addListener("appStateChange", async ({ isActive }) => {
+      if (disposed) return;
+      if (isActive && awaitingInstallPermission.value && downloaded.value) {
+        awaitingInstallPermission.value = false;
+        try {
+          const { allowed } = await AndroidAppUpdate.canInstallApk();
+          if (allowed && !disposed) await installUpdate();
+        } catch (error) {
+          console.error("检查安装授权失败", error);
+          errorMessage.value = "无法检查安装授权，请再次点击安装更新";
+        }
+      }
+    });
+    if (disposed) {
+      removeListener(appHandle);
+      return;
+    }
+    appListener = appHandle;
+    await resolveAsset();
+  } catch (error) {
+    if (disposed) return;
+    console.error("初始化 Android 更新窗口失败", error);
+    errorMessage.value = "无法初始化更新窗口，请关闭后重试";
+  }
 });
 
 onBeforeUnmount(() => {
-  progressListener?.remove();
-  appListener?.remove();
-  if (downloading.value) AndroidAppUpdate.cancelDownload();
+  disposed = true;
+  removeListener(progressListener);
+  removeListener(appListener);
+  if (downloading.value)
+    void AndroidAppUpdate.cancelDownload().catch((error) =>
+      console.warn("取消更新下载失败", error),
+    );
 });
 </script>
 
@@ -222,6 +262,21 @@ onBeforeUnmount(() => {
 
   .actions {
     margin-top: 4px;
+  }
+  .version-summary {
+    min-width: 0;
+    :deep(.n-tag) {
+      max-width: 100%;
+      height: auto;
+      min-height: var(--n-height);
+    }
+    :deep(.n-tag__content) {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+  }
+  .channel-label {
+    align-self: flex-start;
   }
 }
 </style>

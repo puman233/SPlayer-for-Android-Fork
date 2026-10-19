@@ -33,7 +33,7 @@
       <SongList
         :key="chooseAlbum"
         :data="albumSongs"
-        :loading="albumSongs?.length ? false : true"
+        :loading="loading"
         @removeSong="handleRemoveSong"
         hidden-cover
       />
@@ -47,7 +47,7 @@ import { useLocalStore, useSettingStore } from "@/stores";
 import { some } from "lodash-es";
 import { usePlayerController } from "@/core/player/PlayerController";
 
-const props = defineProps<{ data: SongType[] }>();
+const props = defineProps<{ data: SongType[]; loading: boolean }>();
 
 const localStore = useLocalStore();
 const settingStore = useSettingStore();

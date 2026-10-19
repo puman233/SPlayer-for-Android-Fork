@@ -207,6 +207,8 @@ class PlayerController {
     const lyricManager = useLyricManager();
 
     musicStore.playSong = song;
+    // 大封面随歌曲选择开始准备，不等播放页挂载，也不阻塞音频取源。
+    if (isCapacitorAndroid) useSongManager().prefetchCover(song);
     // $patch 批量提交：persist 只触发 1 次写，避免切歌瞬间多次持久化卡主线程
     // 用元数据 duration 立即填，否则进度条 max=0 会把所有 seek 钳到 0
     // （ExoPlayer 在 autoPlay=false 暂停态下 progressRunnable 不跑，duration 永远到不了 TS）
@@ -401,6 +403,11 @@ class PlayerController {
         return;
       }
       console.log(`🔄 [${playSongData.id}] 切换音质:`, "source resolved");
+      this.currentAudioSource = {
+        url: audioSource.url,
+        quality: audioSource.quality,
+        source: audioSource.source,
+      };
       // 更新音质和解锁状态
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
@@ -445,6 +452,11 @@ class PlayerController {
         return;
       }
       console.log(`🔄 [${playSongData.id}] 切换音频源:`, "source resolved");
+      this.currentAudioSource = {
+        url: audioSource.url,
+        quality: audioSource.quality,
+        source: audioSource.source,
+      };
       // 更新状态
       statusStore.songQuality = audioSource.quality;
       statusStore.audioSource = audioSource.source;
@@ -488,6 +500,7 @@ class PlayerController {
   ) {
     const requestToken = this.currentRequestToken;
     const seekRevision = this.seekRevision;
+    const intentRevision = this.playbackIntentRevision;
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
     const audioManager = useAudioManager();
@@ -526,6 +539,13 @@ class PlayerController {
     }
     // 播放新音频
     try {
+      if (isCapacitorAndroid && audioManager.engineType === "android-native") {
+        // 缓存音频可能立即开播；先同步身份，避免新音频事件携带上一首元数据。
+        await mediaSessionManager.updateMetadata(useMusicStore().playSong, url);
+        if (requestToken !== this.currentRequestToken) return;
+        if (intentRevision !== this.playbackIntentRevision) autoPlay = statusStore.playStatus;
+        if (seekRevision !== this.seekRevision) seek = statusStore.currentTime;
+      }
       const updateSeekState = () => {
         if (requestToken !== this.currentRequestToken || seekRevision !== this.seekRevision) {
           return statusStore.duration;
@@ -635,7 +655,10 @@ class PlayerController {
     if (song.type !== "radio") this.runIdleWithTimeout(() => void dataStore.setHistory(song), 1000);
     // 更新歌曲数据
     if (!song.path || song.type === "streaming") {
-      mediaSessionManager.updateMetadata();
+      // 原生加载前已经同步；后台自治切歌也由 Java 原子设置元数据。
+      if (!isCapacitorAndroid || useAudioManager().engineType !== "android-native") {
+        void mediaSessionManager.updateMetadata();
+      }
       getCoverColor(musicStore.songCover);
     }
     // 本地文件额外处理
@@ -649,7 +672,19 @@ class PlayerController {
     } else {
       this.runIdleWithTimeout(runSync);
     }
-    if (settingStore.useNextPrefetch) songManager.prefetchNextSong();
+    if (settingStore.useNextPrefetch) {
+      void songManager.prefetchNextSong().then((prefetched) => {
+        // 解锁源的预载可能晚于首次推窗；完成后补交地址，后台无需重新解析。
+        if (
+          isCapacitorAndroid && prefetched && settingStore.useNextPrefetch &&
+          musicStore.playSong?.id === song.id
+        ) {
+          void this.syncAndroidPlaybackContext(song);
+        }
+      }).catch((error) => {
+        console.warn("预载下一首失败:", requestFailureCategory(error));
+      });
+    }
 
     // Last.fm Scrobbler
     if (settingStore.lastfm.enabled && settingStore.isLastfmConfigured) {
@@ -1993,9 +2028,7 @@ class PlayerController {
 
   /**
    * 切换随机模式
-   * @param mode 可选，直接设置目标模式。如果不传则按 Off -> On -> Off 顺序轮转
-   * @note 心跳模式只能通过菜单开启（传入 "heartbeat" 参数），点击随机按钮不会进入心跳模式
-   * @note 当播放列表包含本地歌曲时，跳过心动模式，只在 Off 和 On 之间切换
+   * @param mode 可选，直接设置目标模式；不传则按 Off -> On -> Heartbeat -> Off 轮转。
    */
   public async toggleShuffle(mode?: ShuffleModeType) {
     const statusStore = useStatusStore();

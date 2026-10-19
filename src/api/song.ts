@@ -103,8 +103,10 @@ export const songLyricTTML = async (id: number) => {
     const settingStore = useSettingStore();
     const server = settingStore.amllDbServer || defaultAMLLDbServer;
     const url = server.replace("%s", String(id));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       if (response === null || response.status !== 200) {
         return null;
       }
@@ -112,6 +114,8 @@ export const songLyricTTML = async (id: number) => {
       return data;
     } catch {
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 };

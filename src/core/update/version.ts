@@ -20,7 +20,17 @@ export const parseVersion = (input: string): ParsedVersion | null => {
     .trim()
     .replace(VERSION_PREFIX_RE, "")
     .split("+", 1)[0];
-  const [coreText, prereleaseText = ""] = normalized.split("-", 2);
+  const separator = normalized.indexOf("-");
+  const coreText = separator < 0 ? normalized : normalized.slice(0, separator);
+  const prereleaseText = separator < 0 ? "" : normalized.slice(separator + 1);
+  if (
+    separator >= 0 &&
+    (!prereleaseText ||
+      prereleaseText
+        .split(".")
+        .some((part) => !/^[0-9A-Za-z-]+$/.test(part) || /^0\d+$/.test(part)))
+  )
+    return null;
   const coreParts = coreText.split(".");
 
   if (
@@ -32,15 +42,19 @@ export const parseVersion = (input: string): ParsedVersion | null => {
   }
 
   const core = coreParts.map(Number);
+  if (core.some((part) => !Number.isSafeInteger(part))) return null;
   while (core.length < 3) core.push(0);
 
   const prerelease = prereleaseText
-    ? prereleaseText
-        .split(".")
-        .map((part) => (/^\d+$/.test(part) ? Number(part) : part.toLowerCase()))
+    ? prereleaseText.split(".").map((part) => (/^\d+$/.test(part) ? Number(part) : part))
     : [];
 
-  if (prerelease.some((part) => part === "")) return null;
+  if (
+    prerelease.some(
+      (part) => part === "" || (typeof part === "number" && !Number.isSafeInteger(part)),
+    )
+  )
+    return null;
   return { core, prerelease };
 };
 
@@ -83,9 +97,12 @@ export const filterUpdateReleases = <T extends VersionedRelease>(
   releases: T[],
   includePrerelease = false,
 ): T[] =>
-  releases.filter(
-    (release) =>
-      !release.draft &&
-      (includePrerelease || !release.prerelease) &&
-      parseVersion(release.tag_name) !== null,
-  );
+  releases
+    .filter(
+      (release) =>
+        !release.draft &&
+        (includePrerelease ||
+          (!release.prerelease && parseVersion(release.tag_name)?.prerelease.length === 0)) &&
+        parseVersion(release.tag_name) !== null,
+    )
+    .sort((a, b) => compareVersions(b.tag_name, a.tag_name) ?? 0);

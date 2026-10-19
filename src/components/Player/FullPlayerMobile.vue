@@ -18,7 +18,7 @@ let savedPageType: MobilePageType = "info";
     ]"
     :style="{
       '--lyric-h-offset': lyricHeaderHorizontalPadding,
-      '--cover-size': `${Math.max(0, Math.min(coverWidth, coverHeight / (settingStore.playerType === 'record' ? 1.45 : 1), 380))}px`,
+      '--cover-size': `${Math.max(0, Math.min(coverWidth, coverHeight / (settingStore.playerType === 'record' ? 1.45 : 1), isPhoneDevice ? 300 : 380))}px`,
       '--top-bar-height': `${topBarHeight}px`,
       '--top-bar-flow-height': `${topBarFlowHeight}px`,
       '--player-height': `${playerViewportHeight}px`,
@@ -101,9 +101,10 @@ let savedPageType: MobilePageType = "info";
                 :center="false"
                 :light="false"
                 :phone-portrait="isPhoneDevice"
+                :action-widths="portraitActionWidths"
                 class="mobile-data"
               >
-                <template #actions="{ compact }">
+                <template #actions="{ compact, reduced, desktopReduced }">
                   <div class="info-actions" :class="{ compact }">
                     <div
                       v-if="musicStore.playSong.type !== 'radio'"
@@ -126,7 +127,7 @@ let savedPageType: MobilePageType = "info";
                       />
                     </div>
                     <n-button
-                      v-if="isPhoneDevice"
+                      v-if="isPhoneDevice && !desktopReduced"
                       text
                       class="portrait-desktop-lyric action-btn"
                       aria-label="桌面歌词"
@@ -149,7 +150,7 @@ let savedPageType: MobilePageType = "info";
                       <SvgIcon name="AddList" :size="26" />
                     </div>
                     <n-badge
-                      v-if="showPortraitPlaylistButton"
+                      v-if="showPortraitPlaylistButton && !reduced"
                       :value="dataStore.playList?.length ?? 0"
                       :show="settingStore.showPlaylistCount"
                       :max="9999"
@@ -160,12 +161,22 @@ let savedPageType: MobilePageType = "info";
                     </n-badge>
                     <!-- 快捷操作菜单 -->
                     <PlayerQuickActionsMenu :compact-portrait="compact">
-                      <template v-if="compact" #footer>
+                      <template v-if="compact" #footer="{ close }">
                         <div class="portrait-overflow-actions">
+                          <n-button
+                            v-if="reduced && showPortraitPlaylistButton"
+                            text
+                            @click="
+                              close();
+                              statusStore.playListShow = true;
+                            "
+                            ><SvgIcon name="PlayList" :size="24" />播放列表</n-button
+                          >
                           <n-button
                             text
                             @click="
-                              openPlaylistAdd([musicStore.playSong], !!musicStore.playSong.path)
+                              close();
+                              openPlaylistAdd([musicStore.playSong], !!musicStore.playSong.path);
                             "
                             ><SvgIcon name="AddList" :size="24" />添加到歌单</n-button
                           >
@@ -293,6 +304,18 @@ const showPureLyricButton = computed(
 const showPortraitPlaylistButton = computed(
   () => isPhonePortrait.value && !statusStore.personalFmMode,
 );
+const portraitActionWidths = computed(() => {
+  const favorite = musicStore.playSong.type !== "radio" ? 1 : 0;
+  const playlist = showPortraitPlaylistButton.value ? 1 : 0;
+  const expanded = 2 + favorite + playlist; // Desktop lyric and More stay available.
+  const reduced = 1 + favorite;
+  const width = (count: number) => count * 48 + Math.max(0, count - 1) * 2;
+  return {
+    expanded: width(expanded) + playlist * 4,
+    intermediate: width(reduced + playlist) + playlist * 4,
+    reduced: width(reduced),
+  };
+});
 const togglePureLyricMode = () => {
   statusStore.pureLyricMode = !statusStore.pureLyricMode;
 };
@@ -311,18 +334,22 @@ const mobileStart = ref<HTMLElement | null>(null);
 const topBarRef = ref<HTMLElement | null>(null);
 const lyricHeaderRef = ref<HTMLElement | null>(null);
 const lyricFooterRef = ref<ComponentPublicInstance | null>(null);
-const { height: lyricHeaderHeight } = useElementBounding(lyricHeaderRef);
-const { height: lyricFooterHeight } = useElementBounding(lyricFooterRef);
+// Flow sizing must not retain the scaled rectangles from the card entry animation.
+const borderBox = { box: "border-box" } as const;
+const { height: lyricHeaderHeight } = useElementSize(lyricHeaderRef, undefined, borderBox);
+const { height: lyricFooterHeight } = useElementSize(lyricFooterRef, undefined, borderBox);
 const dragHandleRef = ref<HTMLElement | null>(null);
 const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
 const { height: topBarHeight } = useElementSize(topBarRef);
-const { height: topBarFlowHeight } = useElementBounding(topBarRef);
+const { height: topBarFlowHeight } = useElementSize(topBarRef, undefined, borderBox);
 const { bottom: coverViewportBottom } = useElementBounding(coverSectionRef);
-const { top: playerViewportTop, height: playerViewportHeight } = useElementBounding(mobileStart);
+const { top: playerViewportTop } = useElementBounding(mobileStart);
+const { height: playerViewportHeight } = useElementSize(mobileStart, undefined, borderBox);
 const coverBottom = computed(() => coverViewportBottom.value - playerViewportTop.value);
 
 // 歌词/评论可用性
-const hasLyric = computed(() => musicStore.isHasLrc && musicStore.playSong.type !== "radio");
+// Loading/empty lyrics are page states, not reasons to remove navigation.
+const hasLyric = computed(() => musicStore.playSong.type !== "radio");
 // 纯净模式下仍保留评论页：用户可从最左侧滑出，按需查看评论
 const hasComment = computed(() => {
   if (musicStore.playSong.path) return false;
@@ -352,6 +379,7 @@ const resolveSavedPageIndex = (type: MobilePageType): number => {
 const pageIndex = ref(resolveSavedPageIndex(savedPageType));
 const pageTransitionDisabled = ref(false);
 const pageSwipeBlocked = ref(false);
+const pageSwipeDirection = ref<"horizontal" | "vertical" | null>(null);
 let pageTransitionTimer = 0;
 let lastLyricCoverTapAt = 0;
 let lastLyricCoverTapX = 0;
@@ -687,7 +715,7 @@ watch(currentPageType, (t) => {
 
 const isNoPageSwipeTarget = (event: TouchEvent) => {
   const target = event.target;
-  return target instanceof HTMLElement && Boolean(target.closest("[data-no-page-swipe]"));
+  return target instanceof Element && Boolean(target.closest("[data-no-page-swipe]"));
 };
 
 const { direction, isSwiping, lengthX, lengthY } = useSwipe(mobileStart, {
@@ -695,15 +723,24 @@ const { direction, isSwiping, lengthX, lengthY } = useSwipe(mobileStart, {
   passive: true,
   onSwipeStart: (event) => {
     pageSwipeBlocked.value = isNoPageSwipeTarget(event);
+    pageSwipeDirection.value = null;
+  },
+  onSwipe: () => {
+    if (pageSwipeBlocked.value || pageSwipeDirection.value) return;
+    const x = Math.abs(lengthX.value), y = Math.abs(lengthY.value);
+    if (Math.max(x, y) < DIRECTION_LOCK_TOLERANCE) return;
+    pageSwipeDirection.value = x > y ? "horizontal" : "vertical";
   },
   onSwipeEnd: () => {
+    const horizontal = pageSwipeDirection.value === "horizontal";
+    pageSwipeDirection.value = null;
     if (pageSwipeBlocked.value) {
       pageSwipeBlocked.value = false;
       return;
     }
     if (totalPages.value <= 1) return;
     // 仅在主方向为水平时触发翻页，避免上下滑动歌词/评论误触
-    if (Math.abs(lengthX.value) <= Math.abs(lengthY.value)) return;
+    if (!horizontal) return;
 
     if (direction.value === "left" && lengthX.value > 100) {
       pageIndex.value = Math.min(pageIndex.value + 1, totalPages.value - 1);
@@ -716,7 +753,7 @@ const { direction, isSwiping, lengthX, lengthY } = useSwipe(mobileStart, {
 // 当前滑动是否为水平方向（用于跟手位移）
 const isHorizontalSwipe = computed(
   () =>
-    !pageSwipeBlocked.value && isSwiping.value && Math.abs(lengthX.value) > Math.abs(lengthY.value),
+    !pageSwipeBlocked.value && isSwiping.value && pageSwipeDirection.value === "horizontal",
 );
 
 watch(isHorizontalSwipe, (swiping) => {
@@ -754,7 +791,6 @@ const contentTransform = computed(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-
 
   // 频谱贴底浮层：absolute 锚定容器底部，避开 PlayerSpectrum 默认 fixed + z-index:-1
   :deep(.mobile-spectrum) {
@@ -891,6 +927,8 @@ const contentTransform = computed(() => {
       flex: 0 1 auto;
       max-height: 60%;
       overflow-y: auto;
+      overflow-x: hidden;
+      touch-action: pan-y;
       overscroll-behavior: contain;
       width: 100%;
       display: flex;
@@ -1294,11 +1332,13 @@ const contentTransform = computed(() => {
         gap: 4px;
       }
       .play-meta {
-        flex: 0 0 auto;
+        flex: 1 1 0;
+        min-width: 0;
       }
       .info-actions {
+        flex: 0 0 auto;
         gap: 8px;
-        align-self: flex-end;
+        align-self: center;
         .action-btn,
         .qa-trigger--mobile {
           width: 48px;
@@ -1311,7 +1351,7 @@ const contentTransform = computed(() => {
           }
           .action-btn,
           .qa-trigger--mobile {
-            width: 40px;
+            width: 48px;
           }
         }
       }

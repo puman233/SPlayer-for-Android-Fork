@@ -21,6 +21,8 @@ export interface AndroidNativeLoadOptions {
 }
 
 export interface AndroidNativeMetadataPayload {
+  /** 仅供下一次加载此资源时原子应用；省略时立即更新当前资源。 */
+  forSource?: string;
   songId?: number;
   title: string;
   artist: string;
@@ -246,6 +248,7 @@ export interface AndroidNativePlaybackPlugin {
   updateFloatingLyricProgress(options: AndroidNativeFloatingLyricProgressPayload): Promise<void>;
   updateFloatingLyricSongInfo(options: AndroidNativeFloatingLyricSongInfoPayload): Promise<void>;
   updateFloatingLyricConfig(options: AndroidNativeFloatingLyricConfigPayload): Promise<void>;
+  unlockFloatingLyric(): Promise<void>;
   checkOverlayPermission(): Promise<AndroidNativePermissionResult>;
   requestOverlayPermission(): Promise<AndroidNativePermissionResult>;
   /**

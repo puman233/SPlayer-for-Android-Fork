@@ -98,7 +98,8 @@ public class ApkDownloadTest {
   }
 
   @Test public void proxyFailureFallsBackAndValidates() throws Exception {
-    assertTrue(context.getPackageName().endsWith(".phase1verify"));
+    assertTrue(context.getPackageName().endsWith(".phase1verify")
+        || context.getPackageName().equals("top.imsyy.splayer.android.debug"));
     byte[] apk = fixture();
     File partial = new File(context.getCacheDir(), "transport-test.part");
     for (int status : new int[]{403, 500, 206, 200}) {

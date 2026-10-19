@@ -60,6 +60,8 @@ export interface SettingState {
   shareUrlFormat: "web" | "mobile";
   /** 启动时检查更新 */
   checkUpdateOnStart: boolean;
+  /** Android 更新检查可选包含预发布版本，默认仅正式版 */
+  checkBetaUpdates: boolean;
   /** 隐藏 VIP 标签 */
   hideVipTag: boolean;
   /** 歌词字体大小模式 */
@@ -574,6 +576,7 @@ export const useSettingStore = defineStore("setting", {
     showTaskbarProgress: false,
     taskbarLyricUseThemeColor: false,
     checkUpdateOnStart: true,
+    checkBetaUpdates: false,
     preventSleep: false,
     useKeepAlive: true,
     songLevel: "exhigh",

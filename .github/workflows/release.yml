@@ -118,6 +118,9 @@ jobs:
       - name: 验证四架构发布契约并记录摘要
         if: steps.existing.outputs.exists == 'false'
         run: python3 -B .release-tools/.github/scripts/release-contract.py local
+      - name: 准备固定源码与许可材料并校验全部资产
+        if: steps.existing.outputs.exists == 'false' && inputs.replace_release_id == ''
+        run: python3 -B .release-tools/.github/scripts/release_assets.py prepare
       - uses: actions/upload-artifact@v4
         if: steps.existing.outputs.exists == 'false'
         with:

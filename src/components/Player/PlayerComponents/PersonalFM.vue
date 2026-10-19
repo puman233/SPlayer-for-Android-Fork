@@ -5,7 +5,7 @@
       <n-image
         v-if="!settingStore.hiddenCovers.personalFM"
         :key="musicStore.personalFMSong?.id"
-        :src="musicStore.personalFMSong?.coverSize?.m"
+        :src="musicStore.personalFMSong?.coverSize?.m || musicStore.personalFMSong?.cover"
         class="cover"
         preview-disabled
         lazy
@@ -24,25 +24,33 @@
         :key="musicStore.personalFMSong?.id"
         :class="['info', { 'no-cover': settingStore.hiddenCovers.personalFM }]"
       >
-        <n-text class="name text-hidden">
-          {{ musicStore.personalFMSong?.name || "未知曲目" }}
-        </n-text>
-        <div v-if="Array.isArray(musicStore.personalFMSong?.artists)" class="artists text-hidden">
-          <SvgIcon name="Artist" :depth="3" />
-          <n-text v-for="ar in musicStore.personalFMSong.artists" :key="ar.id" class="ar">
-            {{ ar.name }}
+        <div class="fm-metadata">
+          <n-text class="name text-hidden" :title="musicStore.personalFMSong?.name">
+            {{ musicStore.personalFMSong?.name || "未知曲目" }}
           </n-text>
-        </div>
-        <div v-if="isObject(musicStore.personalFMSong.album)" class="album text-hidden">
-          <SvgIcon name="Album" :depth="3" />
-          <n-text class="album-text">
-            {{ musicStore.personalFMSong.album?.name || "未知专辑" }}
-          </n-text>
+          <div v-if="Array.isArray(musicStore.personalFMSong?.artists)" class="artists text-hidden">
+            <SvgIcon name="Artist" :depth="3" />
+            <n-text v-for="ar in musicStore.personalFMSong.artists" :key="ar.id" class="ar">
+              {{ ar.name }}
+            </n-text>
+          </div>
+          <div v-if="isObject(musicStore.personalFMSong.album)" class="album text-hidden">
+            <SvgIcon name="Album" :depth="3" />
+            <n-text class="album-text">
+              {{ musicStore.personalFMSong.album?.name || "未知专辑" }}
+            </n-text>
+          </div>
+          <div class="radio">
+            <SvgIcon :depth="3" name="Radio" />
+            <n-text :depth="3">私人FM</n-text>
+          </div>
         </div>
         <!-- 功能 -->
         <n-flex :wrap="false" class="menu" align="center">
           <!-- 不喜欢 -->
-          <div
+          <button
+            type="button"
+            aria-label="不喜欢这首私人 FM 歌曲"
             class="menu-icon"
             v-debounce="
               () =>
@@ -52,10 +60,13 @@
             "
           >
             <SvgIcon class="icon" size="18" name="ThumbDown" />
-          </div>
+          </button>
           <!-- 播放暂停 -->
           <n-button
             :loading="statusStore.personalFmMode && statusStore.playLoading"
+            :aria-label="
+              statusStore.personalFmMode && statusStore.playStatus ? '暂停私人 FM' : '播放私人 FM'
+            "
             :focusable="false"
             class="play"
             strong
@@ -70,15 +81,15 @@
             </template>
           </n-button>
           <!-- 下一曲 -->
-          <div class="menu-icon" @click.stop="fmPlayNext">
+          <button
+            type="button"
+            class="menu-icon"
+            aria-label="下一首私人 FM"
+            @click.stop="fmPlayNext"
+          >
             <SvgIcon size="26" name="SkipNext" />
-          </div>
+          </button>
         </n-flex>
-        <!-- 图标 -->
-        <div class="radio">
-          <SvgIcon :depth="3" name="Radio" />
-          <n-text :depth="3">私人FM</n-text>
-        </div>
       </div>
     </Transition>
   </n-card>
@@ -217,6 +228,9 @@ onMounted(() => songManager.initPersonalFM());
         }
       }
       .menu-icon {
+        border: 0;
+        padding: 0;
+        background: transparent;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -316,6 +330,94 @@ onMounted(() => songManager.initPersonalFM());
           width: 26px;
           height: 26px;
         }
+      }
+    }
+  }
+  @media (max-width: 599px) {
+    min-width: 0;
+    height: auto;
+    min-height: 0;
+    :deep(.n-card-content) {
+      flex-wrap: nowrap;
+      padding: 8px;
+      gap: 8px;
+    }
+    .cover {
+      margin-right: 0;
+      align-self: flex-start;
+      width: clamp(88px, 30vw, 112px);
+      height: clamp(88px, 30vw, 112px);
+      min-width: clamp(88px, 30vw, 112px);
+    }
+    .fm-metadata {
+      min-width: 0;
+      min-height: 0;
+      flex: 0 0 auto;
+    }
+    .info {
+      flex: 1;
+      min-width: 0;
+      height: auto;
+      min-height: clamp(88px, 30vw, 112px);
+      gap: 4px;
+      &.no-cover {
+        height: auto;
+        .fm-metadata {
+          max-height: none;
+        }
+      }
+      .name {
+        font-size: clamp(15px, 4.5vw, 16px);
+      }
+      .name,
+      .artists {
+        display: block;
+        line-clamp: unset;
+        -webkit-line-clamp: unset;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .artists .ar {
+        display: inline;
+      }
+      .menu {
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+        margin-top: auto;
+        flex: 0 0 auto;
+        .menu-icon,
+        .play {
+          width: 48px;
+          height: 48px;
+          min-width: 48px;
+          min-height: 48px;
+          flex: 0 0 48px;
+        }
+        .play {
+          background: radial-gradient(
+            circle,
+            rgba(var(--primary), 0.12) 0 18px,
+            transparent 19px
+          ) !important;
+          :deep(.n-button__border),
+          :deep(.n-button__state-border) {
+            display: none;
+          }
+          .n-icon {
+            font-size: 24px !important;
+          }
+        }
+      }
+    }
+    .radio {
+      position: static;
+      order: -1;
+      margin-top: 0;
+      justify-content: flex-start;
+      .n-icon,
+      .n-text {
+        font-size: 12px;
       }
     }
   }

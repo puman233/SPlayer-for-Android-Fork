@@ -228,6 +228,24 @@ public final class PlaybackQueue {
   }
 
   /**
+   * 查看紧邻下一首，不跳过尚未解析的曲目，也不改变当前索引。
+   * 音频字节预载只服务即将播放的曲目，避免较远歌曲抢占带宽。
+   */
+  @Nullable
+  public synchronized Track peekNextTrack() {
+    if (windowTracks.isEmpty() || windowCurrentIndex < 0) return null;
+    for (int i = windowCurrentIndex + 1; i < windowTracks.size(); i++) {
+      if (!windowTracks.get(i).skipSong) return windowTracks.get(i).copy();
+    }
+    if (repeatMode == RepeatMode.ALL && !hasPreviousOutsideWindow && !hasNextOutsideWindow) {
+      for (Track track : windowTracks) {
+        if (!track.skipSong) return track.copy();
+      }
+    }
+    return null;
+  }
+
+  /**
    * 取窗口内当前曲目之后 N 首已 resolved 的 URL 列表（!skipSong）。<br>
    * 供 Java 端音频字节预载用：锁屏 / WebView 冻结时仍能保证下一首切歌秒响。
    */

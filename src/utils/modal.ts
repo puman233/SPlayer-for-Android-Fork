@@ -226,6 +226,7 @@ export const openPlaylistAdd = async (data: SongType[], isLocal: boolean) => {
 export const openBatchList = async (data: SongType[], isLocal: boolean, playListId?: number) => {
   const { default: BatchList } = await import("@/components/Modal/BatchList.vue");
   window.$modal.create({
+    class: "batch-operation-modal",
     preset: "card",
     transformOrigin: "center",
     autoFocus: false,

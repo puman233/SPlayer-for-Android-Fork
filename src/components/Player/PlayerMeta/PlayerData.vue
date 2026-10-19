@@ -50,71 +50,143 @@
       vertical
       :class="{
         'phone-portrait-meta': phonePortrait,
-        'portrait-actions-stacked': stackedPortraitActions,
       }"
     >
       <!-- 播放状态 + 操作按钮 -->
       <div
-        class="meta-actions-row"
         ref="metaRowRef"
+        class="meta-actions-row"
         :inert="controlsVisible === false"
         :aria-hidden="controlsVisible === false"
       >
-        <n-flex
-          v-if="settingStore.showPlayMeta && !light"
-          class="play-meta"
-          ref="tagsRef"
-          size="small"
-          align="center"
+        <span
+          v-if="phonePortrait && settingStore.showPlayMeta && !light"
+          ref="tagMeasureRef"
+          class="meta-measure"
+          aria-hidden="true"
         >
-          <!-- 音质 -->
-          <n-popselect
-            v-if="settingStore.showPlayerQuality && canQuickSelectQuality"
-            v-model:show="showQualityPopover"
-            trigger="manual"
-            placement="right"
-            :value="currentPlayingLevel"
-            :options="qualityOptions"
-            @update:value="handleQualitySelectAndClose"
-            @clickoutside="handleQualityClickOutside"
+          <span
+            v-if="settingStore.showPlayerQuality"
+            class="meta-measure-label"
+            :class="{ interactive: canQuickSelectQuality }"
+            >{{ qualityText }}</span
           >
-            <span ref="qualityTagRef" class="meta-item clickable" @click.stop="handleQualityClick">
+          <span
+            class="meta-measure-label"
+            :class="{ interactive: lyricSourceOptions.length > 1 }"
+            >{{ lyricMode }}</span
+          >
+          <span
+            class="meta-measure-label"
+            :class="{ interactive: audioSourceOptions.length > 1 && canSwitchSource }"
+            >{{ audioSourceText }}</span
+          >
+        </span>
+        <DefineMetaTags>
+          <n-flex
+            v-if="settingStore.showPlayMeta && !light"
+            class="play-meta"
+            :size="mergeTags ? 8 : phonePortrait ? 4 : 'small'"
+            :wrap="!phonePortrait"
+            :vertical="mergeTags"
+            :class="{ 'merged-meta-panel': mergeTags }"
+            data-no-page-swipe
+            :align="mergeTags ? 'stretch' : 'center'"
+          >
+            <!-- 音质 -->
+            <n-popselect
+              v-if="settingStore.showPlayerQuality && canQuickSelectQuality"
+              v-model:show="showQualityPopover"
+              trigger="manual"
+              placement="right"
+              :value="currentPlayingLevel"
+              :options="qualityOptions"
+              :to="mergeTags ? 'body' : undefined"
+              @update:value="handleQualitySelectAndClose"
+              @clickoutside="handleQualityClickOutside"
+            >
+              <template #empty>
+                <n-flex align="center" size="small"
+                  ><n-spin v-if="qualityLoading" :size="16" /><n-text>{{
+                    qualityLoading ? "正在获取可用音质…" : "暂无可切换音质"
+                  }}</n-text></n-flex
+                >
+              </template>
+              <button
+                type="button"
+                ref="qualityTagRef"
+                class="meta-target"
+                :aria-busy="qualityLoading"
+                @click.stop="handleQualityClick"
+              >
+                <span class="meta-item clickable">{{ qualityText }}</span>
+              </button>
+            </n-popselect>
+            <span v-else-if="settingStore.showPlayerQuality" class="meta-item">
               {{ qualityText }}
             </span>
-          </n-popselect>
-          <span v-else-if="settingStore.showPlayerQuality" class="meta-item">
-            {{ qualityText }}
-          </span>
-          <!-- 歌词模式 -->
-          <n-popselect
-            v-if="lyricSourceOptions.length > 1"
-            v-model:show="lyricPopoverOpen"
-            trigger="click"
-            :value="settingStore.lyricPriority"
-            :options="lyricSourceOptions"
-            @update:value="(val) => lyricManager.switchLyricSource(val)"
-          >
-            <span class="meta-item clickable">{{ lyricMode }}</span>
-          </n-popselect>
-          <span v-else class="meta-item">{{ lyricMode }}</span>
-          <!-- 音源状态 -->
-          <n-popselect
-            v-if="audioSourceOptions.length > 1 && canSwitchSource"
-            v-model:show="sourcePopoverOpen"
-            trigger="click"
-            :value="statusStore.audioSource"
-            :options="audioSourceOptions"
-            @update:value="(val) => player.switchAudioSource(val)"
-          >
-            <span class="meta-item clickable">
+            <!-- 歌词模式 -->
+            <n-popselect
+              v-if="lyricSourceOptions.length > 1"
+              v-model:show="lyricPopoverOpen"
+              trigger="click"
+              :value="settingStore.lyricPriority"
+              :options="lyricSourceOptions"
+              :to="mergeTags ? 'body' : undefined"
+              @update:value="(val) => lyricManager.switchLyricSource(val)"
+            >
+              <button type="button" class="meta-target">
+                <span class="meta-item clickable">{{ lyricMode }}</span>
+              </button>
+            </n-popselect>
+            <span v-else class="meta-item">{{ lyricMode }}</span>
+            <!-- 音源状态 -->
+            <n-popselect
+              v-if="audioSourceOptions.length > 1 && canSwitchSource"
+              v-model:show="sourcePopoverOpen"
+              trigger="click"
+              :value="statusStore.audioSource"
+              :options="audioSourceOptions"
+              :to="mergeTags ? 'body' : undefined"
+              @update:value="(val) => player.switchAudioSource(val)"
+            >
+              <button type="button" class="meta-target">
+                <span class="meta-item clickable">
+                  {{ audioSourceText }}
+                </span>
+              </button>
+            </n-popselect>
+            <span v-else class="meta-item">
               {{ audioSourceText }}
             </span>
-          </n-popselect>
-          <span v-else class="meta-item">
-            {{ audioSourceText }}
-          </span>
-        </n-flex>
-        <slot name="actions" :compact="compactPortraitActions" />
+          </n-flex>
+        </DefineMetaTags>
+        <n-popover
+          v-if="mergeTags && settingStore.showPlayMeta && !light"
+          v-model:show="metaPanelOpen"
+          trigger="click"
+          placement="top-start"
+        >
+          <template #trigger
+            ><button
+              type="button"
+              class="meta-settings-trigger"
+              data-no-page-swipe
+              :aria-expanded="metaPanelOpen"
+            >
+              播放设置
+            </button></template
+          >
+          <div class="meta-panel-title">音质、歌词与音源</div>
+          <ReuseMetaTags />
+        </n-popover>
+        <ReuseMetaTags v-else />
+        <slot
+          name="actions"
+          :compact="phonePortrait"
+          :reduced="hideQueue"
+          :desktop-reduced="reduceActions"
+        />
       </div>
       <!-- 歌手 -->
       <div v-if="musicStore.playSong.type !== 'radio'" class="artists">
@@ -191,7 +263,7 @@ import { useQualityControl } from "@/composables/useQualityControl";
 import { useBackClosable } from "@/composables/useAndroidBack";
 import { useDevice } from "@/composables/useDevice";
 import { usePlayerMetaPopoverHold } from "@/composables/usePlayerMetaPopoverHold";
-import { useElementSize } from "@vueuse/core";
+import { createReusableTemplate, useElementSize } from "@vueuse/core";
 const props = withDefaults(
   defineProps<{
     /** 数据居中 */
@@ -202,20 +274,10 @@ const props = withDefaults(
     controlsVisible?: boolean;
     /** 仅硬件手机竖屏调整信息顺序及操作空间 */
     phonePortrait?: boolean;
+    /** 同行操作区实际按钮数量对应的完整/收纳宽度 */
+    actionWidths?: { expanded: number; intermediate?: number; reduced: number };
   }>(),
   { controlsVisible: undefined },
-);
-
-const metaRowRef = ref<HTMLElement | null>(null);
-const tagsRef = ref<HTMLElement | null>(null);
-const { width: metaRowWidth } = useElementSize(metaRowRef);
-const { width: tagsWidth } = useElementSize(tagsRef);
-// 五个操作热区，空间不足只收纳添加歌单，其余入口保持可见。
-const compactPortraitActions = computed(
-  () => props.phonePortrait && metaRowWidth.value < tagsWidth.value + 292,
-);
-const stackedPortraitActions = computed(
-  () => compactPortraitActions.value && metaRowWidth.value < tagsWidth.value + 174,
 );
 
 const router = useRouter();
@@ -225,6 +287,39 @@ const settingStore = useSettingStore();
 const lyricManager = useLyricManager();
 const player = usePlayerController();
 const { isPhonePortrait } = useDevice();
+const [DefineMetaTags, ReuseMetaTags] = createReusableTemplate();
+const metaRowRef = ref<HTMLElement | null>(null);
+const tagMeasureRef = ref<HTMLElement | null>(null);
+const { width: metaRowWidth } = useElementSize(metaRowRef);
+const { width: naturalTagWidth } = useElementSize(tagMeasureRef);
+// Tag content plus its 4px trailing padding and the 4px row gap.
+const tagSpacing = 8;
+const reduceActions = computed(
+  () =>
+    props.phonePortrait &&
+    settingStore.showPlayMeta &&
+    !props.light &&
+    naturalTagWidth.value + tagSpacing + (props.actionWidths?.expanded ?? 0) > metaRowWidth.value,
+);
+const mergeTags = computed(
+  () =>
+    reduceActions.value &&
+    naturalTagWidth.value + tagSpacing + (props.actionWidths?.reduced ?? 0) > metaRowWidth.value,
+);
+const hideQueue = computed(
+  () =>
+    reduceActions.value &&
+    naturalTagWidth.value +
+      tagSpacing +
+      (props.actionWidths?.intermediate ?? props.actionWidths?.expanded ?? 0) >
+      metaRowWidth.value,
+);
+const metaPanelOpen = ref(false);
+useBackClosable(metaPanelOpen);
+usePlayerMetaPopoverHold(metaPanelOpen);
+watch(mergeTags, () => {
+  metaPanelOpen.value = false;
+});
 
 const {
   currentPlayingLevel,
@@ -243,6 +338,10 @@ usePlayerMetaPopoverHold(sourcePopoverOpen);
 useBackClosable(showQualityPopover);
 const qualityTagRef = ref<HTMLElement | null>(null);
 const qualityLoading = ref(false);
+let qualityDisposed = false;
+onBeforeUnmount(() => {
+  qualityDisposed = true;
+});
 
 const qualityText = computed(() => getQualityName(statusStore.songQuality));
 const canQuickSelectQuality = computed(
@@ -250,17 +349,18 @@ const canQuickSelectQuality = computed(
 );
 
 const handleQualityClick = async () => {
-  if (qualityLoading.value) return;
   if (showQualityPopover.value) {
     showQualityPopover.value = false;
     return;
   }
+  if (qualityLoading.value) return;
   qualityLoading.value = true;
+  showQualityPopover.value = true;
+  const songId = musicStore.playSong.id;
   try {
     await loadQualities();
-    if (qualityOptions.value.length > 0) {
-      showQualityPopover.value = true;
-    } else {
+    if (qualityDisposed || musicStore.playSong.id !== songId || !showQualityPopover.value) return;
+    if (qualityOptions.value.length === 0) {
       window.$message.warning("暂无可切换音质");
     }
   } finally {
@@ -429,6 +529,22 @@ const jumpToRadio = debounce(
 
 <style lang="scss" scoped>
 .player-data {
+  .meta-target {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .meta-item.clickable {
+    touch-action: manipulation;
+  }
   display: flex;
   flex-direction: column;
   width: 70%;
@@ -533,7 +649,7 @@ const jumpToRadio = debounce(
     opacity: 0.6;
     flex: 1;
     min-width: 0;
-    .meta-item {
+    :is(.meta-item, .meta-measure-label) {
       font-size: 12px;
       border-radius: 8px;
       padding: 2px 6px;
@@ -553,18 +669,61 @@ const jumpToRadio = debounce(
     }
   }
   .phone-portrait-meta {
+    .meta-measure {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: scale(0);
+      transform-origin: top left;
+      visibility: hidden;
+      pointer-events: none;
+      display: inline-flex;
+      width: max-content;
+      gap: 4px;
+      padding: 4px;
+      .meta-measure-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 12px;
+        padding: 2px 6px;
+        border: 1px solid transparent;
+        &.interactive {
+          min-width: 48px;
+        }
+      }
+    }
+    .meta-settings-trigger {
+      flex: 0 0 auto;
+      min-height: 48px;
+      padding: 4px 8px;
+      font: inherit;
+      color: inherit;
+      background: transparent;
+      border: 1px solid rgba(var(--main-cover-color), 0.6);
+      border-radius: 8px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
     .meta-actions-row {
       order: 1;
       flex-wrap: nowrap;
     }
     .play-meta {
-      flex: 0 0 auto;
-      width: max-content;
+      flex: 1 1 0;
+      min-width: 0;
+      flex-wrap: nowrap;
       padding-left: 0;
+      .meta-item {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
     }
-    &.portrait-actions-stacked .meta-actions-row {
-      flex-direction: column;
-      align-items: stretch;
+    .meta-target {
+      min-width: 48px;
+      min-height: 48px;
     }
   }
   &.record {
@@ -627,5 +786,42 @@ const jumpToRadio = debounce(
   color: rgb(var(--main-cover-color));
   background-color: rgba(var(--main-cover-color), 0.18);
   backdrop-filter: blur(10px);
+}
+</style>
+<style scoped lang="scss">
+.merged-meta-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100vw - 48px);
+  .meta-item {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    padding: 2px 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: 8px;
+    border: 1px solid currentColor;
+    cursor: pointer;
+  }
+  .meta-target {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 48px;
+    min-height: 48px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+}
+.meta-panel-title {
+  margin-bottom: 8px;
 }
 </style>

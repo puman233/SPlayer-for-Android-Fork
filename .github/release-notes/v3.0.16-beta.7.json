@@ -1,0 +1,202 @@
+{
+  "previous_tag": "v3.0.16-beta.6",
+  "changes": [
+    {
+      "id": "compact",
+      "category": "highlights",
+      "summary": "完善手机窄屏的首页卡片、设置浮层、歌单批量操作和多行空状态，兼顾大字号与平板布局。"
+    },
+    {
+      "id": "beta",
+      "category": "features",
+      "summary": "更新设置新增默认关闭的 Beta 检查开关，区分稳定版与预发布版并防止版本降级。"
+    },
+    {
+      "id": "mode",
+      "category": "features",
+      "summary": "播放模式按钮支持顺序、随机、心动模式循环切换；点按音量按钮展开可调节的音量条。"
+    },
+    {
+      "id": "lyric",
+      "category": "fixes",
+      "summary": "修复歌词长时间停留在加载中、TTML 就绪后等待其他请求，以及手动拖动迟滞和播放位置回归异常。"
+    },
+    {
+      "id": "overlay",
+      "category": "fixes",
+      "summary": "修复后台切歌后的桌面歌词更新；锁定按钮置于歌词左侧，空间不足时隐藏，关闭桌面歌词时自动解锁。"
+    },
+    {
+      "id": "player",
+      "category": "fixes",
+      "summary": "修复播放页信息区独立位移与滑动抖动，保留整页滑动切换；调整封面上限、横屏圆角及控件淡出。"
+    },
+    {
+      "id": "actions",
+      "category": "fixes",
+      "summary": "修复音源、音质、歌词菜单及更多操作响应，按可用空间展示歌曲列表和桌面歌词按钮。"
+    },
+    {
+      "id": "cover",
+      "category": "fixes",
+      "summary": "优化首次播放和切歌时的封面加载与缓存读取，稳定迷你播放栏及私人 FM 卡片高度。"
+    },
+    {
+      "id": "transition",
+      "category": "fixes",
+      "summary": "改进下一首预载和快速切歌处理，避免较远曲目抢占预载、旧请求回写以及不同资源混用缓存。"
+    },
+    {
+      "id": "android",
+      "category": "android",
+      "summary": "支持 Android 10 及以上，提供四种处理器架构的安装包，并附对应源码与许可材料。"
+    },
+    {
+      "id": "upstream",
+      "category": "known_issues",
+      "summary": "部分上游音源仍可能返回短音频；模拟器曾出现启动崩溃及连续操作异常，原因仍待确认。"
+    },
+    {
+      "id": "font",
+      "category": "known_issues",
+      "summary": "通知图标字体部分字形的再分发授权证据仍不充分，维护者仅接受此次 Beta 的相关风险。"
+    },
+    {
+      "id": "beta-note",
+      "category": "notes",
+      "summary": "这是预发布版本，建议先备份数据；跨版本降级时的数据兼容性无法保证。"
+    }
+  ],
+  "coverage": [
+    {
+      "source": "changelog:cd90820eac75be2d",
+      "classification": "user-visible",
+      "release_ids": [
+        "compact"
+      ],
+      "evidence": "完善手机窄屏的首页卡片、设置浮层、歌单批量操作和多行空状态，兼顾大字号与平板布局。"
+    },
+    {
+      "source": "changelog:364915332df248ed",
+      "classification": "user-visible",
+      "release_ids": [
+        "beta"
+      ],
+      "evidence": "更新设置新增默认关闭的 Beta 检查开关，区分稳定版与预发布版并防止版本降级。"
+    },
+    {
+      "source": "changelog:011b7a34bdc95ab1",
+      "classification": "user-visible",
+      "release_ids": [
+        "mode"
+      ],
+      "evidence": "播放模式按钮支持顺序、随机、心动模式循环切换；点按音量按钮展开可调节的音量条。"
+    },
+    {
+      "source": "changelog:c57b53d4e26bd7d9",
+      "classification": "user-visible",
+      "release_ids": [
+        "lyric"
+      ],
+      "evidence": "修复歌词长时间停留在加载中、TTML 就绪后等待其他请求，以及手动拖动迟滞和播放位置回归异常。"
+    },
+    {
+      "source": "changelog:530774d4fb196034",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay"
+      ],
+      "evidence": "修复后台切歌后的桌面歌词更新；锁定按钮置于歌词左侧，空间不足时隐藏，关闭桌面歌词时自动解锁。"
+    },
+    {
+      "source": "changelog:31eb662e943c32a8",
+      "classification": "user-visible",
+      "release_ids": [
+        "player"
+      ],
+      "evidence": "修复播放页信息区独立位移与滑动抖动，保留整页滑动切换；调整封面上限、横屏圆角及控件淡出。"
+    },
+    {
+      "source": "changelog:5fa41f3d279d7088",
+      "classification": "user-visible",
+      "release_ids": [
+        "actions"
+      ],
+      "evidence": "修复音源、音质、歌词菜单及更多操作响应，按可用空间展示歌曲列表和桌面歌词按钮。"
+    },
+    {
+      "source": "changelog:d9a847e3e8e343f1",
+      "classification": "user-visible",
+      "release_ids": [
+        "cover"
+      ],
+      "evidence": "优化首次播放和切歌时的封面加载与缓存读取，稳定迷你播放栏及私人 FM 卡片高度。"
+    },
+    {
+      "source": "changelog:aa4886e450a9fb4e",
+      "classification": "user-visible",
+      "release_ids": [
+        "transition"
+      ],
+      "evidence": "改进下一首预载和快速切歌处理，避免较远曲目抢占预载、旧请求回写以及不同资源混用缓存。"
+    },
+    {
+      "source": "changelog:9c027a29e89987ac",
+      "classification": "user-visible",
+      "release_ids": [
+        "android"
+      ],
+      "evidence": "支持 Android 10 及以上，提供四种处理器架构的安装包，并附对应源码与许可材料。"
+    },
+    {
+      "source": "changelog:a2505d04cda2ed73",
+      "classification": "user-visible",
+      "release_ids": [
+        "upstream"
+      ],
+      "evidence": "部分上游音源仍可能返回短音频；模拟器曾出现启动崩溃及连续操作异常，原因仍待确认。"
+    },
+    {
+      "source": "changelog:21067ec4cd6f3f2d",
+      "classification": "user-visible",
+      "release_ids": [
+        "font"
+      ],
+      "evidence": "通知图标字体部分字形的再分发授权证据仍不充分，维护者仅接受此次 Beta 的相关风险。"
+    },
+    {
+      "source": "changelog:74b79056a968e0fc",
+      "classification": "user-visible",
+      "release_ids": [
+        "beta-note"
+      ],
+      "evidence": "这是预发布版本，建议先备份数据；跨版本降级时的数据兼容性无法保证。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "user-visible",
+      "release_ids": [
+        "compact",
+        "beta",
+        "mode",
+        "lyric",
+        "overlay",
+        "player",
+        "actions",
+        "cover",
+        "transition",
+        "android",
+        "upstream",
+        "font",
+        "beta-note"
+      ],
+      "evidence": "本阶段源码、原生播放器、回归测试与对应版本记录；历史风险仅披露而未标记修复。"
+    },
+    {
+      "source": "commit:9db84b14b28148c045bdd91c6c6061fd4122f433",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "已有发布恢复工具维护，不作为用户功能更新。"
+    }
+  ]
+}

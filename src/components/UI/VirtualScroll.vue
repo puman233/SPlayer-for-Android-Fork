@@ -286,7 +286,7 @@ const measureItemHeights = () => {
     if (actualIndex < 0 || actualIndex >= props.items.length) return;
 
     try {
-      const height = el.getBoundingClientRect().height;
+      const height = el.offsetHeight;
 
       // 允许 1px 误差，避免频繁更新
       if (height > 0 && Math.abs(height - itemHeights.value[actualIndex]) > 0.5) {
@@ -392,6 +392,12 @@ defineExpose({
 
 // 防抖高度测量
 const debouncedMeasure = useDebounceFn(measureItemHeights, 50);
+// 大字号和换行可在项目集合不变时改变高度；固定模式保持原路径。
+useResizeObserver(
+  computed(() => (props.itemFixed ? [] : itemRefs.value)),
+  () => debouncedMeasure(),
+);
+
 
 // 监听数据变化
 watch(

@@ -11,7 +11,7 @@ import { renderUpdateMarkdown } from "@/core/update/changelog";
 import { isElectron } from "./env";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
 import Fuse from "fuse.js";
-import { filterUpdateReleases } from "@/core/update/version";
+import { filterUpdateReleases, parseVersion } from "@/core/update/version";
 
 type AnyObject = { [key: string]: any };
 
@@ -250,20 +250,23 @@ export const formatForGlobalShortcut = (shortcut: string): string => {
  * 获取更新日志
  * @returns 更新日志数组
  */
-export const getUpdateLog = async (forceRefresh = false): Promise<UpdateLogType[]> => {
+export const getUpdateLog = async (
+  forceRefresh = false,
+  includePrerelease = false,
+): Promise<UpdateLogType[]> => {
   const result = await getCacheData(updateLog, {
-    key: "androidUpdateLog",
+    key: "androidUpdateLogV2",
     time: 10,
     useCache: !forceRefresh,
   });
   if (!result || isEmpty(result)) return [];
   const updateLogs = await Promise.all(
-    filterUpdateReleases(result).map(async (v: any) => ({
+    filterUpdateReleases(result, includePrerelease).map(async (v: any) => ({
       version: v.tag_name,
       changelog: await renderUpdateMarkdown(v.body),
       time: convertToLocalTime(v.published_at),
       url: v.html_url,
-      prerelease: v.prerelease,
+      prerelease: Boolean(v.prerelease || parseVersion(v.tag_name)?.prerelease.length),
     })),
   );
   return updateLogs;

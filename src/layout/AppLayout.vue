@@ -1,5 +1,5 @@
 <template>
-  <div id="app-layout">
+  <div id="app-layout" :style="{ '--phone-player-height': `${phonePlayerHeight}px` }">
     <Transition name="fade">
       <div
         v-if="
@@ -161,7 +161,7 @@
 
     <!-- 真懒加载：用户首次打开播放队列时才挂载，挂载后保持常驻避免 Drawer 动画重置 -->
     <SongPlayList v-if="hasMountedPlayList" />
-    <MainPlayer />
+    <MainPlayer @height-change="phonePlayerHeight = $event" />
     <PlayerProvider>
       <FullPlayer />
     </PlayerProvider>
@@ -180,6 +180,8 @@ import { triggerViewRefresh } from "@/composables/useViewRefresh";
 import MainPlayer from "@/components/Player/MainPlayer.vue";
 import FullPlayer from "@/components/Player/FullPlayer.vue";
 import PlayerProvider from "@/components/Global/PlayerProvider.vue";
+
+const phonePlayerHeight = ref(64);
 
 // 播放队列（n-drawer）首次打开才挂载，配合 defineAsyncComponent 异步拉取 chunk；
 // 挂载后保持常驻，避免每次开关重置 n-drawer 入场动画。

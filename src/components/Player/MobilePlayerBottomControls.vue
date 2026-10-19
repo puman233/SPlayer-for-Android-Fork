@@ -8,7 +8,19 @@
 
     <div class="control-section" @keydown.enter.stop @keydown.space.stop>
       <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-        <button type="button" class="mode-btn" :aria-label="statusStore.shuffleMode === 'heartbeat' ? '随机播放：心动模式' : '随机播放'" :aria-pressed="statusStore.shuffleMode !== 'off'" @click.stop="player.toggleShuffle()">
+        <button
+          type="button"
+          class="mode-btn"
+          :aria-label="
+            statusStore.shuffleMode === 'heartbeat'
+              ? '心动模式：开启'
+              : statusStore.shuffleMode === 'on'
+                ? '随机播放：开启'
+                : '随机播放：关闭'
+          "
+          :aria-pressed="statusStore.shuffleMode !== 'off'"
+          @click.stop="player.toggleShuffle()"
+        >
           <SvgIcon
             :name="statusStore.shuffleIcon"
             :size="24"
@@ -18,7 +30,12 @@
       </template>
       <div v-else class="placeholder" />
 
-      <button type="button" class="ctrl-btn" aria-label="上一曲" @click.stop="player.nextOrPrev('prev')">
+      <button
+        type="button"
+        class="ctrl-btn"
+        aria-label="上一曲"
+        @click.stop="player.nextOrPrev('prev')"
+      >
         <SvgIcon name="SkipPrev" :size="36" />
       </button>
 
@@ -43,12 +60,22 @@
         </template>
       </n-button>
 
-      <button type="button" class="ctrl-btn" aria-label="下一曲" @click.stop="player.nextOrPrev('next')">
+      <button
+        type="button"
+        class="ctrl-btn"
+        aria-label="下一曲"
+        @click.stop="player.nextOrPrev('next')"
+      >
         <SvgIcon name="SkipNext" :size="36" />
       </button>
 
       <template v-if="musicStore.playSong.type !== 'radio' && !statusStore.personalFmMode">
-        <button type="button" class="mode-btn" :aria-label="repeatLabel" @click.stop="player.toggleRepeat()">
+        <button
+          type="button"
+          class="mode-btn"
+          :aria-label="repeatLabel"
+          @click.stop="player.toggleRepeat()"
+        >
           <SvgIcon
             :name="statusStore.repeatIcon"
             :size="24"
@@ -101,7 +128,9 @@ const emit = defineEmits<{
 const musicStore = useMusicStore();
 const statusStore = useStatusStore();
 const player = usePlayerController();
-const repeatLabel = computed(() => `循环模式：${{ off: "关闭", list: "列表循环", one: "单曲循环" }[statusStore.repeatMode]}`);
+const repeatLabel = computed(
+  () => `循环模式：${{ off: "关闭", list: "列表循环", one: "单曲循环" }[statusStore.repeatMode]}`,
+);
 const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 </script>
 
@@ -114,8 +143,8 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   padding: 4px clamp(16px, 5vw, 24px) calc(10px + var(--mobile-safe-bottom));
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(24px, auto) 60px 48px;
-  row-gap: clamp(6px, 1.5vh, 14px);
+  grid-template-rows: minmax(24px, auto) 60px 28px;
+  row-gap: clamp(10px, 1.5vh, 14px);
   background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
 
   .progress-section {
@@ -225,7 +254,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
   }
 
   .pagination {
-    height: 48px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -264,18 +293,21 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
         width 0.3s,
         background-color 0.3s,
         opacity 0.3s;
-
     }
 
     .dot.active .dot-marker {
-        width: 16px;
-        border-radius: 4px;
-        background-color: rgb(var(--main-cover-color));
-        opacity: 0.8;
+      width: 16px;
+      border-radius: 4px;
+      background-color: rgb(var(--main-cover-color));
+      opacity: 0.8;
     }
   }
 
   &.large {
+    row-gap: clamp(6px, 1.5vh, 14px);
+    .pagination {
+      height: 48px;
+    }
     padding-right: clamp(32px, 6vw, 56px);
     padding-left: clamp(32px, 6vw, 56px);
     grid-template-rows: minmax(28px, auto) 76px 48px;
@@ -321,7 +353,6 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
       .dot-marker {
         width: 8px;
         height: 8px;
-
       }
 
       .dot.active .dot-marker {
@@ -334,7 +365,7 @@ const { timeDisplay, toggleTimeFormat } = useTimeFormat();
 @media (max-height: 700px) {
   .mobile-player-bottom-controls {
     padding-top: 2px;
-    row-gap: 6px;
+    row-gap: 10px;
   }
 }
 </style>

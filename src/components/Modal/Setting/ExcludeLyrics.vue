@@ -1,6 +1,6 @@
 <template>
   <div class="exclude-lyrics-modal">
-    <n-flex vertical size="large">
+    <n-flex vertical size="large" class="exclude-layout">
       <n-card class="switch-card" size="small">
         <n-flex align="center" justify="space-between">
           <n-text>启用歌词排除</n-text>
@@ -8,7 +8,7 @@
         </n-flex>
       </n-card>
 
-      <n-tabs v-model:value="page" animated>
+      <n-tabs v-model:value="page" animated class="exclude-body">
         <n-tab-pane name="options" tab="排除选项">
           <div class="set-list">
             <n-card class="set-item">
@@ -259,6 +259,42 @@ onMounted(() => {
         width: 140px;
         min-width: 140px;
       }
+    }
+  }
+}
+@media (max-width: 599px) {
+  .exclude-lyrics-modal {
+    .exclude-layout {
+      max-height: calc(100dvh - 180px);
+      flex-wrap: nowrap;
+    }
+    .switch-card,
+    .exclude-layout > .n-flex,
+    .n-divider {
+      flex-shrink: 0;
+    }
+    .exclude-body {
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .set-item {
+      :deep(.n-card-content) {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .label {
+        width: 100%;
+        min-width: 0;
+        padding-right: 0;
+      }
+      .set {
+        min-width: 0;
+        width: auto;
+      }
+    }
+    .n-button {
+      min-height: 48px;
     }
   }
 }

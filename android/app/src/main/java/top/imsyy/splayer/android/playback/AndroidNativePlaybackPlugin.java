@@ -162,7 +162,13 @@ public class AndroidNativePlaybackPlugin extends Plugin {
     runOnMainThread(
         call,
         () -> {
-          PlaybackManager.getInstance(getContext()).updateMetadata(metadata);
+            String forSource = call.getString("forSource");
+            PlaybackManager manager = PlaybackManager.getInstance(getContext());
+            if (forSource != null && !forSource.isEmpty()) {
+              manager.stageMetadataForSource(forSource, metadata);
+            } else {
+              manager.updateMetadata(metadata);
+            }
           call.resolve();
         });
   }
@@ -488,6 +494,14 @@ public class AndroidNativePlaybackPlugin extends Plugin {
           PlaybackManager.getInstance(getContext()).updateFloatingLyricConfig(payload);
           call.resolve();
         });
+  }
+
+  @PluginMethod
+  public void unlockFloatingLyric(PluginCall call) {
+    runOnMainThread(call, () -> {
+      if (PlaybackManager.getInstance(getContext()).unlockFloatingLyric()) call.resolve();
+      else call.reject("桌面歌词窗口未开启");
+    });
   }
 
   @PluginMethod

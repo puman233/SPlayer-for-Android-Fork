@@ -1,0 +1,54 @@
+diff --git a/dist/amll-core.cjs b/dist/amll-core.cjs
+index 749c61bc12b2e1fe08c3e7c5027f3966300a41e4..6805e4ee3ca08a5823246e5901952989de7efbd7 100644
+--- a/dist/amll-core.cjs
++++ b/dist/amll-core.cjs
+@@ -3039,11 +3039,12 @@ var LyricPlayerBase = class extends EventTarget {
+ 	* @param force 是否绕过弹簧效果强制更新位置
+ 	*/
+ 	async calcLayout(sync = false, force = false) {
+-		const interlude = computeCurrentInterlude({
++		const interlude = this.scrollState.isScrolled ? this.layoutState.lastLayoutInterlude : computeCurrentInterlude({
+ 			currentTime: this.timelineState.currentTime,
+ 			scrollToIndex: this.timelineState.scrollToIndex,
+ 			currentGroups: this.currentLyricGroups
+ 		});
++		this.layoutState.lastLayoutInterlude = interlude;
+ 		const isInterludeActive = !!interlude;
+ 		if (this.layoutState.targetAlignIndex !== this.timelineState.scrollToIndex || this.layoutState.lastInterludeState !== isInterludeActive) {
+ 			this.layoutState.lastInterludeState = isInterludeActive;
+@@ -3057,7 +3058,7 @@ var LyricPlayerBase = class extends EventTarget {
+ 			if (springParams.shouldUpdate && springParams.params) this.setLinePosYSpringParams(springParams.params);
+ 		}
+ 		let curPos = -this.scrollState.scrollOffset;
+-		const targetAlignIndex = this.timelineState.scrollToIndex;
++		const targetAlignIndex = this.scrollState.isScrolled ? this.layoutState.targetAlignIndex : this.timelineState.scrollToIndex;
+ 		let isNextDuet = false;
+ 		if (interlude) isNextDuet = interlude.isNextDuet;
+ 		else this.interludeDots.setInterlude(void 0);
+diff --git a/dist/amll-core.mjs b/dist/amll-core.mjs
+index 3f918a06ec2a46a215b21191826022f3313fe977..5aec4f292a1e6829b9d28aa43b8e340c367bc011 100644
+--- a/dist/amll-core.mjs
++++ b/dist/amll-core.mjs
+@@ -3014,11 +3014,12 @@ var LyricPlayerBase = class extends EventTarget {
+ 	* @param force 是否绕过弹簧效果强制更新位置
+ 	*/
+ 	async calcLayout(sync = false, force = false) {
+-		const interlude = computeCurrentInterlude({
++		const interlude = this.scrollState.isScrolled ? this.layoutState.lastLayoutInterlude : computeCurrentInterlude({
+ 			currentTime: this.timelineState.currentTime,
+ 			scrollToIndex: this.timelineState.scrollToIndex,
+ 			currentGroups: this.currentLyricGroups
+ 		});
++		this.layoutState.lastLayoutInterlude = interlude;
+ 		const isInterludeActive = !!interlude;
+ 		if (this.layoutState.targetAlignIndex !== this.timelineState.scrollToIndex || this.layoutState.lastInterludeState !== isInterludeActive) {
+ 			this.layoutState.lastInterludeState = isInterludeActive;
+@@ -3032,7 +3033,7 @@ var LyricPlayerBase = class extends EventTarget {
+ 			if (springParams.shouldUpdate && springParams.params) this.setLinePosYSpringParams(springParams.params);
+ 		}
+ 		let curPos = -this.scrollState.scrollOffset;
+-		const targetAlignIndex = this.timelineState.scrollToIndex;
++		const targetAlignIndex = this.scrollState.isScrolled ? this.layoutState.targetAlignIndex : this.timelineState.scrollToIndex;
+ 		let isNextDuet = false;
+ 		if (interlude) isNextDuet = interlude.isNextDuet;
+ 		else this.interludeDots.setInterlude(void 0);

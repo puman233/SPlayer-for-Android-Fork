@@ -260,6 +260,14 @@ const albumName = computed(() => {
   height: 90px;
   cursor: pointer;
 
+  &.compact-row {
+    height: auto;
+    min-height: 90px;
+    .song-content {
+      min-height: 78px;
+    }
+  }
+
   // 手机端紧凑：保持外层高度（虚拟滚动依赖固定 itemHeight=90），只压内边距 / cover / 字号
   @media (max-width: 768px) {
     .song-content {

@@ -82,7 +82,7 @@
           <VirtualScroll
             ref="listRef"
             :item-height="90"
-            :item-fixed="true"
+            :item-fixed="!isPhone"
             :items="virtualListItems"
             :height="`calc(100% - 40px)`"
             :padding-bottom="80"
@@ -111,7 +111,10 @@
                   class="drop-line line-bottom"
                 />
                 <SongCard
-                  :class="{ 'is-dragging': isDragging && draggable && draggedIndex === index }"
+                  :class="{
+                    'compact-row': isPhone,
+                    'is-dragging': isDragging && draggable && draggedIndex === index,
+                  }"
                   :song="item.data"
                   :index="index"
                   :hiddenCover="hiddenCover || settingStore.hiddenCovers.list"
@@ -157,14 +160,26 @@
         <Transition name="fade" mode="out-in">
           <div
             v-if="floatToolShow && !statusStore.showFullPlayer"
+            ref="listMenuRef"
             class="list-menu"
+            :class="{ 'outside-list': floatToolOutside }"
+            :aria-hidden="floatToolOutside"
+            :inert="floatToolOutside"
             :style="{ bottom: playerClearance + 'px' }"
           >
             <n-float-button-group position="relative">
-              <n-float-button v-if="hasPlaySong >= 0" width="42" @click="scrollToCurrentSong">
+              <n-float-button
+                v-if="hasPlaySong >= 0"
+                :width="compactFloatTools ? 48 : 42"
+                @click="scrollToCurrentSong"
+              >
                 <SvgIcon :size="22" name="Location" />
               </n-float-button>
-              <n-float-button :class="{ hidden: scrollTop <= 100 }" width="42" @click="scrollToTop">
+              <n-float-button
+                :class="{ hidden: scrollTop <= 100 }"
+                :width="compactFloatTools ? 48 : 42"
+                @click="scrollToTop"
+              >
                 <SvgIcon :size="22" name="Up" />
               </n-float-button>
             </n-float-button-group>
@@ -317,6 +332,33 @@ const scrollIndex = ref<number>(0);
 
 // 悬浮工具
 const floatToolShow = ref<boolean>(true);
+const compactFloatTools = useMediaQuery("(max-width: 599px)");
+const listMenuRef = ref<HTMLElement | null>(null);
+const floatToolOutside = ref(false);
+let floatBoundsFrame: number | null = null;
+const scheduleFloatToolBounds = () => {
+  if (!compactFloatTools.value || !floatToolShow.value) {
+    floatToolOutside.value = false;
+    return;
+  }
+  if (floatBoundsFrame !== null) return;
+  floatBoundsFrame = requestAnimationFrame(() => {
+    floatBoundsFrame = null;
+    if (!compactFloatTools.value || !floatToolShow.value) {
+      floatToolOutside.value = false;
+      return;
+    }
+    const list = songListRef.value?.getBoundingClientRect();
+    const tools = listMenuRef.value?.getBoundingClientRect();
+    // 固定工具仅属于其下方的列表，不覆盖尚未滚出视口的页面标题/菜单。
+    floatToolOutside.value =
+      !list || !tools || tools.top < list.top + 8 || tools.bottom > list.bottom - 8;
+  });
+};
+useEventListener(window, "scroll", scheduleFloatToolBounds, { capture: true, passive: true });
+useEventListener(window, "resize", scheduleFloatToolBounds, { passive: true });
+useResizeObserver([songListRef, listMenuRef], scheduleFloatToolBounds);
+watch([compactFloatTools, floatToolShow, playerClearance], () => nextTick(scheduleFloatToolBounds));
 
 // 右键菜单
 const songListMenuRef = ref<InstanceType<typeof SongListMenu> | null>(null);
@@ -460,7 +502,7 @@ const onScroll = (e: Event) => {
   const target = e.target as HTMLElement;
   const top = target.scrollTop;
   scrollTop.value = top;
-  scrollIndex.value = Math.floor(top / 90);
+  scrollIndex.value = listRef.value?.getDropInfoByOffset(top).index ?? Math.floor(top / 90);
 
   // 触底检测
   const scrollHeight = target.scrollHeight;
@@ -542,6 +584,7 @@ onBeforeRouteLeave(() => {
 
 onActivated(() => {
   floatToolShow.value = true;
+  nextTick(scheduleFloatToolBounds);
   if (props.height === "auto") stopCalcHeight();
   if (scrollIndex.value > 0) {
     nextTick(() => {
@@ -551,6 +594,7 @@ onActivated(() => {
 });
 
 onBeforeUnmount(() => {
+  if (floatBoundsFrame !== null) cancelAnimationFrame(floatBoundsFrame);
   stopCalcHeight();
   floatToolShow.value = false;
 });
@@ -645,6 +689,12 @@ onBeforeUnmount(() => {
       align-items: center;
       justify-content: center;
       width: 40px;
+      @media (max-width: 599px) {
+        width: max-content;
+        min-width: 40px;
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
     }
     .meta {
       width: 50px;
@@ -704,6 +754,15 @@ onBeforeUnmount(() => {
   // 空列表
   &.empty {
     margin-top: 60px;
+    :deep(.n-empty__icon) {
+      flex-shrink: 0;
+      width: auto;
+      height: auto;
+      line-height: 1;
+      svg {
+        display: block;
+      }
+    }
   }
 }
 .list-menu {
@@ -712,8 +771,14 @@ onBeforeUnmount(() => {
   bottom: 120px;
   z-index: 10;
   pointer-events: none;
+  &.outside-list {
+    visibility: hidden;
+  }
   .n-float-button {
     height: 42px;
+    @media (max-width: 599px) {
+      height: 48px;
+    }
     border: 1px solid rgba(var(--primary), 0.28);
     pointer-events: auto;
     transition: opacity 0.3s;

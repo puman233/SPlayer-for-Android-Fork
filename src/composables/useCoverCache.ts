@@ -100,12 +100,12 @@ const memoryHitRelease = (url: string): void => {
 
 /** type|url → 解析中的 Promise，仅活到 cm.get 完成，去重首次解析并发。type 隔离防串话。 */
 const inFlight = new Map<string, Promise<string | undefined>>();
-/** type|url → 后台下载 Promise，活到 fetch + cm.set 写盘完成；防止 #4 同 url 重复网络请求。 */
-const downloadInFlight = new Map<string, Promise<void>>();
+/** type|url → 图片下载 Promise；字节可用即可显示，写盘不阻塞当前封面。 */
+const downloadInFlight = new Map<string, Promise<Blob | undefined>>();
 
 /**
- * 解析 url：命中本地缓存返 blob URL；未命中返 undefined（调用方应回退到原 url，
- * 同时本 helper 会在后台异步下载并写入缓存，下次进入直接命中）。
+ * 解析 url：命中缓存或下载完成均返回 blob URL；失败返回 undefined。
+ * 调用方在等待期间可显示原 URL，缓存写盘不阻塞字节交付。
  */
 const resolveCachedCover = async (
   url: string,
@@ -144,6 +144,8 @@ const resolveCachedCover = async (
           r.data.byteOffset + r.data.byteLength,
         ) as ArrayBuffer;
         const blob = new Blob([ab]);
+        const existing = memoryHitGet(url);
+        if (existing) return existing;
         const blobUrl = URL.createObjectURL(blob);
         memoryHitPut(url, blobUrl);
         return blobUrl;
@@ -151,8 +153,15 @@ const resolveCachedCover = async (
     } catch {
       /* miss：走未命中分支 */
     }
-    // 未命中：后台异步下载并写入；不阻塞返回，让调用方先用原 url 显示
-    void downloadAndCache(url, key, type);
+    // 原 URL 已在显示；下载若先完成，直接交付字节，不再等待重复图片请求。
+    const downloaded = await downloadAndCache(url, key, type);
+    if (downloaded) {
+      const existing = memoryHitGet(url);
+      if (existing) return existing;
+      const blobUrl = URL.createObjectURL(downloaded);
+      memoryHitPut(url, blobUrl);
+      return blobUrl;
+    }
     return undefined;
   })();
 
@@ -165,10 +174,14 @@ const resolveCachedCover = async (
 };
 
 /**
- * 后台抓取并写入缓存（fire-and-forget）。同 url 期间已有下载在跑则直接复用，
+ * 抓取图片并异步写入缓存。同 url 期间已有下载在跑则直接复用，
  * 防止 resolveCachedCover 在 cm.get miss 后多次触发同一 url 的网络请求（#4 修复）。
  */
-const downloadAndCache = (url: string, key: string, type: CoverCacheType): Promise<void> => {
+const downloadAndCache = (
+  url: string,
+  key: string,
+  type: CoverCacheType,
+): Promise<Blob | undefined> => {
   const flightKey = `${type}|${url}`;
   const existing = downloadInFlight.get(flightKey);
   if (existing) return existing;
@@ -177,7 +190,7 @@ const downloadAndCache = (url: string, key: string, type: CoverCacheType): Promi
   const ctrl = new AbortController();
   // 包成 holder：正常完成时立刻 clearTimeout，避免闭包延寿 30s（ctrl/job/flightKey 占内存）
   const timer: { id?: ReturnType<typeof setTimeout> } = {};
-  const job = (async () => {
+  const job = (async (): Promise<Blob | undefined> => {
     try {
       const settingStore = useSettingStore();
       if (!settingStore.cacheEnabled) return;
@@ -186,7 +199,11 @@ const downloadAndCache = (url: string, key: string, type: CoverCacheType): Promi
       const buf = await resp.arrayBuffer();
       if (buf.byteLength === 0) return;
       const cm = useCacheManager();
-      await cm.set(type, key, new Uint8Array(buf));
+      // 缓存写盘失败不能阻止已经下载的封面显示。
+      void cm.set(type, key, new Uint8Array(buf)).catch((e) => {
+        console.warn("[useCoverCache] cache write failed:", requestFailureCategory(e));
+      });
+      return new Blob([buf], { type: resp.headers.get("content-type") || "" });
     } catch (e) {
       // 网络失败 / abort 不致命：下次访问仍可能命中或重试
       console.warn("[useCoverCache] download failed:", requestFailureCategory(e));
@@ -295,7 +312,11 @@ export const useCoverCache = (
 
   watch(
     srcRef,
-    async (url, prevUrl) => {
+    async (url, prevUrl, onCleanup) => {
+      let cancelled = false;
+      onCleanup(() => {
+        cancelled = true;
+      });
       // 切换 src：先 release 旧 url 的引用计数
       if (prevUrl && retainedUrls.includes(prevUrl)) {
         memoryHitRelease(prevUrl);
@@ -332,7 +353,7 @@ export const useCoverCache = (
       // 先用原始 url 显示，避免等待 IPC（命中时立即升级）
       resolved.value = url;
       const cached = await resolveCachedCover(url, type);
-      if (cached && srcRef.value === url) {
+      if (cached && !cancelled && srcRef.value === url) {
         resolved.value = cached;
         if (cached.startsWith("blob:")) {
           // resolveCachedCover 已 pre-retain（修复 #2），这里只需记录 url 等卸载时 release

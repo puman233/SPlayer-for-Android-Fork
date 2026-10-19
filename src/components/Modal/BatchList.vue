@@ -5,18 +5,19 @@
       :columns="columnsData"
       :data="tableData"
       :row-key="(row) => row.key"
-      max-height="60vh"
+      :max-height="compact ? '45vh' : '60vh'"
+      :scroll-x="compact ? 656 : undefined"
       virtual-scroll
       @update:checked-row-keys="tableCheck"
     />
     <n-flex class="batch-footer" justify="space-between" align="center">
       <n-flex align="center">
         <n-text :depth="3" class="count">已选择 {{ checkCount }} 首</n-text>
-        <n-popover trigger="click" placement="right">
+        <n-popover trigger="click" :placement="compact ? 'bottom' : 'right'">
           <template #trigger>
             <n-button tertiary> 高级筛选 </n-button>
           </template>
-          <n-flex :wrap="false" align="center">
+          <n-flex class="batch-range-filter" :wrap="false" align="center">
             <n-input-number
               v-model:value="startRange"
               class="range-input"
@@ -117,9 +118,11 @@ import { deleteSongs } from "@/utils/auth";
 import { NInput, NInputNumber, NButton, NText, NFlex } from "naive-ui";
 import { useLocalStore, useStatusStore } from "@/stores";
 import { openDownloadSongs } from "@/utils/modal";
+import { useMediaQuery } from "@vueuse/core";
 
 const localStore = useLocalStore();
 const statusStore = useStatusStore();
+const compact = useMediaQuery("(max-width: 599px)");
 
 interface DataType {
   key?: number;
@@ -151,6 +154,8 @@ const columnsData = computed<DataTableColumns<DataType>>(() => {
   const columns: DataTableColumns<DataType> = [
     {
       type: "selection",
+      width: compact.value ? 48 : undefined,
+      fixed: compact.value ? "left" : undefined,
       disabled(row: DataType) {
         return !row.id;
       },
@@ -158,11 +163,12 @@ const columnsData = computed<DataTableColumns<DataType>>(() => {
     {
       title: "#",
       key: "key",
-      width: 80,
+      width: compact.value ? 48 : 80,
     },
     {
       title: "标题",
       key: "name",
+      width: compact.value ? 240 : undefined,
       ellipsis: {
         tooltip: true,
       },
@@ -170,6 +176,7 @@ const columnsData = computed<DataTableColumns<DataType>>(() => {
     {
       title: "歌手",
       key: "artists",
+      width: compact.value ? 160 : undefined,
       ellipsis: {
         tooltip: true,
       },
@@ -177,6 +184,7 @@ const columnsData = computed<DataTableColumns<DataType>>(() => {
     {
       title: "专辑",
       key: "album",
+      width: compact.value ? 160 : undefined,
       ellipsis: {
         tooltip: true,
       },
@@ -325,5 +333,47 @@ const handleBatchDownloadClick = () => {
 }
 .range-input {
   width: 100px;
+}
+@media (max-width: 599px) {
+  :global(.batch-operation-modal) {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .batch-list {
+    max-height: calc(100dvh - 160px);
+    overflow: auto;
+  }
+  .batch-footer {
+    gap: 12px;
+    margin-top: 12px;
+    > .n-flex,
+    .menu {
+      width: 100%;
+    }
+    :deep(button) {
+      min-height: 48px;
+      max-width: 100%;
+      height: auto;
+      padding-block: 10px;
+      white-space: normal;
+    }
+    .menu :deep(button) {
+      width: 100%;
+    }
+  }
+  .batch-range-filter {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    width: calc(100vw - 64px);
+    .range-input {
+      width: 100%;
+      min-width: 0;
+      min-height: 48px;
+    }
+    > .n-button {
+      grid-column: 1 / -1;
+      min-height: 48px;
+    }
+  }
 }
 </style>

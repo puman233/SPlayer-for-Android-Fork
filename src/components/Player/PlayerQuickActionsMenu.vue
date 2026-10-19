@@ -11,9 +11,15 @@
   >
     <template #trigger>
       <!-- 同时挂 menu-icon 让 PlayerControl 的 :deep(.menu-icon) 风格命中 -->
-      <div :class="triggerClass" aria-label="更多快捷操作">
+      <button
+        type="button"
+        :class="triggerClass"
+        aria-label="更多快捷操作"
+        :aria-expanded="popoverShow"
+        @click.stop
+      >
         <SvgIcon name="More" :size="triggerIconSize" />
-      </div>
+      </button>
     </template>
 
     <div
@@ -79,7 +85,8 @@
             <span class="qa-item-text">在线 TTML 歌词</span>
           </div>
           <n-switch
-            v-model:value="settingStore.enableOnlineTTMLLyric"
+            :value="settingStore.enableOnlineTTMLLyric"
+            @update:value="(value: boolean) => lyricManager.setOnlineTTML(value)"
             :round="false"
             size="small"
           />
@@ -372,7 +379,7 @@
         </div>
       </div>
     </div>
-    <slot name="footer" />
+    <slot name="footer" :close="() => (popoverShow = false)" />
   </n-popover>
 </template>
 
@@ -380,10 +387,10 @@
 import { computed, inject, onBeforeUnmount, watch } from "vue";
 import { useSettingStore, useStatusStore } from "@/stores";
 import { usePlayerController } from "@/core/player/PlayerController";
+import { useLyricManager } from "@/core/player/LyricManager";
 import { isElectron, isCapacitorAndroid } from "@/utils/env";
 import { PLAYER_META_HOLD_KEY } from "@/composables/usePlayerMetaHold";
 import { useBackClosable } from "@/composables/useAndroidBack";
-
 const popoverShow = ref(false);
 useBackClosable(popoverShow);
 
@@ -401,6 +408,7 @@ const triggerClass = computed(() => ["qa-trigger", `qa-trigger--${props.variant}
 const settingStore = useSettingStore();
 const statusStore = useStatusStore();
 const player = usePlayerController();
+const lyricManager = useLyricManager();
 
 // 平板桌面歌词「设置」按钮：收到打开快捷面板指令时弹出本菜单（决策 1B）
 watch(
@@ -541,7 +549,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+.desktop-unlock {
+  min-width: 48px;
+  min-height: 48px;
+}
 .qa-trigger {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  touch-action: manipulation;
   display: flex;
   align-items: center;
   justify-content: center;

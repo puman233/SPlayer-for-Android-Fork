@@ -595,11 +595,13 @@ export const useLyricSettings = (): SettingConfig => {
             label: "启用在线 TTML 歌词",
             type: "switch",
             description:
-              "是否从 AMLL TTML DB 获取歌词（如有），TTML 歌词支持逐字、翻译、音译等功能，将会在下一首歌生效。命中后自动写入歌词缓存，重播无需再请求。",
+              "开启后立即为当前歌曲优先获取 TTML 并开启逐词渲染；没有对应数据时使用其他可用歌词。命中后自动写入歌词缓存，重播无需再请求。",
             tags: [{ text: "Beta", type: "warning" }],
             value: computed({
               get: () => settingStore.enableOnlineTTMLLyric,
-              set: (v) => (settingStore.enableOnlineTTMLLyric = v),
+              set: (v) => {
+                void lyricManager.setOnlineTTML(v);
+              },
             }),
             children: [
               {
@@ -752,6 +754,22 @@ export const useLyricSettings = (): SettingConfig => {
               get: () => statusStore.showDesktopLyric,
               set: (v) => player.setDesktopLyricShow(v),
             }),
+          },
+          {
+            key: "desktopLyricUnlock",
+            label: "解锁桌面歌词",
+            type: "button",
+            description: "锁图标在歌词左侧；左侧空间不足时隐藏，可在这里解锁",
+            show: isCapacitorAndroid,
+            buttonLabel: "解锁",
+            action: async () => {
+              try {
+                await AndroidNativePlayback.unlockFloatingLyric();
+                window.$message.success("桌面歌词已解锁");
+              } catch {
+                window.$message.error("解锁失败，请确认桌面歌词已开启后重试");
+              }
+            },
           },
           {
             key: "desktopLyricLock",

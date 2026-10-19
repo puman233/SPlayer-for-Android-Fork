@@ -14,12 +14,14 @@ const song = (id: number) => ({ id, name: `song${id}`, duration: 60000, type: "r
 
 // Exercise the full controller through its public commands. Deferred source and
 // audio adapters represent network/media execution; no controller methods are replaced.
-function fixture() {
+function fixture(native = false) {
   const listeningEvents: string[] = [];
+  const loadedSources: string[] = [];
   const pending: ReturnType<typeof deferred>[] = [];
   const notices: string[] = [];
   let loadCompletion: Promise<any> | undefined;
   let resumeCompletion: Promise<any> | undefined;
+  let metadataCompletion: Promise<any> | undefined;
   const retryDelays: ReturnType<typeof deferred>[] = [];
   const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, lastfm: { enabled: false } };
   const status: any = { currentTime: 1000, duration: 60000, playStatus: true, playLoading: false,
@@ -27,12 +29,13 @@ function fixture() {
   const music: any = { playSong: song(1), lyricSongId: 1 };
   const callbacks = new Map<string, (event?: any) => void>();
   const audio = {
-    src: "audio1", paused: false, currentTime: 1, duration: 60, engineType: "element",
+    src: "audio1", paused: false, currentTime: 1, duration: 60, engineType: native ? "android-native" : "element",
     capabilities: { supportsRate: false },
     addEventListener: (name: string, callback: (event?: any) => void) => callbacks.set(name, callback),
     stop() { audio.src = ""; audio.paused = true; },
     pause() { audio.paused = true; callbacks.get("pause")?.(); },
     async play(url: string, options: any) {
+      loadedSources.push(url);
       audio.src = url; audio.currentTime = options.seek; audio.paused = !options.autoPlay;
       callbacks.get(options.autoPlay ? "play" : "pause")?.();
       await loadCompletion;
@@ -44,9 +47,9 @@ function fixture() {
   const imports: Record<string, any> = {
     "@/utils/requestDiagnostics": { requestFailureCategory: () => "unknown" },
     "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => ({}) },
-    "@/utils/env": { isCapacitorAndroid: false, isElectron: false, isMac: false },
+    "@/utils/env": { isCapacitorAndroid: native, isElectron: false, isMac: false },
     "./AudioManager": { useAudioManager: () => audio },
-    "./SongManager": { useSongManager: () => ({ clearPrefetch: noop, getAudioSource: () => { const d = deferred(); pending.push(d); return d.promise; } }) },
+    "./SongManager": { useSongManager: () => ({ clearPrefetch: noop, prefetchCover: noop, getAudioSource: () => { const d = deferred(); pending.push(d); return d.promise; } }) },
     "./LyricManager": { useLyricManager: () => ({ handleLyric: (s: any) => { music.lyricSongId = s.id; } }) },
     "@/core/automix/AutomixManager": { useAutomixManager: () => ({ resetNextAnalysisCache: noop, resetAutomixScheduling: noop }) },
     "@/utils/format": { getPlaySongData: () => music.playSong, getPlayerInfoObj: () => ({ name: "fixture", artist: "fixture" }) },
@@ -55,7 +58,7 @@ function fixture() {
     "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
     "@/utils/time": { calculateProgress: (time: number, duration: number) => time / duration },
     "@/utils/lastfmScrobbler": { default: { resume: () => listeningEvents.push("resume"), pause: () => listeningEvents.push("pause") } },
-    "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: noop, updateState: noop } },
+    "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: () => metadataCompletion, updateState: noop } },
     "./PlayModeManager": { PlayModeManager: class {} },
     "./PlayerIpc": new Proxy({}, { get: () => noop }),
     "lodash-es": { throttle: (fn: any) => Object.assign(fn, { cancel: noop }) },
@@ -71,8 +74,9 @@ function fixture() {
     setTimeout: () => 0, clearTimeout: noop,
   });
   return { controller: module.exports.usePlayerController(), status, music, audio, pending, notices,
-    listeningEvents, emit: (name: string) => callbacks.get(name)?.(),
+    listeningEvents, loadedSources, emit: (name: string) => callbacks.get(name)?.(),
     retryDelays, emitError: () => callbacks.get("error")?.({ detail: { errorCode: 2 } }),
+    delayMetadata: (promise?: Promise<any>) => { metadataCompletion = promise; },
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
     delayResume: (promise: Promise<any>) => { resumeCompletion = promise; } };
 }
@@ -138,6 +142,19 @@ test("audio source switch cannot stop or load over a later song", async () => {
   f.pending[0].resolve({ url: "old-alternative" }); await old;
   assert.equal(f.audio.src, "audio2"); assert.equal(f.audio.paused, true);
   assert.equal(f.status.currentTime, 4000); assert.equal(f.music.lyricSongId, 2);
+});
+
+test("switching source updates the active source used by native queue synchronization", async () => {
+  const f = fixture();
+  const first = f.controller.playSong({ song: song(1), autoPlay: true });
+  f.pending[0].resolve({ url: "official-url", source: "official", quality: "standard" });
+  await first;
+  const change = f.controller.switchAudioSource("netease");
+  f.pending[1].resolve({ url: "third-party-url", source: "netease", quality: "lossless" });
+  await change;
+  assert.equal(f.audio.src, "third-party-url");
+  assert.equal(f.controller.currentAudioSource?.url, "third-party-url");
+  assert.equal(f.controller.currentAudioSource?.source, "netease");
 });
 
 test("stale failures do not clear a current loading state or display a failure notice", async () => {
@@ -211,4 +228,55 @@ test("a late resume AbortError cannot undo a newer pause of the same song", asyn
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.equal(f.pending.length, 0); assert.equal(f.status.playStatus, false); assert.equal(f.audio.paused, true);
   await job;
+});
+
+
+test("rapid song selections load only the final target when older source responses finish late", async () => {
+  const f = fixture();
+  const first = f.controller.playSong({ song: song(2) });
+  const middle = f.controller.playSong({ song: song(3) });
+  const final = f.controller.playSong({ song: song(4) });
+  f.pending[2].resolve({ url: "final-audio4" });
+  await final;
+  f.pending[0].resolve({ url: "stale-audio2" });
+  f.pending[1].resolve({ url: "stale-audio3" });
+  await Promise.all([first, middle]);
+  assert.deepEqual(f.loadedSources, ["final-audio4"]);
+  assert.equal(f.audio.src, "final-audio4");
+  assert.equal(f.music.playSong.id, 4);
+  assert.equal(f.music.lyricSongId, 4);
+  assert.equal(f.status.playLoading, false);
+});
+
+
+test("native audio waits for matching metadata and preserves pause and seek during that wait", async () => {
+  const f = fixture(true), metadata = deferred();
+  f.delayMetadata(metadata.promise);
+  const job = f.controller.loadAndPlay("prepared-audio", true, 1000);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(f.loadedSources, []);
+  await f.controller.pause();
+  f.controller.setSeek(9000);
+  metadata.resolve(undefined);
+  await job;
+  assert.deepEqual(f.loadedSources, ["prepared-audio"]);
+  assert.equal(f.audio.paused, true);
+  assert.equal(f.audio.currentTime, 9);
+});
+
+test("an obsolete metadata completion cannot load an older selected song", async () => {
+  const f = fixture(true), metadata = deferred();
+  f.delayMetadata(metadata.promise);
+  const first = f.controller.playSong({ song: song(2) });
+  f.pending[0].resolve({ url: "old-native-audio" });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(f.loadedSources, []);
+  f.delayMetadata();
+  const final = f.controller.playSong({ song: song(3) });
+  f.pending[1].resolve({ url: "final-native-audio" });
+  await final;
+  metadata.resolve(undefined);
+  await first;
+  assert.deepEqual(f.loadedSources, ["final-native-audio"]);
+  assert.equal(f.music.playSong.id, 3);
 });

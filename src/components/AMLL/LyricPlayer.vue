@@ -11,6 +11,7 @@ import {
   type spring,
 } from "@applemusic-like-lyrics/core";
 import type { PropType, Ref, ShallowRef } from "vue";
+import { isCapacitorAndroid } from "@/utils/env";
 import "@applemusic-like-lyrics/core/style.css";
 
 /**
@@ -183,7 +184,8 @@ export interface LyricPlayerRef {
 // 模板引用
 const wrapperRef = useTemplateRef<HTMLDivElement>("wrapper-ref");
 // 歌词播放实例
-const playerRef = ref<CoreLyricPlayer>();
+// Core自行维护逐帧状态，Vue只追踪实例替换，避免深度代理整首逐词动画。
+const playerRef = shallowRef<CoreLyricPlayer>();
 
 // 事件处理器
 let suppressNextLineClick = false;
@@ -224,6 +226,76 @@ type InternalLyricPlayer = CoreLyricPlayer & {
 };
 
 const getInternalPlayer = () => playerRef.value as InternalLyricPlayer | undefined;
+// 隔离当前依赖版本的 protected/private 滚动字段，避免与公共类类型相交。
+const getScrollInternals = () =>
+  playerRef.value as unknown as
+    | {
+        scrollState?: { isScrolled: boolean; isUserScrolling: boolean; scrollOffset: number };
+        scrolledHandler?: ReturnType<typeof setTimeout>;
+      }
+    | undefined;
+
+// AMLL 的超时仅清偏移，不触发布局；由包装层统一等待触摸和引擎惯性结束。
+let manualBrowsing = false;
+const manualMotion = ref(false);
+let manualTouchHeld = false;
+let lastManualActivity = 0;
+const markManualBrowse = () => {
+  manualMotion.value = true;
+  manualBrowsing = true;
+  lastManualActivity = performance.now();
+};
+const startManualBrowse = () => {
+  manualTouchHeld = true;
+  markManualBrowse();
+};
+const endManualBrowse = (event: TouchEvent) => {
+  manualTouchHeld = event.touches.length > 0;
+  markManualBrowse();
+};
+const cancelManualBrowse = () => {
+  manualTouchHeld = false;
+  const state = getScrollInternals()?.scrollState;
+  if (state) state.isUserScrolling = false;
+  markManualBrowse();
+};
+const updateManualBrowse = (now: number) => {
+  if (!manualBrowsing) return;
+  const player = getInternalPlayer();
+  const scrolling = getScrollInternals();
+  const state = scrolling?.scrollState;
+  if (!player || !state) return;
+  // 不让引擎自己的五秒超时在长按/长惯性中途清零偏移。
+  if (scrolling?.scrolledHandler !== undefined) clearTimeout(scrolling.scrolledHandler);
+  if (manualTouchHeld || state.isUserScrolling) {
+    lastManualActivity = now;
+    return;
+  }
+  if (now - lastManualActivity < 3000) return;
+  manualBrowsing = false;
+  manualMotion.value = false;
+  player.resetScroll?.();
+  // 停止浏览后恢复默认锚点；小幅偏移也必须重排，暂停时不会有播放事件代为更新。
+  void nextTick().then(() => {
+    // 先撤销手动模式的CSS，再让Core启动自动回位动画；新手势不得被旧恢复打断。
+    if (!manualBrowsing && wrapperRef.value?.isConnected && getInternalPlayer() === player) {
+      void player.calcLayout?.();
+    }
+  });
+};
+
+let resizeLayoutFrame: number | null = null;
+useResizeObserver(wrapperRef, () => {
+  if (resizeLayoutFrame !== null) cancelAnimationFrame(resizeLayoutFrame);
+  // 依赖的 ResizeObserver 会先更新 size；下一帧补齐默认锚点重排。
+  resizeLayoutFrame = requestAnimationFrame(() => {
+    resizeLayoutFrame = null;
+    if (!manualBrowsing) void getInternalPlayer()?.calcLayout?.();
+  });
+});
+onBeforeUnmount(() => {
+  if (resizeLayoutFrame !== null) cancelAnimationFrame(resizeLayoutFrame);
+});
 
 const LONG_PRESS_DURATION = 2500;
 const LONG_PRESS_MOVE_LIMIT = 24;
@@ -240,18 +312,27 @@ const findLineIndex = (target: EventTarget | null, x: number, y: number) => {
   const player = getInternalPlayer();
   if (!player || !Array.isArray(player.currentLyricGroups)) return -1;
   const targetNode = target instanceof Node ? target : null;
+  const indexForLine = (line: InternalLyricLineObject) => {
+    const mappedIndex = player.lyricLinesIndexes?.get(line);
+    if (mappedIndex !== undefined) return mappedIndex;
+    const sourceLine = line.getLine?.();
+    return sourceLine ? (player.processedLines?.indexOf(sourceLine) ?? -1) : -1;
+  };
+  // 真实触摸通常已命中歌词节点；先查包含关系，避免手势开始时强制重排。
+  if (targetNode) {
+    for (const group of player.currentLyricGroups) {
+      for (const line of [group.mainLine, group.bgLine]) {
+        if (line?.getElement?.()?.contains(targetNode)) return indexForLine(line);
+      }
+    }
+  }
   for (const group of player.currentLyricGroups) {
     for (const line of [group.mainLine, group.bgLine]) {
       const element = line?.getElement?.();
       if (!line || !element) continue;
       const rect = element.getBoundingClientRect();
       const containsPoint = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
-      if (!(targetNode && element.contains(targetNode)) && !containsPoint) continue;
-
-      const mappedIndex = player.lyricLinesIndexes?.get(line);
-      if (mappedIndex !== undefined) return mappedIndex;
-      const sourceLine = line.getLine?.();
-      return sourceLine ? (player.processedLines?.indexOf(sourceLine) ?? -1) : -1;
+      if (containsPoint) return indexForLine(line);
     }
   }
   return -1;
@@ -371,6 +452,7 @@ onMounted(() => {
 onUnmounted(() => {
   const player = playerRef.value;
   if (player) {
+    player.resetScroll();
     player.removeEventListener("line-click", lineClickHandler);
     player.removeEventListener("line-contextmenu", lineContextMenuHandler);
     player.dispose();
@@ -380,6 +462,21 @@ onUnmounted(() => {
 // 限制单帧最大时间步长，避免后台恢复后动画突跳
 // 设为 120ms 兼顾低端机偶发卡顿（≈30fps 下 33ms/帧），同时防止可见性切换前累计的大 delta 一次注入
 const MAX_FRAME_DELTA = 120;
+
+const preserveAndroidBlurChoice = () => {
+  const element = playerRef.value?.getElement();
+  if (!isCapacitorAndroid || !props.enableBlur || !element?.matches(":hover")) return;
+  // Core 的 hover !important 会盖掉配置；沿用引擎自身的逐行结果，不重新计算模糊。
+  for (const line of element.children) {
+    if (
+      line instanceof HTMLElement &&
+      line.style.filter.startsWith("blur(") &&
+      line.style.getPropertyPriority("filter") !== "important"
+    ) {
+      line.style.setProperty("filter", line.style.filter, "important");
+    }
+  }
+};
 
 watchEffect((onCleanup) => {
   if (!props.disabled) {
@@ -400,6 +497,8 @@ watchEffect((onCleanup) => {
       const rawDelta = time - lastTime;
       const delta = rawDelta > MAX_FRAME_DELTA ? MAX_FRAME_DELTA : rawDelta;
       playerRef.value?.update(delta);
+      preserveAndroidBlurChoice();
+      updateManualBrowse(time);
       lastTime = time;
       requestAnimationFrame(onFrame);
     };
@@ -440,8 +539,9 @@ watchEffect(() => {
 
 // 弹簧动画
 watchEffect(() => {
-  if (props.enableSpring !== undefined) playerRef.value?.setEnableSpring(props.enableSpring);
-  else playerRef.value?.setEnableSpring(true);
+  // Android手动滚动已由Core force路径直接定位；回位前恢复原位置弹簧。
+  const enabled = (props.enableSpring ?? true) && !(isCapacitorAndroid && manualMotion.value);
+  playerRef.value?.setEnableSpring(enabled);
 });
 
 // 模糊效果
@@ -553,10 +653,16 @@ defineExpose<LyricPlayerRef>({
   <div
     ref="wrapper-ref"
     class="lyric-player-wrapper"
+    :class="{ 'manual-motion': manualMotion }"
     @touchstart.capture="startTouchLongPress"
+    @touchstart.passive="startManualBrowse"
     @touchmove.capture="moveTouchLongPress"
+    @touchmove.passive="markManualBrowse"
     @touchend.capture="cancelLongPress"
+    @touchend.passive="endManualBrowse"
     @touchcancel.capture="cancelLongPress"
+    @touchcancel.passive="cancelManualBrowse"
+    @wheel.passive="markManualBrowse"
     @pointerdown.capture="startPointerLongPress"
     @pointermove.capture="movePointerLongPress"
     @pointerup.capture="cancelLongPress"
@@ -575,5 +681,11 @@ defineExpose<LyricPlayerRef>({
   touch-action: pan-y;
   user-select: none;
   -webkit-touch-callout: none;
+}
+.manual-motion :deep(.amll-lyric-player > div),
+.manual-motion :deep(.amll-lyric-player [class*="lyricLine"]) {
+  /* 手指位置直接驱动歌词；仅移除位置插值，自动跟随仍使用Core原动画。 */
+  transition-property: filter, opacity, background-color, box-shadow !important;
+  transition-delay: 0s !important;
 }
 </style>

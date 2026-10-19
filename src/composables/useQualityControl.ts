@@ -102,6 +102,7 @@ export const useQualityControl = () => {
     if (!songId) return;
     try {
       const res = await songQuality(songId);
+      if (musicStore.playSong.id !== songId) return;
       if (res.data) {
         const levels = getSongLevelsData(songLevelData, res.data);
 
@@ -119,7 +120,11 @@ export const useQualityControl = () => {
         window.$message.warning("获取音质信息失败");
       }
     } catch (error) {
-      console.error(`获取音质详情失败${isPreload ? " (预加载)" : ""}:`, requestFailureCategory(error));
+      if (musicStore.playSong.id !== songId) return;
+      console.error(
+        `获取音质详情失败${isPreload ? " (预加载)" : ""}:`,
+        requestFailureCategory(error),
+      );
       statusStore.availableQualities = [];
       if (!isPreload) {
         window.$message.error("获取音质信息失败");

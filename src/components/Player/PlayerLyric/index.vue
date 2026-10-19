@@ -1,8 +1,11 @@
 <template>
   <div class="player-lyric">
     <!-- 歌词内容 -->
+    <div v-if="!statusStore.lyricLoading && !musicStore.isHasLrc" class="lyric-empty" role="status">
+      暂无歌词
+    </div>
     <AMLyric
-      v-if="settingStore.useAMLyrics"
+      v-else-if="settingStore.useAMLyrics"
       :currentTime="playSeek"
       @lyric-line-long-press="openCopyLyrics"
     />
@@ -217,6 +220,16 @@ onBeforeUnmount(() => {
 
 <style lang="scss" scoped>
 .player-lyric {
+  .lyric-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 24px;
+    font-size: 18px;
+    color: rgb(var(--main-cover-color));
+    text-align: center;
+  }
   position: relative;
   width: 100%;
   height: 100%;

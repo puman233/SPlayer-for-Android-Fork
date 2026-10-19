@@ -21,7 +21,7 @@
       <SongList
         :key="chooseFolder"
         :data="folderSongs"
-        :loading="folderSongs?.length ? false : true"
+        :loading="loading"
         :hidden-cover="!settingStore.showLocalCover"
         class="song-list"
         @removeSong="handleRemoveSong"

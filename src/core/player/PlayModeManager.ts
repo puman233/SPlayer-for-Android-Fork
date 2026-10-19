@@ -26,6 +26,8 @@ export class PlayModeManager {
    * 存储当前加载消息的实例
    */
   private loadingMessage: MessageReactive | null = null;
+  // A failed heart transition must not trap the cycle in repeated login/network requests.
+  private heartbeatFailed = false;
 
   /**
    * 清除当前的加载消息
@@ -76,11 +78,17 @@ export class PlayModeManager {
 
   /**
    * 计算下一个随机模式
-   * 注意：心跳模式只能通过菜单开启，不能通过点击随机按钮进入
+   * 随机关闭 → 随机开启 → 心动模式 → 关闭。
    */
   public calculateNextShuffleMode(currentMode: ShuffleModeType): ShuffleModeType {
     if (currentMode === "off") return "on";
-    if (currentMode === "on") return "off";
+    if (currentMode === "on") {
+      if (this.heartbeatFailed) {
+        this.heartbeatFailed = false;
+        return "off";
+      }
+      return "heartbeat";
+    }
     // 如果是心跳模式，点击随机按钮时退出心跳模式
     if (currentMode === "heartbeat") return "off";
     return "off";
@@ -137,9 +145,10 @@ export class PlayModeManager {
       return;
     }
 
-    this.loadingMessage = window.$message.loading("心动模式开启中...", {
+    const loadingMessage = window.$message.loading("心动模式开启中...", {
       duration: 0,
     });
+    this.loadingMessage = loadingMessage;
 
     try {
       let pid = Number(musicStore.playPlaylistId);
@@ -151,7 +160,12 @@ export class PlayModeManager {
       let currentSongId: number;
       const rawId = musicStore.playSong.id;
       // 字符串ID，尝试解析为数字
-      if (typeof rawId === "string") {
+      if (musicStore.playSong.path || musicStore.playSong.type !== "song") {
+        const liked = await dataStore.getUserLikePlaylist();
+        const seed = liked?.data?.find((song) => typeof song.id === "number" && song.id > 0);
+        if (!seed) throw new Error("请先收藏一首在线歌曲后再开启心动模式");
+        currentSongId = seed.id as number;
+      } else if (typeof rawId === "string") {
         const parsed = parseInt(rawId, 10);
         if (Number.isNaN(parsed) || parsed <= 0) {
           // 无法解析为有效数字ID，使用喜欢列表中的随机歌曲ID
@@ -186,7 +200,10 @@ export class PlayModeManager {
       }
       // 备份当前播放列表
       const currentList = [...dataStore.playList];
-      await dataStore.setOriginalPlayList(currentList);
+      // 从随机进入心动时保留随机之前的顺序，关闭后仍能恢复。
+      const original = previousMode === "on" ? await dataStore.getOriginalPlayList() : null;
+      if (signal.aborted) return;
+      if (!original?.length) await dataStore.setOriginalPlayList(currentList);
       if (signal.aborted) return;
       // 构建新的心动播放列表
       const currentSong = musicStore.playSong;
@@ -199,10 +216,10 @@ export class PlayModeManager {
       statusStore.playIndex = 0;
       window.$message.success("心动模式已开启");
     } catch (e) {
-      statusStore.shuffleMode = previousMode;
+      if (!signal.aborted) statusStore.shuffleMode = previousMode;
       throw e;
     } finally {
-      this.clearLoadingMessage();
+      if (this.loadingMessage === loadingMessage) this.clearLoadingMessage();
     }
   }
 
@@ -238,6 +255,7 @@ export class PlayModeManager {
   public async toggleShuffle(mode: ShuffleModeType) {
     const statusStore = useStatusStore();
     const signal = this.resetCurrentTask();
+    this.heartbeatFailed = false;
 
     const nextMode = mode;
     const currentMode = statusStore.shuffleMode;
@@ -276,6 +294,14 @@ export class PlayModeManager {
 
         const errorMsg = (e as Error).message || "模式切换出错";
         window.$message.error(errorMsg);
+      } finally {
+        if (
+          !signal.aborted &&
+          nextMode === "heartbeat" &&
+          previousMode === "on" &&
+          statusStore.shuffleMode === "on"
+        )
+          this.heartbeatFailed = true;
       }
     }, 10);
   }

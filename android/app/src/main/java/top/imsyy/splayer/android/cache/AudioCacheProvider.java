@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
  *
  * <ul>
  *   <li>使用 {@link NoOpCacheEvictor}：把驱逐权交给 {@link CacheStorage} 全局 LRU，避免双重逻辑。
- *   <li>cacheKey：从 URL 路径尾段提取音频文件名作为指纹，去掉 expire 签名等动态参数； 同一首歌不同时间签出的 URL 仍可命中同一份缓存。
+ *   <li>cacheKey：通用URL保留完整资源身份；可信网易CDN内容哈希可跨签名复用。
  *   <li>{@link DataSource.Factory} 链：HTTP upstream → CacheDataSource。
  * </ul>
  */
@@ -46,11 +46,10 @@ import java.util.regex.Pattern;
 public final class AudioCacheProvider {
 
   /**
-   * 音频文件名匹配：路径末段是 “xxxxx.{ext}” 形式时提取作为 cacheKey 主体。<br>
-   * 不仅适用 NCM；任何 CDN 返回“动态路径 + 音频后缀”均可命中。使用 (?i) 允许大写后缀。
+   * 仅在可信网易CDN识别路径末段的32位内容哈希；不把普通同名文件当成同一音频。
    */
   private static final Pattern AUDIO_FILE_PATTERN =
-      Pattern.compile("/([A-Za-z0-9_-]+\\.(?i:mp3|flac|m4a|ogg|wav|aac|opus))");
+      Pattern.compile("/([a-fA-F0-9]{32}\\.(?i:mp3|flac|m4a|ogg|wav|aac|opus))$");
 
   /**
    * 低磁盘阈值：设备剩余不足 1GB 时禁止音频缓存<strong>写入</strong>（prefetch + 播放期 sink）。<br>
@@ -179,7 +178,7 @@ public final class AudioCacheProvider {
           new CacheDataSource.Factory()
               .setCache(cache)
               .setUpstreamDataSourceFactory(httpFactory)
-              .setCacheKeyFactory(spec -> resolveCacheKey(spec.uri))
+              .setCacheKeyFactory(spec -> spec.key != null ? spec.key : resolveCacheKey(spec.uri))
               .setFlags(
                   blockOnCache
                       ? CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR
@@ -301,7 +300,7 @@ public final class AudioCacheProvider {
     }
   }
 
-  /** 已知的临时签名 / 过期参数：仅这些会被剔除以保证同曲目缓存命中。其余 query 参与 key 防碰撞。 */
+  /** 仅用于可信网易CDN内容哈希资源的临时参数；通用地址不剔除任何业务/认证查询值。 */
   private static final java.util.Set<String> EPHEMERAL_QUERY_KEYS =
       new java.util.HashSet<>(
           java.util.Arrays.asList(
@@ -318,10 +317,8 @@ public final class AudioCacheProvider {
   /**
    * 从 URL 提取稳定 cacheKey。
    *
-   * <p>API命中 {@link #NCM_FILE_PATTERN} 时走 {@code ncm:<id>}，最稳定。
-   *
-   * <p>其他场景（Subsonic / 自部署流媒体 / 签名 URL）兜底用 {@code host + path + 排序后非临时 query} 的
-   * md5：仅剔除已知临时签名参数，保留区分歌曲的业务参数（如 ?id=xxx）防止 A/B 共用 key 播错歌。
+   * <p>普通URL不可凭文件名或token猜测资源身份。仅可信网易CDN的内容哈希文件名可跨签名复用。
+   * v2不复用无法确定原始URL归属的旧键，保留旧文件，首次读取可能重新获取。
    */
   @NonNull
   public static String resolveCacheKey(@NonNull Uri uri) {
@@ -332,16 +329,14 @@ public final class AudioCacheProvider {
     }
     String path = uri.getPath();
     if (path == null) path = "";
-    Matcher m = AUDIO_FILE_PATTERN.matcher(path);
-    if (m.find()) {
-      // 前缀 aud: 表示“从 URL 提取的音频文件名”；早期版本使用 ncm:，重命名后一次性 cache miss，可接受。
-      return "aud:" + m.group(1).toLowerCase(java.util.Locale.ROOT);
-    }
-    // 通用回退：host + path + 排序后的稳定 query（剔除签名/过期参数）
-    StringBuilder sb = new StringBuilder();
     String host = uri.getHost();
-    if (host != null) sb.append(host);
-    sb.append(path);
+    host = host == null ? "" : host.toLowerCase(java.util.Locale.ROOT);
+    Matcher m = AUDIO_FILE_PATTERN.matcher(path);
+    if (!(host.equals("music.126.net") || host.endsWith(".music.126.net")) || !m.find()) {
+      return CacheStorage.keyFromUrl("audio-url-v2:" + uri.buildUpon().fragment(null).build());
+    }
+    StringBuilder sb = new StringBuilder("audio-netease-v2:")
+        .append(m.group(1).toLowerCase(java.util.Locale.ROOT));
     java.util.Set<String> qnames;
     try {
       qnames = uri.getQueryParameterNames();
@@ -351,15 +346,14 @@ public final class AudioCacheProvider {
     if (!qnames.isEmpty()) {
       java.util.List<String> sortedKeys = new java.util.ArrayList<>(qnames);
       java.util.Collections.sort(sortedKeys);
-      sb.append('?');
       boolean first = true;
       for (String qk : sortedKeys) {
         if (EPHEMERAL_QUERY_KEYS.contains(qk.toLowerCase(java.util.Locale.ROOT))) continue;
-        String qv = uri.getQueryParameter(qk);
-        if (qv == null) qv = "";
-        if (!first) sb.append('&');
-        sb.append(qk).append('=').append(qv);
-        first = false;
+        for (String qv : uri.getQueryParameters(qk)) {
+          sb.append(first ? '?' : '&');
+          sb.append(Uri.encode(qk)).append('=').append(Uri.encode(qv));
+          first = false;
+        }
       }
     }
     return CacheStorage.keyFromUrl(sb.toString());

@@ -29,7 +29,7 @@
       </n-card>
       <n-card class="set-item" :class="{ 'input-mode': isInputMode }">
         <div class="label">
-          <div style="display: flex; justify-content: space-between; align-items: center">
+          <div class="label-header">
             <div class="info" style="display: flex; flex-direction: column">
               <n-text class="name">全局字体</n-text>
               <n-text class="tip" :depth="3">应用到软件内所有非特定区域的字体</n-text>
@@ -525,6 +525,33 @@ onUnmounted(() => {
       .n-button {
         margin-left: auto;
       }
+    }
+  }
+}
+@media (max-width: 599px) {
+  .font-manager .set-item {
+    .label {
+      width: 100%;
+      min-width: 0;
+      padding-right: 0;
+      .label-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        .info {
+          flex: 1 1 100%;
+          min-width: 0;
+        }
+      }
+    }
+    .set {
+      width: 100%;
+      min-width: 0;
+      &:not(.n-switch) {
+        min-height: 48px;
+      }
+    }
+    .n-button {
+      min-height: 48px;
     }
   }
 }

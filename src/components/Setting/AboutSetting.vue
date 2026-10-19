@@ -8,7 +8,7 @@
           <n-text class="logo-name">SPlayer</n-text>
           <n-tag v-if="statusStore.isDeveloperMode" size="small" type="warning" round> DEV </n-tag>
           <n-tag size="small" type="primary" round @click="openDeveloperMode">
-            {{ packageJson.version }}
+            {{ currentVersion }}
           </n-tag>
         </n-flex>
         <n-flex>
@@ -26,6 +26,19 @@
           </n-button>
         </n-flex>
       </n-card>
+      <n-card v-if="!isElectron" class="set-item beta-channel">
+        <div class="beta-description">
+          <n-text strong>检查 Beta 版本</n-text>
+          <n-text :depth="3"
+            >默认仅检查 Stable 正式版。开启后同时检查 Beta / Pre-release，测试版可能不稳定。</n-text
+          >
+        </div>
+        <n-switch
+          v-model:value="settingStore.checkBetaUpdates"
+          :disabled="statusStore.updateCheck"
+          aria-label="检查 Beta 版本"
+        />
+      </n-card>
       <n-collapse-transition :show="!!updateData">
         <n-card class="set-item update-data">
           <n-collapse arrow-placement="right">
@@ -36,8 +49,12 @@
                   <n-tag :bordered="false" size="small" type="primary" class="version-tag">
                     {{ newVersion?.version || "v0.0.0" }}
                   </n-tag>
-                  <n-tag v-if="newVersion?.prerelease" class="test" size="small" type="warning">
-                    测试版
+                  <n-tag
+                    class="test"
+                    size="small"
+                    :type="newVersion?.prerelease ? 'warning' : 'success'"
+                  >
+                    {{ newVersion?.prerelease ? "Beta / Pre-release" : "Stable 正式版" }}
                   </n-tag>
                   <n-text :depth="3" class="time">{{ newVersion?.time }}</n-text>
                 </div>
@@ -153,9 +170,10 @@
 import type { UpdateLogType } from "@/types/main";
 import { getUpdateLog, openLink } from "@/utils/helper";
 import { debounce } from "lodash-es";
-import { useStatusStore } from "@/stores";
+import { useSettingStore, useStatusStore } from "@/stores";
 import { isElectron } from "@/utils/env";
 import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import packageJson from "@/../package.json";
 import { ANDROID_REPOSITORY_URL } from "@/config/repository";
 import { getUpdateCheckErrorMessage } from "@/core/update/errors";
@@ -165,6 +183,18 @@ import { openAndroidUpdateApp } from "@/utils/modal";
 import "github-markdown-css/github-markdown.css";
 
 const statusStore = useStatusStore();
+const settingStore = useSettingStore();
+const currentVersion = ref(packageJson.version);
+let disposed = false;
+const readCurrentVersion = async () => {
+  if (Capacitor.getPlatform() === "android") {
+    const info = await App.getInfo();
+    currentVersion.value = info.id.includes(".debug")
+      ? info.version.replace(/-debug$/, "")
+      : info.version;
+  }
+  return currentVersion.value;
+};
 
 // 打开日志文件
 const handleOpenLog = () => {
@@ -274,10 +304,12 @@ const checkUpdate = debounce(
     if (statusStore.updateCheck) return;
     statusStore.updateCheck = true;
     try {
-      const logs = await getUpdateLog(true);
+      const includeBeta = settingStore.checkBetaUpdates;
+      const current = await readCurrentVersion();
+      const logs = await getUpdateLog(true, includeBeta);
+      if (disposed) return;
       const latest = logs?.[0];
       const latestVer = latest?.version || "";
-      const current = packageJson.version;
       if (!latest) {
         window.$message.warning("仓库暂未发布可用版本");
         return;
@@ -285,7 +317,7 @@ const checkUpdate = debounce(
       if (latestVer && isVersionNewer(latestVer, current)) {
         window.$dialog.info({
           title: "发现新版本",
-          content: `当前版本 v${current}\n最新版本 ${latestVer}${latest?.time ? "\n" + latest.time : ""}`,
+          content: `当前版本 v${current}\n最新版本 ${latestVer}（${latest.prerelease ? "Beta / Pre-release" : "Stable 正式版"}）${latest?.time ? "\n" + latest.time : ""}`,
           positiveText: "查看下载",
           negativeText: "稍后再说",
           onPositiveClick: () => {
@@ -296,6 +328,7 @@ const checkUpdate = debounce(
         window.$message.success("已是最新版本");
       }
     } catch (error) {
+      if (disposed) return;
       console.error("检查 Android 更新失败", error);
       window.$message.error(getUpdateCheckErrorMessage(error));
     } finally {
@@ -317,14 +350,25 @@ const jumpLink = (e: MouseEvent) => {
 };
 
 // 获取更新日志
+let updateDataRequest = 0;
 const getUpdateData = async () => {
+  const request = ++updateDataRequest;
+  updateData.value = null;
   try {
-    updateData.value = await getUpdateLog();
+    const logs = await getUpdateLog(false, settingStore.checkBetaUpdates);
+    if (request === updateDataRequest) updateData.value = logs;
   } catch (error) {
     // 关于页初始化不弹出阻塞提示；用户主动检查时再给出可操作错误。
     console.warn("获取 Android 更新日志失败", error);
   }
 };
+
+watch(() => settingStore.checkBetaUpdates, getUpdateData);
+onBeforeUnmount(() => {
+  disposed = true;
+  updateDataRequest++;
+  checkUpdate.cancel();
+});
 
 // 打开开发者模式
 const openDeveloperMode = useThrottleFn(() => {
@@ -345,11 +389,33 @@ const openDeveloperMode = useThrottleFn(() => {
 }, 100);
 
 onMounted(() => {
+  void readCurrentVersion().catch((error) => console.warn("读取应用版本失败", error));
   getUpdateData();
 });
 </script>
 
 <style lang="scss" scoped>
+.beta-channel {
+  :deep(.n-card-content) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 12px;
+  }
+  .beta-description {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .n-switch {
+    flex-shrink: 0;
+    align-self: center;
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
 .about {
   .logo-name {
     font-size: 16px;

@@ -2,8 +2,16 @@
   <div class="home-online">
     <div v-if="isLogin()" class="main-rec">
       <div class="main-rec-grid">
-        <n-flex :size="20" class="rec-list" justify="space-between" vertical>
+        <n-flex :size="compactHome ? 8 : 20" class="rec-list" justify="space-between" vertical>
+          <HomeRecommendationCard
+            v-if="compactHome"
+            :data="musicStore.dailySongsData.list"
+            title="每日推荐"
+            :hidden-cover="settingStore.hiddenCovers.home"
+            @click="router.push({ name: 'daily-songs' })"
+          />
           <SongListCard
+            v-else
             :data="musicStore.dailySongsData.list"
             :title="dailySongsTitle"
             :height="90"
@@ -12,7 +20,15 @@
             :hiddenCover="settingStore.hiddenCovers.home"
             @click="router.push({ name: 'daily-songs' })"
           />
+          <HomeRecommendationCard
+            v-if="compactHome"
+            :data="dataStore.likeSongsList.data"
+            title="我喜欢的音乐"
+            :hidden-cover="settingStore.hiddenCovers.home"
+            @click="router.push({ name: 'like-songs' })"
+          />
           <SongListCard
+            v-else
             :data="dataStore.likeSongsList.data"
             :height="90"
             title="我喜欢的音乐"
@@ -69,6 +85,8 @@ import { formatArtistsList, formatCoverList } from "@/utils/format";
 import { sleep } from "@/utils/helper";
 import { isLogin } from "@/utils/auth";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
+import HomeRecommendationCard from "@/components/Card/HomeRecommendationCard.vue";
+import { useMediaQuery } from "@vueuse/core";
 
 interface RecItemTypeBase {
   name: string;
@@ -98,6 +116,7 @@ const router = useRouter();
 const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
+const compactHome = useMediaQuery("(max-width: 599px)");
 const recommendationScope = computed(() =>
   !isLogin()
     ? "guest"
@@ -200,7 +219,9 @@ watch(recommendationScope, () => {
   recData.value.playlist.list = [];
   void loadPlaylistRecommendations(true);
 });
-onBeforeUnmount(() => { playlistRequestId++; });
+onBeforeUnmount(() => {
+  playlistRequestId++;
+});
 
 const getAllRecData = async () => {
   try {
@@ -301,6 +322,21 @@ onMounted(() => {
       display: grid !important;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
+    }
+  }
+  @media (max-width: 599px) {
+    .main-rec-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      min-width: 0;
+    }
+    .rec-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      min-width: 0;
+      align-items: stretch;
+    }
+    .date {
+      flex-wrap: wrap;
     }
   }
 }

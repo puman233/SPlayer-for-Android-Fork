@@ -40,6 +40,8 @@ const props = withDefaults(
     src: string | undefined;
     /** 默认图片 */
     defaultSrc?: string;
+    /** 首选图片失败后尝试的原封面；失败后仍回退默认图片。 */
+    fallbackSrc?: string;
     /** 图片描述 */
     alt?: string;
     /** 图片大小 */
@@ -139,7 +141,13 @@ const imageError = (e: Event) => {
   if (currentToken.value !== loadToken.value) return;
   isLoaded.value = false;
   // 避免默认图也反复触发导致死循环
-  if (imgSrc.value !== props.defaultSrc) {
+  if (
+    props.fallbackSrc &&
+    imgSrc.value !== props.fallbackSrc &&
+    imgSrc.value !== props.defaultSrc
+  ) {
+    imgSrc.value = props.fallbackSrc;
+  } else if (imgSrc.value !== props.defaultSrc) {
     imgSrc.value = props.defaultSrc;
   }
   emit("error", e);
@@ -175,6 +183,8 @@ watch(
 watch(
   () => cachedSrc.value,
   (val) => {
+    // 原图已经可见时无需为同一封面的缓存副本重新淡入。
+    if (isLoaded.value && imgSrc.value === srcRef.value && val?.startsWith("blob:")) return;
     isLoaded.value = false;
     // 不同值时才进行赋值，减少重绘
     if (props.observeVisibility) {

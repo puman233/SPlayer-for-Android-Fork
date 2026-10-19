@@ -38,102 +38,109 @@
           ref="lyricScrollContainer"
           class="lyric-scroll-container"
           tabindex="-1"
-          @wheel="handleUserScroll"
+          @wheel.passive="handleUserScroll"
+          @touchstart.passive="startUserTouch"
+          @touchend.passive="endUserTouch"
+          @touchcancel.passive="endUserTouch"
+          @scroll.passive="handleScrollActivity"
+          @keydown="handleScrollKey"
         >
-          <!-- 顶部占位 -->
-          <div id="lrc-placeholder" class="placeholder" />
-          <!-- 预处理后的歌词列表 -->
-          <template v-for="(item, index) in processedLyrics" :key="`item-${index}`">
-            <!-- 倒计时行 -->
-            <div
-              v-if="item.type === 'countdown'"
-              class="countdown-line"
-              :style="{
-                animationPlayState: statusStore.playStatus ? 'running' : 'paused',
-              }"
-            >
-              <Transition name="fade" mode="out-in">
-                <div v-if="isCountdownVisible(item)" class="count-down">
-                  <div
-                    v-for="i in 3"
-                    :key="i"
-                    :style="{ opacity: getPointOpacity(item, i - 1) }"
-                    class="point"
-                  />
-                </div>
-              </Transition>
-            </div>
-            <!-- 歌词行 -->
-            <div
-              v-else
-              :id="`lrc-${index}`"
-              :class="getLyricLineClass(item, index)"
-              :style="getLyricLineStyle(item, index)"
-              @touchstart="startTouchLongPress($event, item.originalIndex)"
-              @touchmove="moveTouchLongPress"
-              @touchend="cancelLongPress"
-              @touchcancel="cancelLongPress"
-              @pointerdown="startPointerLongPress($event, item.originalIndex)"
-              @pointermove="movePointerLongPress"
-              @pointerup="cancelLongPress"
-              @contextmenu.prevent
-              @click="handleLineClick($event, item.data.startTime)"
-            >
-              <!-- 逐字歌词 -->
-              <template v-if="isYrcMode">
-                <div class="content">
-                  <div
-                    v-for="(text, textIndex) in item.data.words"
-                    :key="textIndex"
-                    :class="{
-                      'content-text': true,
-                      'end-with-space': text.word.endsWith(' ') || text.startTime === 0,
-                    }"
-                    :style="getYrcVars(text, index)"
-                  >
-                    <span class="yrc-word" :lang="getLyricLanguage(text.word)">
-                      {{ text.word }}
-                    </span>
+          <div ref="lyricLinesContainer" class="lyric-lines">
+            <!-- 顶部占位 -->
+            <div id="lrc-placeholder" class="placeholder" />
+            <!-- 预处理后的歌词列表 -->
+            <template v-for="(item, index) in processedLyrics" :key="`item-${index}`">
+              <!-- 倒计时行 -->
+              <div
+                v-if="item.type === 'countdown'"
+                class="countdown-line"
+                :style="{
+                  animationPlayState: statusStore.playStatus ? 'running' : 'paused',
+                }"
+              >
+                <Transition name="fade" mode="out-in">
+                  <div v-if="isCountdownVisible(item)" class="count-down">
+                    <div
+                      v-for="i in 3"
+                      :key="i"
+                      :style="{ opacity: getPointOpacity(item, i - 1) }"
+                      class="point"
+                    />
                   </div>
-                </div>
-              </template>
-              <!-- 普通歌词 -->
-              <template v-else>
-                <span class="content" :lang="getLyricLanguage(item.data.words?.[0]?.word)">
-                  {{ item.data.words?.[0]?.word }}
-                </span>
-              </template>
-              <!-- 翻译和音译 -->
-              <template v-if="settingStore.swapTranRoma">
-                <!-- 音译在前 -->
-                <span v-if="item.data.romanLyric && settingStore.showRoma" class="roma" lang="en">
-                  {{ item.data.romanLyric }}
-                </span>
-                <span
-                  v-if="item.data.translatedLyric && settingStore.showTran"
-                  class="tran"
-                  lang="en"
-                >
-                  {{ item.data.translatedLyric }}
-                </span>
-              </template>
-              <template v-else>
-                <!-- 翻译在前（默认） -->
-                <span
-                  v-if="item.data.translatedLyric && settingStore.showTran"
-                  class="tran"
-                  lang="en"
-                >
-                  {{ item.data.translatedLyric }}
-                </span>
-                <span v-if="item.data.romanLyric && settingStore.showRoma" class="roma" lang="en">
-                  {{ item.data.romanLyric }}
-                </span>
-              </template>
-            </div>
-          </template>
-          <!-- 底部占位 -->
-          <div class="placeholder" />
+                </Transition>
+              </div>
+              <!-- 歌词行 -->
+              <div
+                v-else
+                :id="`lrc-${index}`"
+                :class="getLyricLineClass(item, index)"
+                :style="getLyricLineStyle(item, index)"
+                @touchstart.passive="startTouchLongPress($event, item.originalIndex)"
+                @touchmove.passive="moveTouchLongPress"
+                @touchend.passive="cancelLongPress"
+                @touchcancel.passive="cancelLongPress"
+                @pointerdown="startPointerLongPress($event, item.originalIndex)"
+                @pointermove="movePointerLongPress"
+                @pointerup="cancelLongPress"
+                @contextmenu.prevent
+                @click="handleLineClick($event, item.data.startTime)"
+              >
+                <!-- 逐字歌词 -->
+                <template v-if="isYrcMode">
+                  <div class="content">
+                    <div
+                      v-for="(text, textIndex) in item.data.words"
+                      :key="textIndex"
+                      :class="{
+                        'content-text': true,
+                        'end-with-space': text.word.endsWith(' ') || text.startTime === 0,
+                      }"
+                      :style="getYrcVars(text, index)"
+                    >
+                      <span class="yrc-word" :lang="getLyricLanguage(text.word)">
+                        {{ text.word }}
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <!-- 普通歌词 -->
+                <template v-else>
+                  <span class="content" :lang="getLyricLanguage(item.data.words?.[0]?.word)">
+                    {{ item.data.words?.[0]?.word }}
+                  </span>
+                </template>
+                <!-- 翻译和音译 -->
+                <template v-if="settingStore.swapTranRoma">
+                  <!-- 音译在前 -->
+                  <span v-if="item.data.romanLyric && settingStore.showRoma" class="roma" lang="en">
+                    {{ item.data.romanLyric }}
+                  </span>
+                  <span
+                    v-if="item.data.translatedLyric && settingStore.showTran"
+                    class="tran"
+                    lang="en"
+                  >
+                    {{ item.data.translatedLyric }}
+                  </span>
+                </template>
+                <template v-else>
+                  <!-- 翻译在前（默认） -->
+                  <span
+                    v-if="item.data.translatedLyric && settingStore.showTran"
+                    class="tran"
+                    lang="en"
+                  >
+                    {{ item.data.translatedLyric }}
+                  </span>
+                  <span v-if="item.data.romanLyric && settingStore.showRoma" class="roma" lang="en">
+                    {{ item.data.romanLyric }}
+                  </span>
+                </template>
+              </div>
+            </template>
+            <!-- 底部占位 -->
+            <div class="placeholder" />
+          </div>
         </div>
       </Transition>
     </div>
@@ -166,6 +173,7 @@ const settingStore = useSettingStore();
 const player = usePlayerController();
 
 const lyricScrollContainer = ref<HTMLElement | null>(null);
+const lyricLinesContainer = ref<HTMLElement | null>(null);
 const LONG_PRESS_DURATION = 2500;
 const LONG_PRESS_MOVE_LIMIT = 24;
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -371,21 +379,57 @@ const userScrolling = ref(false);
 let userScrollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 /** 用户滚动恢复超时时间（毫秒） */
 const USER_SCROLL_TIMEOUT = 3000;
+let userTouching = false;
+
+const cancelScrollAnimation = () => {
+  if (scrollAnimationId !== null) cancelAnimationFrame(scrollAnimationId);
+  scrollAnimationId = null;
+};
+
+const clearUserScrollTimeout = () => {
+  if (userScrollTimeoutId !== null) clearTimeout(userScrollTimeoutId);
+  userScrollTimeoutId = null;
+};
+
+const scheduleScrollRecovery = () => {
+  clearUserScrollTimeout();
+  if (userTouching) return;
+  userScrollTimeoutId = setTimeout(() => {
+    userScrollTimeoutId = null;
+    userScrolling.value = false;
+    const container = lyricScrollContainer.value;
+    const target = getLyricScrollTarget(firstActiveIndex.value);
+    // 手势与惯性结束后恢复原有锚点，小幅浏览也不能残留偏移。
+    if (container && target !== null && Math.abs(container.scrollTop - target) > 1) {
+      lyricsScroll(firstActiveIndex.value);
+    }
+  }, USER_SCROLL_TIMEOUT);
+};
 
 /**
  * 自主滚动
  */
 const handleUserScroll = () => {
+  cancelScrollAnimation();
   userScrolling.value = true;
-  if (userScrollTimeoutId !== null) {
-    clearTimeout(userScrollTimeoutId);
-  }
-  // 超时后恢复
-  userScrollTimeoutId = setTimeout(() => {
-    userScrolling.value = false;
-    userScrollTimeoutId = null;
-    lyricsScroll(firstActiveIndex.value);
-  }, USER_SCROLL_TIMEOUT);
+  scheduleScrollRecovery();
+};
+
+const startUserTouch = () => {
+  userTouching = true;
+  handleUserScroll();
+};
+const endUserTouch = (event: TouchEvent) => {
+  userTouching = event.touches.length > 0;
+  scheduleScrollRecovery();
+};
+const handleScrollActivity = () => {
+  // 原生惯性滚动也延后恢复；自动动画的 scroll 事件不会续期。
+  if (userScrolling.value) scheduleScrollRecovery();
+};
+const handleScrollKey = (event: KeyboardEvent) => {
+  if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key))
+    handleUserScroll();
 };
 
 /**
@@ -432,13 +476,13 @@ const smoothScrollTo = (container: HTMLElement, targetY: number, duration = 300)
 /**
  * 歌词滚动
  */
-const lyricsScroll = (index: number) => {
+const getLyricScrollTarget = (index: number): number | null => {
   const container = lyricScrollContainer.value;
-  if (!container) return;
-  // 用户滚动时不自动滚动
-  if (userScrolling.value) return;
-  const lrcItemDom = document.getElementById(index >= 0 ? `lrc-${index}` : "lrc-placeholder");
-  if (!lrcItemDom) return;
+  if (!container) return null;
+  const lrcItemDom = container.querySelector<HTMLElement>(
+    index >= 0 ? `#lrc-${index}` : "#lrc-placeholder",
+  );
+  if (!lrcItemDom) return null;
   // 计算目标滚动位置
   const containerHeight = container.clientHeight;
   const elementTop = lrcItemDom.offsetTop;
@@ -447,14 +491,21 @@ const lyricsScroll = (index: number) => {
   let targetY = elementTop - (containerHeight - elementHeight) * effectiveLyricsScrollOffset.value;
   // 确保不超出边界
   targetY = Math.max(0, Math.min(targetY, container.scrollHeight - container.clientHeight));
-  // 执行平滑滚动
-  smoothScrollTo(container, targetY, 500);
+  return targetY;
+};
+
+const lyricsScroll = (index: number) => {
+  const container = lyricScrollContainer.value;
+  if (!container || userScrolling.value) return;
+  const targetY = getLyricScrollTarget(index);
+  if (targetY !== null) smoothScrollTo(container, targetY, 500);
 };
 
 /**
  * 鼠标移出歌词区域恢复自动滚动
  */
 const lrcAllLeave = () => {
+  if (userTouching || userScrolling.value) return;
   userScrolling.value = false;
   if (userScrollTimeoutId !== null) {
     clearTimeout(userScrollTimeoutId);
@@ -595,11 +646,9 @@ const jumpSeek = (time: number) => {
 };
 
 // 监听歌词滚动
-useResizeObserver(lyricScrollContainer, () => {
-  // 仅在真实视窗尺寸变化时重新定位，控件显隐不改变视窗。
-  if (lyricScrollContainer.value?.closest(".phone-portrait")) {
-    lyricsScroll(firstActiveIndex.value);
-  }
+useResizeObserver([lyricScrollContainer, lyricLinesContainer], () => {
+  // 视窗、字体和换行都可能改变锚点；手动浏览仍由lyricsScroll的状态保护。
+  lyricsScroll(firstActiveIndex.value);
 });
 watch(firstActiveIndex, (val, oldVal) => {
   lyricsScroll(val);
@@ -607,6 +656,19 @@ watch(firstActiveIndex, (val, oldVal) => {
     yrcFadingLineIndex.value = oldVal;
     yrcFadingUntilAt.value = Date.now() + YRC_LINE_FADE_MS;
   }
+});
+
+watch([() => musicStore.playSong.id, currentLyricData], async ([songId], [previousSongId]) => {
+  const keepBrowsing = songId === previousSongId && userScrolling.value;
+  cancelScrollAnimation();
+  clearUserScrollTimeout();
+  if (!keepBrowsing) {
+    userTouching = false;
+    userScrolling.value = false;
+  }
+  await nextTick();
+  if (keepBrowsing) scheduleScrollRecovery();
+  else lyricsScroll(firstActiveIndex.value);
 });
 
 onMounted(() => {

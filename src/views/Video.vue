@@ -473,5 +473,44 @@ onUnmounted(() => {
       }
     }
   }
+  @media (max-width: 599px) {
+    .info {
+      height: auto;
+      min-height: 60px;
+      gap: 8px;
+      .name {
+        margin: 0;
+        line-height: 1.3;
+      }
+    }
+    .menu {
+      height: auto;
+      min-height: 40px;
+      gap: 12px;
+      .artist {
+        min-width: 0;
+        max-width: 100%;
+        margin-left: 0;
+        .cover {
+          flex-shrink: 0;
+        }
+        .name {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+      }
+      .control {
+        width: 100%;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .n-button {
+        --n-height: auto;
+        min-height: 48px;
+        padding: 8px 12px;
+      }
+    }
+  }
+
 }
 </style>

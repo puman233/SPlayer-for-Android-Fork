@@ -6,6 +6,7 @@ import androidx.core.content.res.ResourcesCompat;
 import java.util.Locale;
 import android.app.Service;
 import android.content.Context;
+import android.content.ComponentCallbacks;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
@@ -16,6 +17,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -23,6 +25,7 @@ import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.Display;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -48,6 +51,15 @@ public class FloatingLyricService extends Service {
   private static final String PREFS = "floating_lyric_prefs";
   private static final long HIDE_DELAY_MS = 2500;
   private WindowManager wm;
+  private Context overlayContext;
+  private boolean overlayCallbacksRegistered;
+  private final ComponentCallbacks overlayConfiguration = new ComponentCallbacks() {
+    @Override public void onConfigurationChanged(Configuration config) {
+      refreshViewport(null);
+      if (view != null) view.requestApplyInsets();
+    }
+    @Override public void onLowMemory() {}
+  };
   private LyricView view;
   private WindowManager.LayoutParams lp, unlockLp;
   private View unlockBtnView;
@@ -99,27 +111,45 @@ public class FloatingLyricService extends Service {
     prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
     restoreConfigFromPrefs();
     if (prefs.getBoolean("locked", false)) interaction.lock();
-    wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-    view = new LyricView(this);
-    lp = new WindowManager.LayoutParams(1, 1,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-        PixelFormat.TRANSLUCENT);
-    lp.gravity = Gravity.TOP | Gravity.LEFT;
-    if (interaction.locked()) lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-    view.setOnApplyWindowInsetsListener((v, insets) -> {
-      refreshViewport(insets);
-      return insets;
-    });
-    refreshViewport(null);
+    DisplayManager displays = getSystemService(DisplayManager.class);
+    Display desktop = displays == null ? null : displays.getDisplay(Display.DEFAULT_DISPLAY);
+    if (desktop == null || !desktop.isValid()) {
+      Log.w(TAG, "桌面显示器不可用，停止创建悬浮歌词");
+      stopSelf();
+      return;
+    }
     try {
+      // 整个初始化都可能遇到显示器失效；桌面窗口复用独立 UI 上下文。
+      overlayContext = createDisplayContext(desktop);
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        overlayContext = overlayContext.createWindowContext(
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, null);
+      }
+      wm = (WindowManager) overlayContext.getSystemService(WINDOW_SERVICE);
+      view = new LyricView(overlayContext);
+      lp = new WindowManager.LayoutParams(1, 1,
+          WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+              | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+              | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+          PixelFormat.TRANSLUCENT);
+      lp.gravity = Gravity.TOP | Gravity.LEFT;
+      if (interaction.locked()) lp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+      view.setOnApplyWindowInsetsListener((v, insets) -> {
+        refreshViewport(insets);
+        return insets;
+      });
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        overlayContext.registerComponentCallbacks(overlayConfiguration);
+        overlayCallbacksRegistered = true;
+      }
+      refreshViewport(null);
       wm.addView(view, lp);
       attached = true;
       view.requestApplyInsets();
       Log.i(TAG, "overlay create");
-    } catch (SecurityException | IllegalArgumentException | WindowManager.BadTokenException e) {
+    } catch (SecurityException | IllegalArgumentException | WindowManager.BadTokenException
+        | WindowManager.InvalidDisplayException e) {
       Log.e(TAG, "悬浮歌词窗口创建失败", e);
       stopSelf();
       return;
@@ -174,6 +204,10 @@ public class FloatingLyricService extends Service {
   @Override
   public void onDestroy() {
     destroyed = true;
+    if (overlayCallbacksRegistered) {
+      overlayContext.unregisterComponentCallbacks(overlayConfiguration);
+      overlayCallbacksRegistered = false;
+    }
     handler.removeCallbacks(autoHide);
     if (controlsAnimator != null) controlsAnimator.cancel();
     PlaybackManager.getInstance(this).detachFloatingLyricService(this);
@@ -226,12 +260,12 @@ public class FloatingLyricService extends Service {
     }
     boolean changed = !safeArea.equals(bounds);
     safeArea.set(bounds);
-    DisplayMetrics dm = getResources().getDisplayMetrics();
+    DisplayMetrics dm = overlayContext.getResources().getDisplayMetrics();
     float d = dm.density;
-    tabletMode = getResources().getConfiguration().smallestScreenWidthDp >= 600;
+    tabletMode = overlayContext.getResources().getConfiguration().smallestScreenWidthDp >= 600;
     int width = Math.max(1, Math.round(bounds.width()
         * FloatingLyricPolicy.clamp(windowWidthPercent, 30, 100) / 100f));
-    float fontScale = getResources().getConfiguration().fontScale;
+    float fontScale = overlayContext.getResources().getConfiguration().fontScale;
     float requestedHeightDp = FloatingLyricPolicy.clamp(windowHeightDp, 48, 240);
     float effectiveSp = "USER_DEFINED".equals(fontSizeMode) ? fontSizeSp
         : FloatingLyricPolicy.defaultFont(bounds.width() / d, bounds.height() / d,
@@ -267,7 +301,7 @@ public class FloatingLyricService extends Service {
   }
 
   private float tabletTitleHeight(float density) {
-    return Math.max(32 * density, 21 * getResources().getDisplayMetrics().scaledDensity + 8 * density);
+    return Math.max(32 * density, 21 * overlayContext.getResources().getDisplayMetrics().scaledDensity + 8 * density);
   }
 
   private void projectPosition() {
@@ -410,6 +444,10 @@ public class FloatingLyricService extends Service {
     controlsAnimator.start();
   }
 
+  static void clearPersistedLock(Context context) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("locked", false).apply();
+  }
+
   public void setLocked(boolean locked) {
     handler.removeCallbacks(autoHide);
     if (locked) interaction.lock(); else interaction.unlock();
@@ -426,8 +464,8 @@ public class FloatingLyricService extends Service {
 
   private void showUnlockBtn() {
     if (unlockBtnView != null || !attached) return;
-    int size = Math.round(48 * getResources().getDisplayMetrics().density);
-    unlockBtnView = new View(this) {
+    int size = Math.round(48 * overlayContext.getResources().getDisplayMetrics().density);
+    unlockBtnView = new View(overlayContext) {
       private Drawable icon;
       @Override protected void onDraw(Canvas canvas) {
         if (icon == null) {
@@ -452,7 +490,8 @@ public class FloatingLyricService extends Service {
     try {
       wm.addView(unlockBtnView, unlockLp);
       unlockAttached = true;
-    } catch (SecurityException | IllegalArgumentException | WindowManager.BadTokenException e) {
+    } catch (SecurityException | IllegalArgumentException | WindowManager.BadTokenException
+        | WindowManager.InvalidDisplayException e) {
       Log.e(TAG, "解锁窗口创建失败，恢复歌词触摸", e);
       unlockBtnView = null;
       setLocked(false);
@@ -461,13 +500,36 @@ public class FloatingLyricService extends Service {
 
   private void updateUnlockPosition() {
     if (unlockBtnView == null || unlockLp == null) return;
-    unlockLp.x = Math.max(safeArea.left, Math.min(lp.x + lp.width - unlockLp.width,
-        safeArea.right - unlockLp.width));
-    unlockLp.y = Math.max(safeArea.top, Math.min(lp.y, safeArea.bottom - unlockLp.height));
+    float density = overlayContext.getResources().getDisplayMetrics().density;
+    int size = unlockLp.width, gap = Math.round(6 * density);
+    int bodyTop = lp.y + Math.max(0, lp.height - idleHeight);
+    int anchorX = lp.x - size - gap;
+    int anchorY = Math.max(safeArea.top, Math.min(bodyTop + (idleHeight - size) / 2, safeArea.bottom - size));
+    boolean placed = anchorX >= safeArea.left && anchorX + size <= safeArea.right
+        && anchorY >= safeArea.top && anchorY + size <= safeArea.bottom;
+    if (placed) {
+      unlockLp.x = anchorX;
+      unlockLp.y = anchorY;
+    }
+    // Keep the lyric untouched; settings can unlock when there is no room on its left.
+    unlockBtnView.setVisibility(placed ? View.VISIBLE : View.INVISIBLE);
+    unlockLp.alpha = placed ? 1f : 0f;
+    if (placed) unlockLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+    else unlockLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
     if (unlockAttached) {
       try { wm.updateViewLayout(unlockBtnView, unlockLp); }
       catch (IllegalArgumentException | SecurityException | WindowManager.BadTokenException e) { Log.w(TAG, "解锁窗口更新失败", e); }
     }
+  }
+
+  private void layoutControlButton(RectF rect, int index, int width, float density) {
+    int count = tabletMode ? 6 : 5;
+    int columns = Math.min(count, Math.max(1, width / Math.round(48 * density)));
+    float size = Math.min(48 * density, width / (float) columns);
+    float gap = Math.max(0, (width - columns * size) / (columns + 1));
+    float left = gap + (index % columns) * (size + gap);
+    float top = (tabletMode ? tabletTitleHeight(density) : 0) + (index / columns) * size;
+    rect.set(left, top, left + size, top + size);
   }
 
   private void removeUnlockBtn() {
@@ -726,9 +788,6 @@ public class FloatingLyricService extends Service {
         canvas.restoreToCount(saved);
       }
       int count = tabletMode ? 6 : 5;
-      int columns = Math.min(count, Math.max(1, width / Math.round(48 * d)));
-      float size = Math.min(48 * d, width / (float) columns);
-      float gap = Math.max(0, (width - columns * size) / (columns + 1));
       RectF[] rects = tabletMode ? new RectF[] {rLock, rPrev, rPlay, rNext, rFavorite, rClose}
           : new RectF[] {rLock, rPrev, rPlay, rNext, rClose};
       int[] icons = tabletMode ? new int[] {ICON_UNLOCK, ICON_PREV, playing ? ICON_PAUSE : ICON_PLAY,
@@ -737,14 +796,9 @@ public class FloatingLyricService extends Service {
           : new int[] {ICON_UNLOCK, ICON_PREV, playing ? ICON_PAUSE : ICON_PLAY, ICON_NEXT, ICON_CLOSE};
       rFavorite.setEmpty();
       for (int i = 0; i < count; i++) {
-        drawBtn(canvas, rects[i], gap + (i % columns) * (size + gap),
-            titleHeight + (i / columns) * size + size / 2, size, icons[i]);
+        layoutControlButton(rects[i], i, width, d);
+        drawResIcon(canvas, icons[i], rects[i].centerX(), rects[i].centerY(), rects[i].width() * 0.58f);
       }
-    }
-
-    private void drawBtn(Canvas canvas, RectF rect, float left, float cy, float size, int icon) {
-      rect.set(left, cy - size / 2, left + size, cy + size / 2);
-      drawResIcon(canvas, icon, rect.centerX(), rect.centerY(), size * 0.58f);
     }
 
     private void drawResIcon(Canvas c, int iconType, float cx, float cy, float sizePx) {

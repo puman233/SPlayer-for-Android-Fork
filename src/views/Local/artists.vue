@@ -19,7 +19,7 @@
       <SongList
         :key="chooseArtist"
         :data="artistSongs"
-        :loading="artistSongs?.length ? false : true"
+        :loading="loading"
         :hidden-cover="!settingStore.showLocalCover"
         @removeSong="handleRemoveSong"
       />
@@ -33,7 +33,7 @@ import { useLocalStore, useSettingStore } from "@/stores";
 import { isArray, some } from "lodash-es";
 import { usePlayerController } from "@/core/player/PlayerController";
 
-const props = defineProps<{ data: SongType[] }>();
+const props = defineProps<{ data: SongType[]; loading: boolean }>();
 
 const localStore = useLocalStore();
 const settingStore = useSettingStore();

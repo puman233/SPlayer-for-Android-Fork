@@ -59,7 +59,7 @@
             <PlayerCover compact />
           </div>
           <div ref="infoRef" class="info" data-stagger="title">
-            <PlayerData center :controls-visible="controls.visible.value" />
+            <PlayerData center :controls-visible="true" />
           </div>
         </template>
       </div>
@@ -187,10 +187,10 @@ useResizeObserver([leftRef, infoRef], measureCover);
     var(--safe-area-left, 0px);
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) 84px;
+  transition: grid-template-rows 180ms cubic-bezier(0.22, 1, 0.36, 1);
   &[data-controls-visible="false"] {
     grid-template-rows: 48px minmax(0, 1fr) 0px;
     .landscape-controls {
-      padding: 0;
       overflow: hidden;
     }
   }
@@ -212,13 +212,15 @@ useResizeObserver([leftRef, infoRef], measureCover);
   }
   .auto-controls {
     transition:
-      opacity 0.2s ease,
-      visibility 0.2s;
+      opacity 160ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 180ms;
   }
   &[data-controls-visible="false"] .auto-controls {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+    transform: translateY(6px);
   }
   .landscape-content {
     min-height: 0;
@@ -247,7 +249,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
     width: var(--landscape-cover-size);
     aspect-ratio: 1;
     flex-shrink: 0;
-    border-radius: 14px;
+    border-radius: 32px;
     overflow: hidden;
     box-shadow: 0 12px 28px #00000030;
     :deep(.player-cover) {
@@ -255,7 +257,9 @@ useResizeObserver([leftRef, infoRef], measureCover);
       height: 100% !important;
       max-width: none !important;
       max-height: none !important;
-      border-radius: 0 !important;
+      border-radius: inherit !important;
+      transform: none !important;
+      overflow: hidden;
       background: transparent !important;
       box-shadow: none !important;
     }
@@ -336,9 +340,6 @@ useResizeObserver([leftRef, infoRef], measureCover);
       padding: 2px 5px;
     }
   }
-  &[data-controls-visible="false"] :deep(.meta-actions-row) {
-    display: none;
-  }
   .landscape-comment {
     width: 100%;
     height: 100%;
@@ -398,6 +399,7 @@ useResizeObserver([leftRef, infoRef], measureCover);
   }
   .landscape-controls {
     min-height: 0;
+    overflow: hidden;
     padding: 0 12px 4px;
   }
   :deep(.player-control) {
@@ -538,6 +540,9 @@ useResizeObserver([leftRef, infoRef], measureCover);
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .full-player-mobile-landscape {
+    transition: none !important;
+  }
   .auto-controls {
     transition: none !important;
   }

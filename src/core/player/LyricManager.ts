@@ -44,6 +44,8 @@ interface LyricFetchResult {
   };
 }
 
+type LyricAvailable = (result: LyricFetchResult) => Promise<void>;
+
 interface SearchSongArtist {
   name?: string;
 }
@@ -103,6 +105,7 @@ class LyricManager {
    * 预加载的歌词
    */
   private prefetchedLyric: { id: number | string; result: LyricFetchResult } | null = null;
+  private lyricPreferenceRevision = 0;
 
   constructor() {}
 
@@ -622,10 +625,32 @@ class LyricManager {
   public switchLyricSource(source: LyricPriority) {
     const settingStore = useSettingStore();
     const musicStore = useMusicStore();
+    this.prefetchedLyric = null;
+    this.lyricPreferenceRevision++;
     settingStore.lyricPriority = source;
-    if (musicStore.playSong) {
-      this.handleLyric(musicStore.playSong);
+    if (source === "ttml") {
+      settingStore.enableOnlineTTMLLyric = true;
+      settingStore.showWordLyrics = true;
     }
+    if (musicStore.playSong) {
+      return this.handleLyric(musicStore.playSong);
+    }
+  }
+
+  /** Apply an explicit TTML toggle to the current song, through the normal request guard. */
+  public async setOnlineTTML(enabled: boolean) {
+    const settingStore = useSettingStore();
+    const musicStore = useMusicStore();
+    this.prefetchedLyric = null;
+    this.lyricPreferenceRevision++;
+    settingStore.enableOnlineTTMLLyric = enabled;
+    if (enabled) {
+      settingStore.lyricPriority = "ttml";
+      settingStore.showWordLyrics = true;
+    } else if (settingStore.lyricPriority === "ttml") {
+      settingStore.lyricPriority = "auto";
+    }
+    if (musicStore.playSong?.id) await this.handleLyric(musicStore.playSong);
   }
 
   private async readLyricCacheText(fileName: string): Promise<string | null> {
@@ -773,6 +798,7 @@ class LyricManager {
   private async fetchOnlineLyric(
     song: SongType,
     priorityOverride?: LyricPriority,
+    onAvailable?: LyricAvailable,
   ): Promise<LyricFetchResult> {
     const settingStore = useSettingStore();
     const priority = priorityOverride ?? settingStore.lyricPriority;
@@ -904,7 +930,8 @@ class LyricManager {
       await adoptLRC();
     } else if (priority === "ttml") {
       await adoptTTML();
-      await adoptLRC();
+      // 已有完整逐词内容时由 setFinalLyric 派生普通歌词，不等待低优先级网络。
+      if (!ttmlAdopted) await adoptLRC();
       if (!ttmlAdopted && !result.lrcData.length) {
         await adoptQQMusic();
       }
@@ -912,7 +939,28 @@ class LyricManager {
       if (settingStore.enableQQMusicLyric) {
         await adoptQQMusic();
       }
-      await Promise.all([adoptTTML(), adoptLRC()]);
+      await Promise.all([
+        adoptTTML().then(async () => {
+          if (ttmlAdopted && onAvailable) {
+            await onAvailable(cloneDeep({
+              data: result,
+              meta: { ...meta, usingTTMLLyric: true, usingQRCLyric: false },
+            }));
+          }
+        }).catch((error) => {
+          console.warn("自动模式 TTML 获取失败:", requestFailureCategory(error));
+        }),
+        adoptLRC()
+          .then(async () => {
+            // 自动模式先展示就绪的官方歌词，TTML 完成后仍按原优先级升级。
+            if (!ttmlAdopted && onAvailable && (result.lrcData.length || result.yrcData.length)) {
+              await onAvailable(cloneDeep({ data: result, meta }));
+            }
+          })
+          .catch((error) => {
+            console.warn("自动模式官方歌词获取失败:", requestFailureCategory(error));
+          }),
+      ]);
     }
     // 设置元数据状态
     meta.usingTTMLLyric = ttmlAdopted;
@@ -1218,7 +1266,10 @@ class LyricManager {
     return result || emptyLyricResult();
   }
 
-  private async fetchAndroidPrioritizedLyric(song: SongType): Promise<LyricFetchResult> {
+  private async fetchAndroidPrioritizedLyric(
+    song: SongType,
+    onAvailable?: LyricAvailable,
+  ): Promise<LyricFetchResult> {
     const settingStore = useSettingStore();
     const isLocalSong = Boolean(song.path);
     const priority = settingStore.lyricPriority;
@@ -1231,7 +1282,7 @@ class LyricManager {
         emptyResult: emptyLyricResult,
         fetchSidecar: () => this.fetchAndroidSidecarLyric(song),
         fetchDirectory: (preferMetadata) => this.fetchAndroidDirectoryLyric(song, preferMetadata),
-        fetchOnline: () => this.fetchOnlineLyric(song),
+        fetchOnline: () => this.fetchOnlineLyric(song, undefined, onAvailable),
         fetchAmlTtml: () => this.fetchAndroidAmlLyric(song),
         fetchLegacyQm: () => this.fetchAndroidLegacyQmLyric(song),
         fetchOfficial: () => this.fetchAndroidOfficialMatchedLyric(song),
@@ -1387,7 +1438,8 @@ class LyricManager {
             !Object.is(oldWord.startTime, newWord.startTime) ||
             !Object.is(oldWord.endTime, newWord.endTime) ||
             (oldWord.romanWord || "") !== (newWord.romanWord || "")
-          ) return false;
+          )
+            return false;
         }
       }
       return true;
@@ -1503,41 +1555,53 @@ class LyricManager {
    */
   public async handleLyric(song: SongType) {
     const statusStore = useStatusStore();
-
-    // 标记当前歌词请求
     const req = ++this.lyricReqSeq;
     this.activeLyricReq = req;
-
-    // 清除不匹配的预加载
-    if (this.prefetchedLyric && this.prefetchedLyric.id !== song.id) {
-      this.prefetchedLyric = null;
-    }
-
-    // 检查预加载缓存
-    if (this.prefetchedLyric && this.prefetchedLyric.id === song.id) {
-      console.log(`🚀 [${song.id}] 使用预加载歌词`);
-      const { data, meta } = this.prefetchedLyric.result;
-      this.prefetchedLyric = null; // 消费后清除
-
-      // 应用到 Store
-      statusStore.usingTTMLLyric = meta.usingTTMLLyric;
-      statusStore.usingQRCLyric = meta.usingQRCLyric;
-      this.setFinalLyric(data, req);
-      return;
-    }
+    statusStore.lyricLoading = true;
+    let closed = false;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let available = emptyLyricResult();
+    const current = () => !closed && this.activeLyricReq === req;
 
     try {
-      const { data, meta } = await this.fetchLyric(song);
-
-      // 再次确认请求是否仍然有效
-      if (this.activeLyricReq !== req) return;
-
-      statusStore.usingTTMLLyric = meta.usingTTMLLyric;
-      statusStore.usingQRCLyric = meta.usingQRCLyric;
-      this.setFinalLyric(data, req);
+      if (this.prefetchedLyric && this.prefetchedLyric.id !== song.id) {
+        this.prefetchedLyric = null;
+      }
+      let result: LyricFetchResult;
+      if (this.prefetchedLyric?.id === song.id) {
+        result = this.prefetchedLyric.result;
+        this.prefetchedLyric = null;
+      } else {
+        // Cache/IPC and optional providers can also stall: bound the whole UI request.
+        // Already published lyrics survive expiry; late callbacks cannot replace them.
+        result = await Promise.race([
+          this.fetchLyric(song, async (partial) => {
+            if (!current()) return;
+            available = partial;
+            statusStore.usingTTMLLyric = partial.meta.usingTTMLLyric;
+            statusStore.usingQRCLyric = partial.meta.usingQRCLyric;
+            this.setFinalLyric(partial.data, req);
+          }),
+          new Promise<LyricFetchResult>((resolve) => {
+            deadline = setTimeout(() => {
+              if (current()) console.warn("歌词请求超过等待上限，保留已就绪内容");
+              resolve(available);
+            }, 12000);
+          }),
+        ]);
+      }
+      if (!current()) return;
+      statusStore.usingTTMLLyric = result.meta.usingTTMLLyric;
+      statusStore.usingQRCLyric = result.meta.usingQRCLyric;
+      this.setFinalLyric(result.data, req);
     } catch (error) {
+      if (!current()) return;
       console.error("❌ 处理歌词失败:", requestFailureCategory(error));
       this.resetSongLyric();
+    } finally {
+      closed = true;
+      if (deadline !== undefined) clearTimeout(deadline);
+      if (this.activeLyricReq === req) statusStore.lyricLoading = false;
     }
   }
 
@@ -1546,7 +1610,7 @@ class LyricManager {
    * @param song 歌曲对象
    * @returns 歌词结果和元数据
    */
-  public async fetchLyric(song: SongType): Promise<LyricFetchResult> {
+  public async fetchLyric(song: SongType, onAvailable?: LyricAvailable): Promise<LyricFetchResult> {
     const settingStore = useSettingStore();
     const isStreaming = song?.type === "streaming";
     let fetchResult: LyricFetchResult = {
@@ -1554,13 +1618,23 @@ class LyricManager {
       meta: { usingTTMLLyric: false, usingQRCLyric: false },
     };
 
+    const postProcess = async (result: LyricFetchResult): Promise<LyricFetchResult> => {
+      if (song.path ? settingStore.enableExcludeLyricsLocal : true) {
+        result.data = this.handleLyricExclude(result.data, song, result.meta.usingTTMLLyric);
+      }
+      result.data = await this.applyChineseVariant(result.data);
+      return result;
+    };
+    const publishAvailable: LyricAvailable | undefined = onAvailable
+      ? async (result) => onAvailable(await postProcess(result))
+      : undefined;
+
     try {
       // 判断歌词来源
-      const isLocal = Boolean(song.path);
       if (isStreaming) {
         fetchResult = await this.fetchStreamingLyric(song);
       } else if (isCapacitorAndroid) {
-        fetchResult = await this.fetchAndroidPrioritizedLyric(song);
+        fetchResult = await this.fetchAndroidPrioritizedLyric(song, publishAvailable);
       } else {
         // 检查本地覆盖
         const overrideResult = await this.fetchLocalOverrideLyric(song.id);
@@ -1573,21 +1647,10 @@ class LyricManager {
           fetchResult = await this.fetchLocalLyric(song);
         } else {
           // 在线获取
-          fetchResult = await this.fetchOnlineLyric(song);
+          fetchResult = await this.fetchOnlineLyric(song, undefined, publishAvailable);
         }
       }
-      // 后处理：元数据排除
-      if (isLocal ? settingStore.enableExcludeLyricsLocal : true) {
-        fetchResult.data = this.handleLyricExclude(
-          fetchResult.data,
-          song,
-          fetchResult.meta.usingTTMLLyric,
-        );
-      }
-      // 后处理：简繁转换
-      fetchResult.data = await this.applyChineseVariant(fetchResult.data);
-
-      return fetchResult;
+      return await postProcess(fetchResult);
     } catch (error) {
       console.error("❌ 获取歌词失败:", requestFailureCategory(error));
       return fetchResult;
@@ -1600,9 +1663,11 @@ class LyricManager {
    */
   public async prefetchLyric(song: SongType) {
     if (!song) return;
+    const revision = this.lyricPreferenceRevision;
     try {
       console.log(`Lyrics prefetching started: [${song.id}] ${song.name}`);
       const result = await this.fetchLyric(song);
+      if (revision !== this.lyricPreferenceRevision) return;
       // 存储预加载结果
       this.prefetchedLyric = {
         id: song.id,

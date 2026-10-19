@@ -44,6 +44,7 @@ watch(refreshSeq, () => {
   padding-bottom: 20px;
 
   .welcome {
+    container-type: inline-size;
     margin-top: 8px;
     margin-bottom: 20px;
 
@@ -63,6 +64,13 @@ watch(refreshSeq, () => {
       .n-h1 {
         font-size: 26px;
       }
+    }
+  }
+  @media (max-width: 599px) {
+    .welcome .n-h1 {
+      font-size: clamp(22px, calc(9px + 4.5cqi), 26px);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
   }
 }

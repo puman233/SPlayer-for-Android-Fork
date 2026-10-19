@@ -130,6 +130,8 @@ public final class PlaybackManager {
 
   /** volatile：promotion runnable 不持 this monitor 就能读到最新值（修复 #7 避免主线程锁竞争 → ANR 抖动） */
   private volatile String currentSource = "";
+  @Nullable private String stagedMetadataSource;
+  @Nullable private TrackMetadata stagedMetadata;
 
   private String apiBaseUrl = "";
   private String cookie = "";
@@ -388,8 +390,17 @@ public final class PlaybackManager {
     remoteMode = false;
     resetNativeRecoveryState();
     playbackRequested = autoPlay;
+    boolean applyStagedMetadata =
+        stagedMetadata != null && url != null && url.equals(stagedMetadataSource);
+    if (applyStagedMetadata) currentMetadata = stagedMetadata;
+    stagedMetadata = null;
+    stagedMetadataSource = null;
     currentSource = url == null ? "" : url;
     currentMetadata.url = currentSource;
+    if (applyStagedMetadata) {
+      loadCoverBitmapAsync(currentMetadata.coverUrl);
+      updateMediaSessionButtons();
+    }
 
     // 取消上一首未到期的 10s promotion timer：用户已切歌，旧任务无意义
     cancelPromotion();
@@ -548,6 +559,8 @@ public final class PlaybackManager {
   /** 硬清理：清播放列表 / 登入登出等场景，清空 MediaItem、通知栏、queuedNext 及快路径锁。 */
   public synchronized JSObject cleanup() {
     ensureInitialized();
+    stagedMetadata = null;
+    stagedMetadataSource = null;
     playbackRequested = false;
     resetNativeRecoveryState();
     player.pause();
@@ -618,6 +631,12 @@ public final class PlaybackManager {
     updateMediaSessionButtons();
     updateNotification();
     emitPlaybackState(true);
+  }
+
+  /** 与资源绑定的单次元数据；load 原子提交，避免旧资源事件带上新歌曲身份。 */
+  public synchronized void stageMetadataForSource(String source, TrackMetadata metadata) {
+    stagedMetadataSource = source;
+    stagedMetadata = metadata;
   }
 
   /**
@@ -1342,38 +1361,37 @@ public final class PlaybackManager {
   }
 
   /**
-   * 预解析窗口前方 3 首，让 ENDED 时直接 playable；同时对已解析的下一首 1-2 个触发音频字节预载， 锁屏 / WebView 冻结时仍能秒响。
+   * 预解析窗口前方 3 首；字节预载仅服务紧邻下一首，防止较远曲目取消下一首预载。
    *
    * <ul>
    *   <li>未 resolved 的 URL：urlResolver.prefetchAsync 后台解析，回调里再触发音频字节预载
-   *   <li>已 resolved 的 URL：直接 AudioCacheProvider.prefetchUrl 让 SimpleCache warm 512KB
+   *   <li>已 resolved 的紧邻下一首：按 AudioCacheProvider.DEFAULT_PREFETCH_BYTES 预载
    * </ul>
    *
    * <p>所有 prefetch 都是 fire-and-forget；inFlight / cachedBytes 短路保证幂等，多次调用不浪费带宽。
    */
   private void prefetchUpcomingUrls() {
-    // 1) 已 resolved 的下一首 1-2 个：立刻让 SimpleCache 预载前 512KB
-    //    这里是锁屏后切歌秒响的关键路径——不依赖 JS / WebView 调度。
-    List<String> resolvedUrls = playbackQueue.peekUpcomingResolvedUrls(2);
-    for (String url : resolvedUrls) {
-      AudioCacheProvider.prefetchUrl(appContext, url);
-    }
+    // 1) 优先紧邻下一首的音频，不依赖 JS / WebView 调度。
+    prefetchNextAudio();
 
     // 2) 未 resolved 的 1-3 个：UrlResolver 后台解析 URL，
     //    解析完成回调里再补一次音频字节预载（确保 ENDED 时新解析出的 URL 也被 warm）
     List<PlaybackQueue.Track> upcoming = playbackQueue.peekUpcomingUnresolved(3);
     for (PlaybackQueue.Track t : upcoming) {
-      final long songId = t.songId;
       urlResolver.prefetchAsync(
           t,
           playbackQueue,
           () -> {
-            // onResolved 在 resolver 池线程；URL 已通过 updateTrackUrl 写回 queue，可直接查
-            String resolvedUrl = playbackQueue.findUrlBySongId(songId);
-            if (resolvedUrl != null && !resolvedUrl.isEmpty()) {
-              AudioCacheProvider.prefetchUrl(appContext, resolvedUrl);
-            }
+            // 回调可能晚于切歌；重新选当前队列的下一首，不能让旧/较远请求抢占。
+            mainHandler.post(this::prefetchNextAudio);
           });
+    }
+  }
+
+  private void prefetchNextAudio() {
+    PlaybackQueue.Track next = playbackQueue.peekNextTrack();
+    if (next != null && next.playable()) {
+      AudioCacheProvider.prefetchUrl(appContext, next.url);
     }
   }
 
@@ -2530,6 +2548,9 @@ public final class PlaybackManager {
 
   /** 关闭悬浮歌词服务 */
   public synchronized void hideFloatingLyric() {
+    // Closing must also reset a persisted lock, including a service still starting.
+    FloatingLyricService.clearPersistedLock(appContext);
+    if (floatingLyricService != null) floatingLyricService.setLocked(false);
     floatingLyricService = null;
     bufferedLrcJson = null;
     bufferedYrcJson = null;
@@ -2595,6 +2616,13 @@ public final class PlaybackManager {
     bufferedSongName = name;
     bufferedArtist = artist;
     if (floatingLyricService != null) floatingLyricService.pushSongInfo(name, artist);
+  }
+
+  /** 来自应用内入口的一次性解锁，不混入缓存配置。 */
+  public synchronized boolean unlockFloatingLyric() {
+    if (floatingLyricService == null) return false;
+    floatingLyricService.setLocked(false);
+    return true;
   }
 
   /** 推送桌面歌词配置（颜色、字号、字重、遮罩等） */

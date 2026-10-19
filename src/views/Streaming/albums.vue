@@ -26,12 +26,7 @@
       </n-card>
     </n-scrollbar>
     <Transition name="fade" mode="out-in">
-      <SongList
-        :key="chooseAlbum"
-        :data="albumSongs"
-        :loading="albumSongs?.length ? false : true"
-        hidden-cover
-      />
+      <SongList :key="chooseAlbum" :data="albumSongs" :loading="loading" hidden-cover />
     </Transition>
   </div>
 </template>
@@ -43,6 +38,7 @@ import { some } from "lodash-es";
 import { usePlayerController } from "@/core/player/PlayerController";
 
 defineOptions({ inheritAttrs: false });
+defineProps<{ loading: boolean }>();
 
 const streamingStore = useStreamingStore();
 const player = usePlayerController();

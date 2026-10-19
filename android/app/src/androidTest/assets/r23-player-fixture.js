@@ -1,5 +1,5 @@
 // External runtime inspection only. Real application DOM; synthetic isolated-package data.
-window.p7Init = async () => {
+window.p7Init = async (beforeRender) => {
   const app=document.querySelector('#app').__vue_app__;
   window.p7App=app.config.globalProperties;
   window.p7Stores={};window.p7Saved={};
@@ -9,12 +9,29 @@ window.p7Init = async () => {
     window.p7Saved[key]=JSON.parse(JSON.stringify(window.p7Stores[key].$state));
   }
   window.p7Route=window.p7App.$router.currentRoute.value.fullPath;
+  // Freeze the real transport while synthetic UI data is installed, not only its UI flag.
+  await window.__SPLAYER_PLAYER_CONTROLLER__.pause();
+  for(let attempt=0;attempt<40;attempt++) {
+    const state=await window.Capacitor.nativePromise('AndroidNativePlayback','getState',{});
+    if(!state.playing)break;
+    if(attempt===39)throw Error('Isolated UI fixture could not pause native playback');
+    await new Promise(resolve=>setTimeout(resolve,50));
+  }
+
+  beforeRender?.();
   window.p7Stores.setting.lastfm.enabled=false;
   Object.assign(window.p7Stores.setting,{playerType:'cover',dynamicCover:false,showSpectrums:false,showTran:true,showRoma:true,showWordLyrics:true,lyricFontSizeMode:'adaptive',androidDeviceModeOverride:'auto'});
   Object.assign(window.p7Stores.status,{playStatus:false,playLoading:false,lyricLoading:false,showPlayerComment:false,pureLyricMode:false,playerMetaShow:true,listSortField:'default'});
   window.p7Short='晚风与星光';
   window.p7Long='晚风与星光——直到夏日的最后一颗流星划过海面 / A Gentle Song with a Very Long Multilingual Title';
   window.p7Songs=Array.from({length:18},(_,i)=>({id:99007100+i,name:i?'隔离曲目 '+(i+1):window.p7Short,type:'song',duration:180000,cover:'/images/song.jpg?asset',artists:[{id:990071,name:'合成歌手 / Synthetic artist'}],album:{id:990072,name:'柔和的夏夜'},path:'/phase7-isolated/'+i+'.wav'}));
+  // 通过公开歌曲初始化边界使旧歌词请求失效；无流媒体标识的占位曲不发网络请求。
+  window.__SPLAYER_PLAYER_CONTROLLER__.setupSongUI({...window.p7Songs[0],type:'streaming'},0);
+  for(let attempt=0;attempt<100;attempt++) {
+    if(!window.p7Stores.status.lyricLoading)break;
+    if(attempt===99)throw Error('Isolated lyric initialization did not settle');
+    await new Promise(resolve=>setTimeout(resolve,50));
+  }
   window.p7Stores.music.playSong=window.p7Songs[0];
   window.p7SetLyrics(true);
   window.p7Stores.status.showFullPlayer=true;
@@ -35,11 +52,17 @@ window.p7Measure=(name)=>{
   const root=document.querySelector('.full-player');const style=getComputedStyle(root||document.documentElement);
   return {name,timestamp:Date.now(),fixture:{song:'synthetic isolated music',paused:true,mode:window.p7Stores.setting.androidDeviceModeOverride,word:window.p7Stores.music.isHasYrc,translation:window.p7Stores.setting.showTran,roman:window.p7Stores.setting.showRoma},viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio,visual:{width:visualViewport.width,height:visualViewport.height,scale:visualViewport.scale},screen:{width:screen.width,height:screen.height},ua:navigator.userAgent},safeArea:Object.fromEntries(['top','right','bottom','left'].map(s=>[s,style.getPropertyValue('--safe-area-'+s).trim()])),scrollRoot:{clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth},controlsVisible:document.querySelector('.full-player-mobile-landscape')?.getAttribute('data-controls-visible')||!document.querySelector('.full-player-mobile')?.classList.contains('controls-hidden'),orientationPhase:root?.getAttribute('data-orientation-phase'),elements,controls,targets};
 };
-window.p7Restore=async()=>{
+window.p7Restore=()=>{window.p7Restored=false;return window.p7RestorePromise=(async()=>{
   window.p7Stores.status.showFullPlayer=false;await window.p7App.$router.replace(window.p7Route);
   for(const key of ['music','setting','status'])Object.assign(window.p7Stores[key].$state,window.p7Saved[key]);
+  window.p7Stores.setting.$persist?.();
   window.$modal?.destroyAll();
-};
+  if(window.p7Saved.status.playStatus) {
+    window.p7Stores.status.playStatus=false;
+    await window.__SPLAYER_PLAYER_CONTROLLER__.play();
+  }
+  window.p7Restored=true;
+})();};
 
 window.p24Controls=()=>Array.from(document.querySelectorAll('.mobile-player-bottom-controls .control-section > button,.mobile-player-bottom-controls .control-section > .mode-btn,.mobile-player-bottom-controls .control-section > .ctrl-btn,.player-control .btn > button,.player-control .btn > .btn-icon')).filter(e=>e.getBoundingClientRect().width>0&&!e.closest('[inert]')&&getComputedStyle(e).visibility!=='hidden');
 window.p24State=()=>({viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},calls:window.p24Calls.slice(),controls:window.p24Controls().map(e=>({tag:e.tagName,label:e.getAttribute('aria-label'),pressed:e.getAttribute('aria-pressed'),tabIndex:e.tabIndex,focused:document.activeElement===e,focusVisible:e.matches(':focus-visible'),outline:getComputedStyle(e).outline,rect:e.getBoundingClientRect().toJSON(),icon:e.querySelector('.n-icon')?.getBoundingClientRect().toJSON()})),active:{tag:document.activeElement.tagName,label:document.activeElement.getAttribute('aria-label'),inert:!!document.activeElement.closest('[inert]')},hidden:Array.from(document.querySelectorAll('.full-player [inert]')).map(e=>({class:e.className,containsFocus:e.contains(document.activeElement)}))});

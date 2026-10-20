@@ -89,8 +89,11 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
+          cores: 4
           disable-animations: false
           script: |
+            nproc
+            adb shell getprop ro.hardware
             adb shell wm size '${{ matrix.device.size }}'
             adb shell wm density '${{ matrix.device.density }}'
             adb install -r apks/debug/app-x86_64-debug.apk

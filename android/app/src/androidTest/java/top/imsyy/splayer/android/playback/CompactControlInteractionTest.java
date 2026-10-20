@@ -108,9 +108,10 @@ public class CompactControlInteractionTest {
         f.await("window.ttmlReady===true");
         tap(f,"document.querySelector('.info-page .qa-trigger')");
         f.await("!!document.querySelector('.quick-actions-panel')");
+        f.capture("ttml-more-menu-reachable");
         tap(f,"[...document.querySelectorAll('.quick-actions-panel .qa-item')].find(e=>e.textContent.includes('在线 TTML')).querySelector('.n-switch')");
         try { f.await("fixtureStatus.usingTTMLLyric&&fixtureSetting.showWordLyrics&&p7Stores.music.songLyric.yrcData[0]?.words.length===2"); }
-        catch(AssertionError error) { f.capture("ttml-failure");throw new AssertionError("TTML state="+f.js("JSON.stringify({enabled:fixtureSetting.enableOnlineTTMLLyric,word:fixtureSetting.showWordLyrics,priority:fixtureSetting.lyricPriority,ttml:fixtureStatus.usingTTMLLyric,loading:fixtureStatus.lyricLoading,yrc:p7Stores.music.songLyric.yrcData.length,words:p7Stores.music.songLyric.yrcData[0]?.words.length,lrc:p7Stores.music.songLyric.lrcData.length})"),error); }
+        catch(AssertionError error) { f.capture("ttml-failure");throw new AssertionError("TTML state="+f.js("JSON.stringify({songId:p7Stores.music.playSong.id,songType:p7Stores.music.playSong.type,cacheEnabled:fixtureSetting.cacheEnabled,firstLine:p7Stores.music.songLyric.lrcData[0]?.words[0]?.word,enabled:fixtureSetting.enableOnlineTTMLLyric,word:fixtureSetting.showWordLyrics,priority:fixtureSetting.lyricPriority,ttml:fixtureStatus.usingTTMLLyric,loading:fixtureStatus.lyricLoading,yrc:p7Stores.music.songLyric.yrcData.length,words:p7Stores.music.songLyric.yrcData[0]?.words.length,lrc:p7Stores.music.songLyric.lrcData.length})"),error); }
 
         assertEquals("逐词时间必须来自真实TTML解析", "2000",f.js("p7Stores.music.songLyric.yrcData[0].words[1].startTime"));
         tap(f,"document.querySelector('.mobile-player-bottom-controls .time')");

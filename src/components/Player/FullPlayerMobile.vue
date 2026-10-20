@@ -274,7 +274,7 @@ let savedPageType: MobilePageType = "info";
 import { useMobilePlayerControls } from "@/composables/useMobilePlayerControls";
 import type { ComponentPublicInstance } from "vue";
 import { PLAYER_META_HOLD_KEY } from "@/composables/usePlayerMetaHold";
-import { useSwipe, useElementSize, useElementBounding, useEventListener } from "@vueuse/core";
+import { useSwipe, useElementSize, useEventListener } from "@vueuse/core";
 import { useMusicStore, useStatusStore, useDataStore, useSettingStore } from "@/stores";
 import { useDevice } from "@/composables/useDevice";
 import { useOrientationTransition } from "@/composables/useOrientationTransition";
@@ -342,10 +342,9 @@ const dragHandleRef = ref<HTMLElement | null>(null);
 const { width: coverWidth, height: coverHeight } = useElementSize(coverSectionRef);
 const { height: topBarHeight } = useElementSize(topBarRef);
 const { height: topBarFlowHeight } = useElementSize(topBarRef, undefined, borderBox);
-const { bottom: coverViewportBottom } = useElementBounding(coverSectionRef);
-const { top: playerViewportTop } = useElementBounding(mobileStart);
 const { height: playerViewportHeight } = useElementSize(mobileStart, undefined, borderBox);
-const coverBottom = computed(() => coverViewportBottom.value - playerViewportTop.value);
+// Entry/drag transforms must not expand the invisible gesture layer over metadata actions.
+const coverBottom = computed(() => topBarFlowHeight.value + coverHeight.value);
 
 // 歌词/评论可用性
 // Loading/empty lyrics are page states, not reasons to remove navigation.

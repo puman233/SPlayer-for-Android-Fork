@@ -199,10 +199,18 @@
       "exclusion_reason": "已有发布恢复工具维护，不作为用户功能更新。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:963bbf4dc0475890fd301a20a48846404f1d3cd1",
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "修复远程 UI 测试的重载引用、窗口密度和已批准隐藏解锁入口前提；保留原八项与原性能阈值，无应用功能或签名变化。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "user-visible",
+      "release_ids": [
+        "actions"
+      ],
+      "evidence": "FullPlayerMobile 下拉捕获区改用现有布局流尺寸，避免进场读数遮挡更多按钮；扩充真实按钮/下拉关闭回归。CI 仅调整虚核并保留所有门槛，新增原生与JS双计时。"
     }
   ]
 }

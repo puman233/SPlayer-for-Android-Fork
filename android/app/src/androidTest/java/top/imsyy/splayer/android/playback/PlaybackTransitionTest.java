@@ -151,12 +151,21 @@ public class PlaybackTransitionTest {
       f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.rapidReady=true})");f.await("window.rapidReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       String urls=new org.json.JSONArray(Arrays.asList(server.url("slow"),server.url("middle"),server.url("final"))).toString();
+      long[] nativeFinalPlayingAt={0};
+      androidx.media3.common.Player.Listener nativeTiming=new androidx.media3.common.Player.Listener() {
+        @Override public void onIsPlayingChanged(boolean playing) {
+          var state=manager.buildState();
+          if(playing&&state.optLong("songId")==991562&&server.url("final").equals(state.optString("src"))&&nativeFinalPlayingAt[0]==0)
+            nativeFinalPlayingAt[0]=System.currentTimeMillis();
+        }
+      };
       // Cached final audio can become ready before metadata IPC; exercise that real timing too.
       DataSource warm=AudioCacheProvider.buildCachedDataSourceFactory(f.activity).createDataSource();
       try {
         warm.open(new DataSpec.Builder().setUri(Uri.parse(server.url("final"))).build());
         byte[] bytes=new byte[8192];while(warm.read(bytes,0,bytes.length)!=-1){}
       } finally {warm.close();}
+      f.inst.runOnMainSync(()->manager.getSession().getPlayer().addListener(nativeTiming));
       f.js("window.rapidData=fixturePinia._s.get('data');window.rapidSaved={list:rapidData.playList,original:rapidData.originalPlayList};window.rapidHistory=rapidData.setHistory;rapidData.setHistory=async()=>{};rapidData.playList="+urls+".map((u,i)=>({...p7Songs[0],id:991560+i,type:'streaming',path:undefined,streamUrl:u,name:'Rapid HTTP '+i,duration:2000}));fixtureStatus.personalFmMode=false;fixtureStatus.repeatMode='off';fixtureStatus.playIndex=0;fixtureSetting.useNextPrefetch=false;window.rapidEvents=[];window.rapidIdentityErrors=[];window.rapidListener=Capacitor.addListener('AndroidNativePlayback','playbackStateChanged',e=>{const file=e.src?.startsWith('http://127.0.0.1:')?new URL(e.src).pathname.split('/').pop():'other';const expected={'slow.wav':991560,'middle.wav':991561,'final.wav':991562}[file];if(expected&&e.songId!==expected)rapidIdentityErrors.push({id:e.songId,source:file,playing:e.playing});if(e.playing)rapidEvents.push({id:e.songId,source:e.src?.startsWith('http://127.0.0.1:')?new URL(e.src).pathname.split('/').pop():'other',at:Date.now()})});window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[0],autoPlay:true})");
       try {
         long started=SystemClock.elapsedRealtime();
@@ -165,8 +174,11 @@ public class PlaybackTransitionTest {
         f.js("window.rapidSelectedAt=Date.now();fixtureStatus.playIndex=1;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[1],autoPlay:true});fixtureStatus.playIndex=2;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[2],autoPlay:true})");
         f.await("rapidEvents.some(e=>e.id===991562)");
         java.io.File timingDir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(timingDir.exists()||timingDir.mkdirs());
-        String timing=f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt})");
+        long[] nativeAt={0};f.inst.runOnMainSync(()->nativeAt[0]=nativeFinalPlayingAt[0]);
+        long selectedAt=(long)Double.parseDouble(f.js("rapidSelectedAt"));
+        String timing=f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt,nativeFirstPlayingDelayMs:"+(nativeAt[0]-selectedAt)+"})");
         try(var out=new PrintWriter(new File(timingDir,"rapid-http-first-playing.json"),"UTF-8")){out.print(timing);}
+        assertTrue("Native final playback must meet the same latency limit: "+timing,nativeAt[0]>=selectedAt&&nativeAt[0]-selectedAt<1500);
         assertEquals("Slow old request must not hold final selection for seconds: "+timing,"true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
         SystemClock.sleep(2000);
         java.io.File dir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(dir.exists()||dir.mkdirs());
@@ -174,7 +186,7 @@ public class PlaybackTransitionTest {
         assertEquals("Every native resource event must carry its matching identity: "+f.js("JSON.stringify(rapidIdentityErrors)"),"true",f.js("rapidIdentityErrors.length===0"));
         assertEquals("Old and intermediate audio must never play after final selection: "+f.js("JSON.stringify(rapidEvents)"),"true",f.js("rapidEvents.filter(e=>e.at>=rapidSelectedAt).every(e=>e.id===991562&&e.source==='final.wav')"));
       } finally {
-        f.inst.runOnMainSync(manager::pause);
+        f.inst.runOnMainSync(()->{manager.getSession().getPlayer().removeListener(nativeTiming);manager.pause();});
         f.js("Promise.resolve(rapidListener).then(h=>h.remove());rapidData.playList=rapidSaved.list;rapidData.originalPlayList=rapidSaved.original;rapidData.setHistory=rapidHistory;p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext())");f.await("window.p7Restored===true");
       }
     }

@@ -104,8 +104,8 @@ public class PortraitPlayerLayoutTest {
               MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),i==0?MotionEvent.ACTION_DOWN:MotionEvent.ACTION_MOVE,x+direction*i*4*scale,y,0);
               e.setSource(InputDevice.SOURCE_TOUCHSCREEN);f.inst.runOnMainSync(()->f.web.dispatchTouchEvent(e));e.recycle();SystemClock.sleep(40);
             }
-            JSONObject heldAll=geometry(f),held=heldAll.getJSONObject("info");
             f.capture("metadata-held-horizontal-"+target+"-"+direction);
+            JSONObject heldAll=geometry(f),held=heldAll.getJSONObject("info");
             assertEquals("信息区必须随封面整页移动，不能独立侧移: "+target,before.getDouble("left")-beforeAll.getJSONObject("cover").getDouble("left"),held.getDouble("left")-heldAll.getJSONObject("cover").getDouble("left"),1.0);
             assertEquals("整页跟手且保留原有页边界阻尼: "+target,direction*(boundary?9.6:32),held.getDouble("left")-before.getDouble("left"),1.0);
             assertEquals("信息区自身不能水平滚动","0",f.js("document.querySelector('.info-group').scrollLeft"));
@@ -124,6 +124,23 @@ public class PortraitPlayerLayoutTest {
         }
         f.await("document.querySelector('.full-player-mobile').classList.contains('lyric-active')");
         assertEquals("从信息区横滑必须切换到歌词页","true",f.js("!!document.querySelector('.lyric-page .player-lyric')"));
+        f.tapVisible("document.querySelectorAll('.mobile-player-bottom-controls .pagination .dot')[0]");
+        f.await("!document.querySelector('.full-player-mobile').classList.contains('lyric-active')");
+        f.await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&document.querySelector('.full-player')?.contains(a.effect?.target))");
+        assertEquals("下拉捕获区必须覆盖封面并止于信息区之前，不能保留进场动画坐标", "true", f.js("(()=>{const h=document.querySelector('.full-player-mobile .drag-handle').getBoundingClientRect(),c=document.querySelector('.cover-section').getBoundingClientRect(),i=document.querySelector('.info-group').getBoundingClientRect();return h.bottom>=c.bottom-1&&h.bottom<=i.top+1})()"));
+        f.tapVisible("document.querySelector('.info-page .qa-trigger')");
+        f.await("!!document.querySelector('.quick-actions-panel')");
+        f.tapVisible("document.querySelector('.info-page .qa-trigger')");
+        f.await("!document.querySelector('.quick-actions-panel')");
+        JSONObject cover=new JSONObject((String)new JSONTokener(f.js("JSON.stringify(document.querySelector('.cover-section').getBoundingClientRect().toJSON())")).nextValue());
+        float closeX=(float)(cover.getDouble("x")+cover.getDouble("width")*.5)*scale;
+        float closeY=(float)(cover.getDouble("y")+Math.min(40,cover.getDouble("height")*.25))*scale;
+        long closeDown=SystemClock.uptimeMillis();
+        for(int i=0;i<=16;i++) {
+          MotionEvent e=MotionEvent.obtain(closeDown,SystemClock.uptimeMillis(),i==0?MotionEvent.ACTION_DOWN:i==16?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE,closeX,closeY+i*10*scale,0);
+          e.setSource(InputDevice.SOURCE_TOUCHSCREEN);f.inst.runOnMainSync(()->f.web.dispatchTouchEvent(e));e.recycle();SystemClock.sleep(25);
+        }
+        f.await("!document.querySelector('.full-player')");
       } finally {
         f.js("p7Restore()");f.await("window.p7Restored===true");
         f.inst.runOnMainSync(()->f.activity.setRequestedOrientation(orientation));

@@ -349,6 +349,7 @@ public final class PlaybackManager {
 
   public synchronized void detachService(PlaybackService playbackService) {
     if (service == playbackService) {
+      cancelNotificationUpdate();
       service = null;
       serviceStarted = false;
     }
@@ -1758,7 +1759,36 @@ public final class PlaybackManager {
     }
   }
 
+  // Media3 emits several callbacks for one transition. Keep the first foreground
+  // notification immediate, then publish the newest snapshot at most every 200ms.
+  private long lastNotificationUpdateAt;
+  private boolean notificationUpdatePending;
+  private final Runnable notificationUpdateTask = () -> {
+    notificationUpdatePending = false;
+    publishNotification();
+  };
+
+  private void cancelNotificationUpdate() {
+    mainHandler.removeCallbacks(notificationUpdateTask);
+    notificationUpdatePending = false;
+    lastNotificationUpdateAt = 0L;
+  }
+
   private void updateNotification() {
+    if (service == null || player == null) return;
+    long now = android.os.SystemClock.uptimeMillis();
+    long remaining = 200L - (now - lastNotificationUpdateAt);
+    if (lastNotificationUpdateAt == 0L || remaining <= 0L) {
+      mainHandler.removeCallbacks(notificationUpdateTask);
+      notificationUpdatePending = false;
+      publishNotification();
+    } else if (!notificationUpdatePending) {
+      notificationUpdatePending = true;
+      mainHandler.postDelayed(notificationUpdateTask, remaining);
+    }
+  }
+
+  private void publishNotification() {
     if (service == null || player == null) {
       return;
     }
@@ -1772,6 +1802,7 @@ public final class PlaybackManager {
       return;
     }
 
+    lastNotificationUpdateAt = android.os.SystemClock.uptimeMillis();
     Notification notification = buildNotification();
     // 仅在「用户主动暂停」撤前台。ENDED / IDLE / BUFFERING 是过渡态，提前撤前台
     // 会被 Android 12+ 拒 (ForegroundServiceStartNotAllowedException)，导致 NEXT 哑火。
@@ -1989,6 +2020,7 @@ public final class PlaybackManager {
   }
 
   private synchronized void clearNotification() {
+    cancelNotificationUpdate();
     stopProgressUpdates();
 
     if (service != null) {

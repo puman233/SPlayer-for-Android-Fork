@@ -54,6 +54,7 @@ final class DeviceWebFixture implements AutoCloseable {
         + "; nativeSize=" + web.getWidth() + "x" + web.getHeight());
   }
   void tapVisible(String expression) throws Exception {
+    await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&(document.querySelector('.full-player')?.contains(a.effect?.target)||a.effect?.target?.closest?.('.n-popover,.quick-actions-panel')))");
     String point="(()=>{const e="+expression+";if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;return r.width>0&&r.height>0&&e.contains(document.elementFromPoint(x,y))?{x,y}:null})()";
     try {await("!!"+point);}
     catch(AssertionError error) {

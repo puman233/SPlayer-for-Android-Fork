@@ -187,7 +187,7 @@ public class PlaybackTransitionTest {
         assertEquals("Every native resource event must carry its matching identity: "+f.js("JSON.stringify(rapidIdentityErrors)"),"true",f.js("rapidIdentityErrors.length===0"));
         assertEquals("Old and intermediate audio must never play after final selection: "+f.js("JSON.stringify(rapidEvents)"),"true",f.js("rapidEvents.filter(e=>e.at>=rapidSelectedAt).every(e=>e.id===991562&&e.source==='final.wav')"));
       } finally {
-        f.js("window.rapidObserver?.disconnect();if(window.rapidNativePromise)window.Capacitor.nativePromise=rapidNativePromise");
+        f.js("window.rapidObserver?.disconnect();if(window.rapidNativePromise)window.Capacitor.nativePromise=rapidNativePromise;if(window.rapidStorageSetItem)Storage.prototype.setItem=rapidStorageSetItem");
         f.inst.runOnMainSync(()->{manager.getSession().getPlayer().removeListener(nativeTiming);manager.pause();});
         f.js("Promise.resolve(rapidListener).then(h=>h.remove());rapidData.playList=rapidSaved.list;rapidData.originalPlayList=rapidSaved.original;rapidData.setHistory=rapidHistory;p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext())");f.await("window.p7Restored===true");
       }

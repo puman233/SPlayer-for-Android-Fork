@@ -53,10 +53,11 @@ final class DeviceWebFixture implements AutoCloseable {
         + "; nativeDisplay=" + activity.getDisplay().getDisplayId()
         + "; nativeSize=" + web.getWidth() + "x" + web.getHeight());
   }
-  void tapVisible(String expression) throws Exception {
-    awaitVisualState();
-    await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&(document.querySelector('.full-player')?.contains(a.effect?.target)||a.effect?.target?.closest?.('.n-popover,.quick-actions-panel')))");
-    String point="(()=>{const e="+expression+";if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;return r.width>0&&r.height>0&&e.contains(document.elementFromPoint(x,y))?{x,y}:null})()";
+  void tapVisible(String expression) throws Exception { tapVisible(expression, 0.5, 0.5); }
+  void tapVisible(String expression, double fractionX, double fractionY) throws Exception {
+    // Prepare the hit target and listener atomically; no extra WebView round trips
+    // between the valid sample and native input (controls may auto-hide meanwhile).
+    String point="(()=>{if(document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&(document.querySelector('.full-player')?.contains(a.effect?.target)||a.effect?.target?.closest?.('.n-popover,.quick-actions-panel'))))return null;const e="+expression+";if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width*"+fractionX+",y=r.y+r.height*"+fractionY+";if(!(r.width>0&&r.height>0&&e.contains(document.elementFromPoint(x,y))))return null;window.fixtureClickSeen=false;window.fixtureInputTrace=[];window.fixtureInputProbe=e=>fixtureInputTrace.push({type:e.type,target:String(e.target?.className),time:e.timeStamp,x:e.clientX??e.changedTouches?.[0]?.clientX,y:e.clientY??e.changedTouches?.[0]?.clientY});window.fixtureInputTypes=['pointerdown','pointerup','pointercancel','touchstart','touchend','click','contextmenu'];fixtureInputTypes.forEach(t=>document.addEventListener(t,fixtureInputProbe,true));e.addEventListener('click',()=>window.fixtureClickSeen=true,{capture:true,once:true});return {x,y,viewportWidth:innerWidth}})()";
     String sampledPoint = "null";
     try {
       for (int attempt=0;attempt<100;attempt++) {
@@ -72,8 +73,7 @@ final class DeviceWebFixture implements AutoCloseable {
       throw new AssertionError("触摸目标="+js("JSON.stringify((()=>{const e="+expression+";if(!e)return {missing:true};const r=e.getBoundingClientRect();return {rect:r.toJSON(),viewport:[innerWidth,innerHeight],controlsHidden:document.querySelector('.full-player-mobile')?.classList.contains('controls-hidden'),inert:!!e.closest('[inert]'),visibility:getComputedStyle(e).visibility,opacity:getComputedStyle(e).opacity,stack:document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).slice(0,7).map(n=>({cls:String(n.className),tag:n.tagName,rect:n.getBoundingClientRect().toJSON()}))}})())"),error);
     }
     var p=new org.json.JSONObject(sampledPoint);
-    float scale=(float)(web.getWidth()/Double.parseDouble(js("innerWidth")));
-    js("window.fixtureClickSeen=false;window.fixtureInputTrace=[];window.fixtureInputProbe=e=>fixtureInputTrace.push({type:e.type,target:String(e.target?.className),time:e.timeStamp,x:e.clientX??e.changedTouches?.[0]?.clientX,y:e.clientY??e.changedTouches?.[0]?.clientY});window.fixtureInputTypes=['pointerdown','pointerup','pointercancel','touchstart','touchend','click','contextmenu'];fixtureInputTypes.forEach(t=>document.addEventListener(t,fixtureInputProbe,true));("+expression+").addEventListener('click',()=>window.fixtureClickSeen=true,{capture:true,once:true})");
+    float scale=(float)(web.getWidth()/p.getDouble("viewportWidth"));
     long down=SystemClock.uptimeMillis();
     for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP}) {
       var event=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,(float)p.getDouble("x")*scale,(float)p.getDouble("y")*scale,0);

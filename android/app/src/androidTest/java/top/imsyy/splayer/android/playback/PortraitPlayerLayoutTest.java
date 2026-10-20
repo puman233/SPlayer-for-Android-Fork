@@ -124,6 +124,9 @@ public class PortraitPlayerLayoutTest {
         }
         f.await("document.querySelector('.full-player-mobile').classList.contains('lyric-active')");
         assertEquals("从信息区横滑必须切换到歌词页","true",f.js("!!document.querySelector('.lyric-page .player-lyric')"));
+        // Exercise the real idle state, then wake controls with touch before using them.
+        f.await("document.querySelector('.full-player-mobile').classList.contains('controls-hidden')");
+        f.tapVisible("document.querySelector('.lyric-page')", 0.02, 0.5);
         f.tapVisible("document.querySelectorAll('.mobile-player-bottom-controls .pagination .dot')[0]");
         f.await("!document.querySelector('.full-player-mobile').classList.contains('lyric-active')");
         f.await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&document.querySelector('.full-player')?.contains(a.effect?.target))");

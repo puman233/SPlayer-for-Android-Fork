@@ -234,13 +234,25 @@
       "exclusion_reason": "修正诊断脚本全局引用和Lint，并补充公开存储耗时记录；测试数量和门槛不变。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:6f6e687fa452fc8bb8cb10197c132360661a0e3b",
       "classification": "user-visible",
       "release_ids": [
         "transition",
         "android"
       ],
       "evidence": "普通原生加载以一次桥接命令携带歌曲身份并在同一管理器锁内提交，去除元数据ACK后才能发load的串行等待；保留跨曲/暂停/seek守卫和原1500ms断言。测试使用绘制就绪后单次命中采样。"
+    },
+    {
+      "source": "commit:032e5d1249a3948f2ef99244bae47a36dc361512",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "仅测试专用主线程采样与失败状态诊断；不改变应用、版本、原断言或性能阈值。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "修正真实触摸测试前提：静置后先触摸空白边距唤醒再点击分页，将动画/命中/监听/视口宽度原子采样；保留原检查及1500ms限值，公开功能与文案不变。"
     }
   ]
 }

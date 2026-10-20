@@ -166,17 +166,18 @@ public class PlaybackTransitionTest {
         byte[] bytes=new byte[8192];while(warm.read(bytes,0,bytes.length)!=-1){}
       } finally {warm.close();}
       f.inst.runOnMainSync(()->manager.getSession().getPlayer().addListener(nativeTiming));
+      try(var in=f.inst.getContext().getAssets().open("rapid-playback-diagnostic.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
       f.js("window.rapidData=fixturePinia._s.get('data');window.rapidSaved={list:rapidData.playList,original:rapidData.originalPlayList};window.rapidHistory=rapidData.setHistory;rapidData.setHistory=async()=>{};rapidData.playList="+urls+".map((u,i)=>({...p7Songs[0],id:991560+i,type:'streaming',path:undefined,streamUrl:u,name:'Rapid HTTP '+i,duration:2000}));fixtureStatus.personalFmMode=false;fixtureStatus.repeatMode='off';fixtureStatus.playIndex=0;fixtureSetting.useNextPrefetch=false;window.rapidEvents=[];window.rapidIdentityErrors=[];window.rapidListener=Capacitor.addListener('AndroidNativePlayback','playbackStateChanged',e=>{const file=e.src?.startsWith('http://127.0.0.1:')?new URL(e.src).pathname.split('/').pop():'other';const expected={'slow.wav':991560,'middle.wav':991561,'final.wav':991562}[file];if(expected&&e.songId!==expected)rapidIdentityErrors.push({id:e.songId,source:file,playing:e.playing});if(e.playing)rapidEvents.push({id:e.songId,source:e.src?.startsWith('http://127.0.0.1:')?new URL(e.src).pathname.split('/').pop():'other',at:Date.now()})});window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[0],autoPlay:true})");
       try {
         long started=SystemClock.elapsedRealtime();
         while(server.slowRequests.get()==0&&SystemClock.elapsedRealtime()-started<5000)SystemClock.sleep(30);
         assertTrue("First track must actually be loading over HTTP",server.slowRequests.get()>0);
-        f.js("window.rapidSelectedAt=Date.now();fixtureStatus.playIndex=1;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[1],autoPlay:true});fixtureStatus.playIndex=2;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[2],autoPlay:true})");
+        f.js("window.rapidSelectedAt=Date.now();rapidTrace.push({mark:'selection',start:rapidSelectedAt-rapidTraceStart});fixtureStatus.playIndex=1;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[1],autoPlay:true});rapidTrace.push({mark:'middle-returned',start:Date.now()-rapidTraceStart});fixtureStatus.playIndex=2;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[2],autoPlay:true});rapidTrace.push({mark:'final-returned',start:Date.now()-rapidTraceStart})");
         f.await("rapidEvents.some(e=>e.id===991562)");
         java.io.File timingDir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(timingDir.exists()||timingDir.mkdirs());
         long[] nativeAt={0};f.inst.runOnMainSync(()->nativeAt[0]=nativeFinalPlayingAt[0]);
         long selectedAt=(long)Double.parseDouble(f.js("rapidSelectedAt"));
-        String timing=f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt,nativeFirstPlayingDelayMs:"+(nativeAt[0]-selectedAt)+"})");
+        String timing=f.js("JSON.stringify({bridge:rapidTrace,longTasks:rapidLongTasks,events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt,nativeFirstPlayingDelayMs:"+(nativeAt[0]-selectedAt)+"})");
         try(var out=new PrintWriter(new File(timingDir,"rapid-http-first-playing.json"),"UTF-8")){out.print(timing);}
         assertTrue("Native final playback must meet the same latency limit: "+timing,nativeAt[0]>=selectedAt&&nativeAt[0]-selectedAt<1500);
         assertEquals("Slow old request must not hold final selection for seconds: "+timing,"true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
@@ -186,6 +187,7 @@ public class PlaybackTransitionTest {
         assertEquals("Every native resource event must carry its matching identity: "+f.js("JSON.stringify(rapidIdentityErrors)"),"true",f.js("rapidIdentityErrors.length===0"));
         assertEquals("Old and intermediate audio must never play after final selection: "+f.js("JSON.stringify(rapidEvents)"),"true",f.js("rapidEvents.filter(e=>e.at>=rapidSelectedAt).every(e=>e.id===991562&&e.source==='final.wav')"));
       } finally {
+        f.js("window.rapidObserver?.disconnect();if(window.rapidNativePromise)window.Capacitor.nativePromise=rapidNativePromise");
         f.inst.runOnMainSync(()->{manager.getSession().getPlayer().removeListener(nativeTiming);manager.pause();});
         f.js("Promise.resolve(rapidListener).then(h=>h.remove());rapidData.playList=rapidSaved.list;rapidData.originalPlayList=rapidSaved.original;rapidData.setHistory=rapidHistory;p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext())");f.await("window.p7Restored===true");
       }

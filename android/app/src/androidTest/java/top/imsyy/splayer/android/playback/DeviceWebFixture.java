@@ -56,12 +56,21 @@ final class DeviceWebFixture implements AutoCloseable {
   void tapVisible(String expression) throws Exception {
     await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&(document.querySelector('.full-player')?.contains(a.effect?.target)||a.effect?.target?.closest?.('.n-popover,.quick-actions-panel')))");
     String point="(()=>{const e="+expression+";if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;return r.width>0&&r.height>0&&e.contains(document.elementFromPoint(x,y))?{x,y}:null})()";
-    try {await("!!"+point);}
+    String sampledPoint = "null";
+    try {
+      for (int attempt=0;attempt<100;attempt++) {
+        Object decodedPoint=new org.json.JSONTokener(js("JSON.stringify("+point+")")).nextValue();
+        sampledPoint=decodedPoint instanceof String ? (String)decodedPoint : "null";
+        if (!"null".equals(sampledPoint)) break;
+        SystemClock.sleep(100);
+      }
+      assertNotEquals("触摸坐标必须来自同一次有效命中采样", "null", sampledPoint);
+    }
     catch(AssertionError error) {
       capture("touch-target-unreachable");
       throw new AssertionError("触摸目标="+js("JSON.stringify((()=>{const e="+expression+";if(!e)return {missing:true};const r=e.getBoundingClientRect();return {rect:r.toJSON(),viewport:[innerWidth,innerHeight],stack:document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).slice(0,7).map(n=>({cls:String(n.className),tag:n.tagName,rect:n.getBoundingClientRect().toJSON()}))}})())"),error);
     }
-    var p=new org.json.JSONObject((String)new org.json.JSONTokener(js("JSON.stringify("+point+")")).nextValue());
+    var p=new org.json.JSONObject(sampledPoint);
     float scale=(float)(web.getWidth()/Double.parseDouble(js("innerWidth")));
     js("window.fixtureClickSeen=false;("+expression+").addEventListener('click',()=>window.fixtureClickSeen=true,{capture:true,once:true})");
     long down=SystemClock.uptimeMillis();

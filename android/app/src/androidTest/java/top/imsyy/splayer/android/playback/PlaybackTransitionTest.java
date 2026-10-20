@@ -146,7 +146,8 @@ public class PlaybackTransitionTest {
   }
 
   @Test public void rapidSelectionsDoNotWaitForOrReturnToTheOldHttpAudio() throws Exception {
-    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true)) {
+    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true);
+        MainThreadTrace trace=new MainThreadTrace(f.activity,"rapid-main-thread")) {
       try(var in=f.inst.getContext().getAssets().open("r23-player-fixture.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
       f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.rapidReady=true})");f.await("window.rapidReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);

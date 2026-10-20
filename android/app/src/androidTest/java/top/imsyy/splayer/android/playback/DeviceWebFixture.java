@@ -69,7 +69,7 @@ final class DeviceWebFixture implements AutoCloseable {
     }
     catch(AssertionError error) {
       capture("touch-target-unreachable");
-      throw new AssertionError("触摸目标="+js("JSON.stringify((()=>{const e="+expression+";if(!e)return {missing:true};const r=e.getBoundingClientRect();return {rect:r.toJSON(),viewport:[innerWidth,innerHeight],stack:document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).slice(0,7).map(n=>({cls:String(n.className),tag:n.tagName,rect:n.getBoundingClientRect().toJSON()}))}})())"),error);
+      throw new AssertionError("触摸目标="+js("JSON.stringify((()=>{const e="+expression+";if(!e)return {missing:true};const r=e.getBoundingClientRect();return {rect:r.toJSON(),viewport:[innerWidth,innerHeight],controlsHidden:document.querySelector('.full-player-mobile')?.classList.contains('controls-hidden'),inert:!!e.closest('[inert]'),visibility:getComputedStyle(e).visibility,opacity:getComputedStyle(e).opacity,stack:document.elementsFromPoint(r.x+r.width/2,r.y+r.height/2).slice(0,7).map(n=>({cls:String(n.className),tag:n.tagName,rect:n.getBoundingClientRect().toJSON()}))}})())"),error);
     }
     var p=new org.json.JSONObject(sampledPoint);
     float scale=(float)(web.getWidth()/Double.parseDouble(js("innerWidth")));

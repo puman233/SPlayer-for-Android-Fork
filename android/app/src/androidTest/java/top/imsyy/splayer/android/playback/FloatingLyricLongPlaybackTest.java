@@ -292,7 +292,13 @@ public class FloatingLyricLongPlaybackTest {
       try {
         // 只记录歌词提交；后台循环中仍不执行 JS，也不改变提交内容或调用顺序。
         f.js("window.longLyricTrace=[];window.longSetLyric=longMusic.setSongLyric;longMusic.setSongLyric=function(data,...rest){longLyricTrace.push({at:Date.now(),id:this.playSong?.id,lrc:data.lrcData?.length,yrc:data.yrcData?.length,stack:new Error().stack});return longSetLyric.call(this,data,...rest)}");
-        f.await("window.longReady===true");
+        try(MainThreadTrace trace=new MainThreadTrace(f.activity,"long-startup-main-thread")) {
+          try { f.await("window.longReady===true"); }
+          catch(AssertionError error) {
+            error.addSuppressed(new AssertionError("Background startup state="+f.js("JSON.stringify({ready:window.longReady,error:window.longError,token:longController.currentRequestToken,loading:fixtureStatus.playLoading,song:longMusic.playSong.id})")));
+            throw error;
+          }
+        }
         f.await("longMusic.songLyric.lrcData.length>=90");
         f.await("fixtureStatus.playStatus===true&&fixtureStatus.currentTime>0");
         f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);

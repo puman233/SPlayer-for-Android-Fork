@@ -1,3 +1,4 @@
+import type { PlaybackMetadata } from "@/types/shared/playback";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { likeSong } from "@/api/song";
 import { useMusicStore, useSettingStore, useStatusStore } from "@/stores";
@@ -330,6 +331,22 @@ class MediaSessionManager {
     }
   }
 
+  public buildAndroidMetadata(songOverride?: ReturnType<typeof getPlaySongData>): PlaybackMetadata | undefined {
+    const song = songOverride || getPlaySongData() || useMusicStore().playSong;
+    if (!song) return;
+    const metadata = this.buildMetadata(song);
+    // Native decoders need the original local URI, not WebView's HTTPS file mapping.
+    const rawCover = typeof song.cover === "string" ? song.cover : "";
+    const coverUrl = song.path && (rawCover.startsWith("file://") || rawCover.startsWith("content://"))
+      ? rawCover : metadata.coverUrl;
+    return {
+      songId: typeof song.id === "number" ? song.id : undefined,
+      title: metadata.title, artist: metadata.artist, album: metadata.album,
+      coverUrl, durationMs: song.duration || 0,
+      canLike: !song.path && song.type !== "streaming",
+    };
+  }
+
   public async updateMetadata(songOverride?: ReturnType<typeof getPlaySongData>, forSource?: string) {
     if (!("mediaSession" in navigator) && !this.shouldUseNativeMedia()) return;
 
@@ -343,32 +360,15 @@ class MediaSessionManager {
     }
     this.metadataAbortController = new AbortController();
     const { signal } = this.metadataAbortController;
-    const metadata = this.buildMetadata(song);
 
     if (isCapacitorAndroid) {
       await this.syncAndroidApiContext();
       if (signal.aborted || musicStore.playSong.id !== song.id) return;
-      // 本地歌曲封面：JS 侧 metadata.coverUrl 已经被 Capacitor.convertFileSrc 转成
-      // https://localhost/_capacitor_file_/...，原生 HttpURLConnection 拿不到自签证书。
-      // 这里优先取 song.cover 的原始 file:// 路径交给 Java，Java 侧的 file:// 分支可直接 decodeFile。
-      const rawCover = typeof song.cover === "string" ? song.cover : "";
-      const nativeCoverUrl =
-        song.path && (rawCover.startsWith("file://") || rawCover.startsWith("content://"))
-          ? rawCover
-          : metadata.coverUrl;
-      await AndroidNativePlayback.updateMetadata({
-        forSource,
-        songId: typeof song.id === "number" ? song.id : undefined,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.album,
-        coverUrl: nativeCoverUrl,
-        durationMs: song.duration || 0,
-        canLike: !song.path && song.type !== "streaming",
-      });
+      await AndroidNativePlayback.updateMetadata({ ...this.buildAndroidMetadata(song)!, forSource });
       return;
     }
 
+    const metadata = this.buildMetadata(song);
     if (this.shouldUseNativeMedia() && settingStore.smtcOpen) {
       try {
         let coverBuffer: Uint8Array | undefined;

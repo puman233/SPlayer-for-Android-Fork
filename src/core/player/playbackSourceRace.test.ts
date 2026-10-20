@@ -17,11 +17,14 @@ const song = (id: number) => ({ id, name: `song${id}`, duration: 60000, type: "r
 function fixture(native = false) {
   const listeningEvents: string[] = [];
   const loadedSources: string[] = [];
+  const loadedOptions: any[] = [];
+  const metadataUpdates: any[] = [];
   const pending: ReturnType<typeof deferred>[] = [];
   const notices: string[] = [];
   let loadCompletion: Promise<any> | undefined;
   let resumeCompletion: Promise<any> | undefined;
   let metadataCompletion: Promise<any> | undefined;
+  let contextCompletion: Promise<any> | undefined;
   const retryDelays: ReturnType<typeof deferred>[] = [];
   const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, lastfm: { enabled: false } };
   const status: any = { currentTime: 1000, duration: 60000, playStatus: true, playLoading: false,
@@ -35,7 +38,7 @@ function fixture(native = false) {
     stop() { audio.src = ""; audio.paused = true; },
     pause() { audio.paused = true; callbacks.get("pause")?.(); },
     async play(url: string, options: any) {
-      loadedSources.push(url);
+      loadedSources.push(url); loadedOptions.push(options);
       audio.src = url; audio.currentTime = options.seek; audio.paused = !options.autoPlay;
       callbacks.get(options.autoPlay ? "play" : "pause")?.();
       await loadCompletion;
@@ -58,7 +61,7 @@ function fixture(native = false) {
     "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
     "@/utils/time": { calculateProgress: (time: number, duration: number) => time / duration },
     "@/utils/lastfmScrobbler": { default: { resume: () => listeningEvents.push("resume"), pause: () => listeningEvents.push("pause") } },
-    "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: () => metadataCompletion, updateState: noop } },
+    "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: (song: any, source: string) => { metadataUpdates.push({ songId: song?.id, source }); return metadataCompletion; }, syncAndroidApiContext: () => contextCompletion, buildAndroidMetadata: () => ({ songId: music.playSong.id, title: music.playSong.name, artist: "fixture", album: "fixture", coverUrl: "", durationMs: 60000 }), updateState: noop } },
     "./PlayModeManager": { PlayModeManager: class {} },
     "./PlayerIpc": new Proxy({}, { get: () => noop }),
     "lodash-es": { throttle: (fn: any) => Object.assign(fn, { cancel: noop }) },
@@ -74,8 +77,9 @@ function fixture(native = false) {
     setTimeout: () => 0, clearTimeout: noop,
   });
   return { controller: module.exports.usePlayerController(), status, music, audio, pending, notices,
-    listeningEvents, loadedSources, emit: (name: string) => callbacks.get(name)?.(),
+    listeningEvents, loadedSources, loadedOptions, metadataUpdates, emit: (name: string) => callbacks.get(name)?.(),
     retryDelays, emitError: () => callbacks.get("error")?.({ detail: { errorCode: 2 } }),
+    delayContext: (promise?: Promise<any>) => { contextCompletion = promise; },
     delayMetadata: (promise?: Promise<any>) => { metadataCompletion = promise; },
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
     delayResume: (promise: Promise<any>) => { resumeCompletion = promise; } };
@@ -249,9 +253,9 @@ test("rapid song selections load only the final target when older source respons
 });
 
 
-test("native audio waits for matching metadata and preserves pause and seek during that wait", async () => {
+test("native audio preserves pause and seek while API context synchronizes", async () => {
   const f = fixture(true), metadata = deferred();
-  f.delayMetadata(metadata.promise);
+  f.delayContext(metadata.promise);
   const job = f.controller.loadAndPlay("prepared-audio", true, 1000);
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.deepEqual(f.loadedSources, []);
@@ -264,14 +268,14 @@ test("native audio waits for matching metadata and preserves pause and seek duri
   assert.equal(f.audio.currentTime, 9);
 });
 
-test("an obsolete metadata completion cannot load an older selected song", async () => {
+test("an obsolete API-context completion cannot load an older selected song", async () => {
   const f = fixture(true), metadata = deferred();
-  f.delayMetadata(metadata.promise);
+  f.delayContext(metadata.promise);
   const first = f.controller.playSong({ song: song(2) });
   f.pending[0].resolve({ url: "old-native-audio" });
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.deepEqual(f.loadedSources, []);
-  f.delayMetadata();
+  f.delayContext();
   const final = f.controller.playSong({ song: song(3) });
   f.pending[1].resolve({ url: "final-native-audio" });
   await final;
@@ -279,4 +283,34 @@ test("an obsolete metadata completion cannot load an older selected song", async
   await first;
   assert.deepEqual(f.loadedSources, ["final-native-audio"]);
   assert.equal(f.music.playSong.id, 3);
+});
+
+test("native cached audio carries identity in its load instead of waiting for a metadata reply", async () => {
+  const f = fixture(true), metadata = deferred();
+  f.delayMetadata(metadata.promise);
+  const job = f.controller.loadAndPlay("cached-final-audio", true, 0);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  try {
+    assert.deepEqual([...f.loadedSources], ["cached-final-audio"]);
+    assert.equal(f.loadedOptions[0].metadata.songId, 1);
+  } finally {
+    metadata.resolve(undefined);
+    await job;
+  }
+});
+
+
+test("a superseded native crossfade cannot stage another track's metadata after context sync", async () => {
+  const f = fixture(true), context = deferred();
+  f.delayContext(context.promise);
+  const obsolete = f.controller.loadAndPlay("obsolete-crossfade", true, 0, { duration: 1 });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  f.delayContext();
+  const latest = f.controller.playSong({ song: song(2) });
+  f.pending[0].resolve({ url: "latest-native-audio" });
+  await latest;
+  context.resolve(undefined);
+  await obsolete;
+  assert.deepEqual([...f.metadataUpdates], []);
+  assert.deepEqual([...f.loadedSources], ["latest-native-audio"]);
 });

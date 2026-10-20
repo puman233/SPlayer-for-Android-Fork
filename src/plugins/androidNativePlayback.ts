@@ -1,3 +1,4 @@
+import type { PlaybackMetadata } from "@/types/shared/playback";
 import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export interface AndroidNativePlaybackState {
@@ -15,21 +16,15 @@ export interface AndroidNativePlaybackState {
 }
 
 export interface AndroidNativeLoadOptions {
+  metadata?: PlaybackMetadata;
   url: string;
   positionMs?: number;
   autoPlay?: boolean;
 }
 
-export interface AndroidNativeMetadataPayload {
+export interface AndroidNativeMetadataPayload extends PlaybackMetadata {
   /** 仅供下一次加载此资源时原子应用；省略时立即更新当前资源。 */
   forSource?: string;
-  songId?: number;
-  title: string;
-  artist: string;
-  album: string;
-  coverUrl: string;
-  durationMs: number;
-  canLike?: boolean;
 }
 
 /**

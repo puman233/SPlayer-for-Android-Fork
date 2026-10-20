@@ -203,3 +203,18 @@ test("a control recovery query cannot rewind a seek issued after the query began
   f.player.seek(12); recovery.result.resolve(state(undefined, true)); await tick();
   assert.equal(f.player.currentTime, 12);
 });
+
+test("load sends track metadata with the audio command before any playback event", async () => {
+  const f = fixture();
+  const metadata = { songId: 4000000001, title: "New track", artist: "Artist", album: "Album", coverUrl: "file:///cover.jpg", durationMs: 9000 };
+  const job = f.player.play("fixture://final", { autoPlay: true, metadata });
+  const load = f.commands.find(c => c.name === "load")!;
+  try {
+    assert.equal(load.args.metadata?.songId, 4000000001);
+    assert.equal(load.args.metadata?.title, "New track");
+    assert.equal(load.args.url, "fixture://final");
+  } finally {
+    load.result.resolve({ src: "fixture://final", paused: false });
+    await job;
+  }
+});

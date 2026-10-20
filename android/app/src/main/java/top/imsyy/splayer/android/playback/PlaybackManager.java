@@ -447,6 +447,13 @@ public final class PlaybackManager {
     return buildState();
   }
 
+  /** Commit the matching identity and resource while holding the same manager lock. */
+  public synchronized JSObject load(
+      String url, long positionMs, boolean autoPlay, @Nullable TrackMetadata metadata) {
+    if (metadata != null) stageMetadataForSource(url, metadata);
+    return load(url, positionMs, autoPlay);
+  }
+
   public synchronized JSObject play() {
     ensureInitialized();
     ensureServiceRunning();

@@ -245,7 +245,7 @@ export class AndroidNativeAudioPlayer extends EventTarget implements IPlaybackEn
       const positionMs = seekSeconds > 0 ? Math.round(seekSeconds * 1000) : 0;
       this.dispatchEvent(new Event(AUDIO_EVENTS.LOAD_START));
       try {
-        const state = await AndroidNativePlayback.load({ url, positionMs, autoPlay: shouldPlay });
+        const state = await AndroidNativePlayback.load({ url, positionMs, autoPlay: shouldPlay, metadata: options?.metadata });
         if (this.isActive(lifecycle) && revision === this.commandRevision) this.applyStructuralState(state);
       } catch (error) {
         if (this.isActive(lifecycle) && revision === this.commandRevision) {

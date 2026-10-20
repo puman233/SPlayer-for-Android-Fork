@@ -1,3 +1,4 @@
+import type { PlaybackMetadata } from "@/types/shared/playback";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
 import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
 import { ensureFloatingLyricVisible } from "./floatingLyricLifecycle";
@@ -539,9 +540,16 @@ class PlayerController {
     }
     // 播放新音频
     try {
+      let nativeMetadata: PlaybackMetadata | undefined;
       if (isCapacitorAndroid && audioManager.engineType === "android-native") {
-        // 缓存音频可能立即开播；先同步身份，避免新音频事件携带上一首元数据。
-        await mediaSessionManager.updateMetadata(useMusicStore().playSong, url);
+        // Normal loads commit identity and audio in one native task, without an ACK round trip.
+        await mediaSessionManager.syncAndroidApiContext();
+        if (requestToken !== this.currentRequestToken) return;
+        if (crossfadeOptions) {
+          await mediaSessionManager.updateMetadata(useMusicStore().playSong, url);
+        } else {
+          nativeMetadata = mediaSessionManager.buildAndroidMetadata(useMusicStore().playSong);
+        }
         if (requestToken !== this.currentRequestToken) return;
         if (intentRevision !== this.playbackIntentRevision) autoPlay = statusStore.playStatus;
         if (seekRevision !== this.seekRevision) seek = statusStore.currentTime;
@@ -588,6 +596,7 @@ class PlayerController {
         // 计算渐入时间
         const fadeTime = settingStore.getFadeTime ? settingStore.getFadeTime / 1000 : 0;
         await audioManager.play(url, {
+          metadata: nativeMetadata,
           fadeIn: !!fadeTime,
           fadeDuration: fadeTime,
           autoPlay,

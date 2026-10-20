@@ -54,6 +54,7 @@ final class DeviceWebFixture implements AutoCloseable {
         + "; nativeSize=" + web.getWidth() + "x" + web.getHeight());
   }
   void tapVisible(String expression) throws Exception {
+    awaitVisualState();
     await("!document.getAnimations().some(a=>a.playState==='running'&&a.effect?.getComputedTiming().iterations!==Infinity&&(document.querySelector('.full-player')?.contains(a.effect?.target)||a.effect?.target?.closest?.('.n-popover,.quick-actions-panel')))");
     String point="(()=>{const e="+expression+";if(!e)return null;const r=e.getBoundingClientRect();const x=r.x+r.width/2,y=r.y+r.height/2;return r.width>0&&r.height>0&&e.contains(document.elementFromPoint(x,y))?{x,y}:null})()";
     String sampledPoint = "null";
@@ -72,16 +73,18 @@ final class DeviceWebFixture implements AutoCloseable {
     }
     var p=new org.json.JSONObject(sampledPoint);
     float scale=(float)(web.getWidth()/Double.parseDouble(js("innerWidth")));
-    js("window.fixtureClickSeen=false;("+expression+").addEventListener('click',()=>window.fixtureClickSeen=true,{capture:true,once:true})");
+    js("window.fixtureClickSeen=false;window.fixtureInputTrace=[];window.fixtureInputProbe=e=>fixtureInputTrace.push({type:e.type,target:String(e.target?.className),time:e.timeStamp,x:e.clientX??e.changedTouches?.[0]?.clientX,y:e.clientY??e.changedTouches?.[0]?.clientY});window.fixtureInputTypes=['pointerdown','pointerup','pointercancel','touchstart','touchend','click','contextmenu'];fixtureInputTypes.forEach(t=>document.addEventListener(t,fixtureInputProbe,true));("+expression+").addEventListener('click',()=>window.fixtureClickSeen=true,{capture:true,once:true})");
     long down=SystemClock.uptimeMillis();
     for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP}) {
       var event=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,(float)p.getDouble("x")*scale,(float)p.getDouble("y")*scale,0);
       event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
       inst.runOnMainSync(()->web.dispatchTouchEvent(event));event.recycle();SystemClock.sleep(80);
     }
-    await("window.fixtureClickSeen===true");
+    try { await("window.fixtureClickSeen===true"); }
+    catch(AssertionError error) {throw new AssertionError("输入事件轨迹="+js("JSON.stringify(fixtureInputTrace)"),error);}
+    finally {js("fixtureInputTypes.forEach(t=>document.removeEventListener(t,fixtureInputProbe,true))");}
   }
-  void capture(String name) throws Exception {
+  private void awaitVisualState() throws Exception {
     CountDownLatch visual = new CountDownLatch(1);
     inst.runOnMainSync(() -> web.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback() {
       @Override public void onComplete(long id) {
@@ -89,6 +92,9 @@ final class DeviceWebFixture implements AutoCloseable {
       }
     }));
     assertTrue("截图前WebView绘制状态必须就绪",visual.await(10,TimeUnit.SECONDS));
+  }
+  void capture(String name) throws Exception {
+    awaitVisualState();
     CountDownLatch done = new CountDownLatch(1);
     android.graphics.Bitmap[] bitmap = new android.graphics.Bitmap[1];
     int[] status = new int[1];

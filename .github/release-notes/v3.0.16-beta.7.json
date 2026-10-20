@@ -213,13 +213,34 @@
       "evidence": "FullPlayerMobile 下拉捕获区改用现有布局流尺寸，避免进场读数遮挡更多按钮；扩充真实按钮/下拉关闭回归。CI 仅调整虚核并保留所有门槛，新增原生与JS双计时。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:744e71b681eaffff0e6abdd009cc1e5dc5e65639",
       "classification": "user-visible",
       "release_ids": [
         "transition",
         "android"
       ],
       "evidence": "原生通知首次立即提交，重复回调合并为200ms最新快照；保留切歌1500ms双计时与原始用例。触摸测试等待菜单动画结束，不改变应用操作。"
+    },
+    {
+      "source": "commit:cad19b4f136e44cc1f82eeaf53876e7f481ba7fa",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试触摸坐标单次采样及桥接诊断，不新增产品功能；该次Lint失败记录保留。"
+    },
+    {
+      "source": "commit:1397064a0fe685f2ffbc0e2775e8117b52f115fa",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "修正诊断脚本全局引用和Lint，并补充公开存储耗时记录；测试数量和门槛不变。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "user-visible",
+      "release_ids": [
+        "transition",
+        "android"
+      ],
+      "evidence": "普通原生加载以一次桥接命令携带歌曲身份并在同一管理器锁内提交，去除元数据ACK后才能发load的串行等待；保留跨曲/暂停/seek守卫和原1500ms断言。测试使用绘制就绪后单次命中采样。"
     }
   ]
 }

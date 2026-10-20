@@ -1,3 +1,5 @@
+import type { PlaybackMetadata } from "@/types/shared/playback";
+
 /**
  * 播放引擎能力描述
  */
@@ -34,6 +36,8 @@ export type FadeCurve = "linear" | "exponential" | "equalPower";
  * 播放选项
  */
 export interface PlayOptions {
+  /** Track identity applied atomically by engines that own a media session. */
+  metadata?: PlaybackMetadata;
   /** 是否自动播放 */
   autoPlay?: boolean;
   /** 是否渐入 */

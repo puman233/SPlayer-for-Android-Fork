@@ -52,8 +52,10 @@ public class AndroidNativePlaybackPlugin extends Plugin {
     boolean autoPlay = call.getBoolean("autoPlay", false);
     android.util.Log.d(
         "CapacitorBridge", "load: positionMs=" + positionMs + " autoPlay=" + autoPlay);
-    resolveOnMainThread(
-        call, () -> PlaybackManager.getInstance(getContext()).load(url, positionMs, autoPlay));
+    JSObject metadataData = call.getObject("metadata");
+    PlaybackManager.TrackMetadata metadata = metadataData == null ? null : readMetadata(metadataData);
+    resolveOnMainThread(call, () ->
+        PlaybackManager.getInstance(getContext()).load(url, positionMs, autoPlay, metadata));
   }
 
   @PluginMethod
@@ -147,18 +149,21 @@ public class AndroidNativePlaybackPlugin extends Plugin {
         });
   }
 
+  private PlaybackManager.TrackMetadata readMetadata(JSObject data) {
+    PlaybackManager.TrackMetadata metadata = new PlaybackManager.TrackMetadata();
+    metadata.songId = data.optLong("songId", 0L);
+    metadata.title = data.optString("title", "");
+    metadata.artist = data.optString("artist", "");
+    metadata.album = data.optString("album", "");
+    metadata.coverUrl = data.optString("coverUrl", "");
+    metadata.durationMs = data.optLong("durationMs", 0L);
+    metadata.canLike = data.optBoolean("canLike", false);
+    return metadata;
+  }
+
   @PluginMethod
   public void updateMetadata(PluginCall call) {
-    PlaybackManager.TrackMetadata metadata = new PlaybackManager.TrackMetadata();
-    // long：上游 songId 可超 int32 上限，用 optLong 避免溢出
-    metadata.songId = call.getData().optLong("songId", 0L);
-    metadata.title = call.getString("title", "");
-    metadata.artist = call.getString("artist", "");
-    metadata.album = call.getString("album", "");
-    metadata.coverUrl = call.getString("coverUrl", "");
-    // 同 seek/load：JS number → Double，用 getDouble 避免 0
-    metadata.durationMs = (long) (double) call.getDouble("durationMs", 0.0);
-    metadata.canLike = call.getBoolean("canLike", false);
+    PlaybackManager.TrackMetadata metadata = readMetadata(call.getData());
     runOnMainThread(
         call,
         () -> {

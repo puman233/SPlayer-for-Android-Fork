@@ -41,17 +41,20 @@ public class VolumeTouchInteractionTest {
     try(DeviceWebFixture f=new DeviceWebFixture()) {
       int display=f.activity.getDisplay().getDisplayId();
       int orientation=f.activity.getRequestedOrientation();String original=shell(f,"wm size -d "+display);
+      String originalDensity=shell(f,"wm density -d "+display);
       var args=InstrumentationRegistry.getArguments();
       int width=Integer.parseInt(args.getString("width","1024")),height=Integer.parseInt(args.getString("height","600"));
-      float density=f.activity.getResources().getDisplayMetrics().density;
-      shell(f,"wm size "+Math.round(Math.min(width,height)*density)+"x"+Math.round(Math.max(width,height)*density)+" -d "+display);
-      f.inst.runOnMainSync(()->f.activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
-      f.await("Math.abs(innerWidth-"+width+")<=1");
-      try(var stream=f.inst.getContext().getAssets().open("r23-player-fixture.js")) {
-        f.js(new String(stream.readAllBytes(),StandardCharsets.UTF_8));
-      }
-      f.js("p7Init().then(()=>{p7Stores.setting.autoHidePlayerMeta=false;p7Stores.status.playerMetaShow=true;window.__SPLAYER_PLAYER_CONTROLLER__.setVolume(0.63);window.volumeReady=true})");
       try {
+        // Keep the requested dp window within the emulator's physical surface limit.
+        shell(f,"wm density 160 -d "+display);
+        f.await("Math.abs(devicePixelRatio-1)<=0.01");
+        shell(f,"wm size "+Math.min(width,height)+"x"+Math.max(width,height)+" -d "+display);
+        f.inst.runOnMainSync(()->f.activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
+        f.await("Math.abs(innerWidth-"+width+")<=1");
+        try(var stream=f.inst.getContext().getAssets().open("r23-player-fixture.js")) {
+          f.js(new String(stream.readAllBytes(),StandardCharsets.UTF_8));
+        }
+        f.js("p7Init().then(()=>{p7Stores.setting.autoHidePlayerMeta=false;p7Stores.status.playerMetaShow=true;window.__SPLAYER_PLAYER_CONTROLLER__.setVolume(0.63);window.volumeReady=true})");
         f.await("window.volumeReady===true&&!!document.querySelector('.player-control .right-menu button[aria-label=\"调节音量\"]')");
         SystemClock.sleep(700);tap(f,".player-control .right-menu button[aria-label=\"调节音量\"]",0);
         f.await("!!document.querySelector('.volume-change')");
@@ -73,10 +76,15 @@ public class VolumeTouchInteractionTest {
         tap(f,".volume-change button[aria-label='取消静音']",0);
         assertEquals("独立静音操作应恢复此前音量",changed,Double.parseDouble(f.js("fixtureStatus.playVolume")),0.001);
       } finally {
-        f.js("p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.setVolume(fixtureStatus.playVolume))");f.await("window.p7Restored===true");
-        String previous=original.contains("Override size:")?original.substring(original.indexOf("Override size:")+14).trim():"reset";
-        shell(f,"wm size "+previous+" -d "+display);
-        f.inst.runOnMainSync(()->f.activity.setRequestedOrientation(orientation));
+        try {
+          f.js("if(window.p7Restore)p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.setVolume(fixtureStatus.playVolume));else window.p7Restored=true");f.await("window.p7Restored===true");
+        } finally {
+          String previous=original.contains("Override size:")?original.substring(original.indexOf("Override size:")+14).trim():"reset";
+          shell(f,"wm size "+previous+" -d "+display);
+          String previousDensity=originalDensity.contains("Override density:")?originalDensity.substring(originalDensity.indexOf("Override density:")+17).trim():"reset";
+          shell(f,"wm density "+previousDensity+" -d "+display);
+          f.inst.runOnMainSync(()->f.activity.setRequestedOrientation(orientation));
+        }
       }
     }
   }

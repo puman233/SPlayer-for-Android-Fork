@@ -99,7 +99,7 @@ final class DeviceWebFixture implements AutoCloseable {
     try { js("window.fixtureRestoreComplete=false;Promise.resolve(window.p7RestorePromise).finally(()=>window.fixtureRestoreComplete=true)");
     await("window.fixtureRestoreComplete===true"); } finally {
     try {
-      js("(()=>{const a=document.querySelector('#app').__vue_app__,p=Reflect.ownKeys(a._context.provides).map(k=>a._context.provides[k]).find(v=>v?._s instanceof Map),s=p._s.get('setting'),t=p._s.get('status'),saved="+savedSettings+";s.userAgreementVersion=saved.agreement;s.checkUpdateOnStart=saved.update;s.hiddenCovers=saved.hiddenCovers;s.songUnlockServer=saved.songUnlockServer;s.useSongUnlock=saved.useSongUnlock;t.showFullPlayer=saved.show;s.$persist?.();})()");
+      js("(()=>{const a=document.querySelector('#app').__vue_app__,p=Reflect.ownKeys(a._context.provides).map(k=>a._context.provides[k]).find(v=>v?._s instanceof Map),s=p._s.get('setting'),t=p._s.get('status'),saved="+savedSettings+";s.userAgreementVersion=saved.agreement;s.checkUpdateOnStart=saved.update;s.hiddenCovers=saved.hiddenCovers;s.songUnlockServer=saved.songUnlockServer;s.useSongUnlock=saved.useSongUnlock;t.showFullPlayer=saved.show;window.fixturePinia=p;window.fixtureStatus=t;window.fixtureSetting=s;s.$persist?.();})()");
       // music-store uses idle/1s persistence; finishing an Activity is not a reliable pagehide.
       js("(()=>{fixturePinia._s.get('music').$persist?.();fixturePinia._s.get('status').$persist?.();window.dispatchEvent(new Event('pagehide'))})()");
       assertEquals("结束Activity前必须完成原歌曲持久化恢复", "true",js("JSON.parse(localStorage.getItem('music-store')||'null')?.playSong?.id===fixturePinia._s.get('music').playSong.id"));

@@ -260,7 +260,15 @@ public class FloatingLyricOverlayTest {
       assertEquals(lockedY, lockedLayout.y);
       saveScreen("locked", view);
       View unlock = (View) field(service, "unlockBtnView");
-      tap(unlock, unlock.getWidth() / 2f, unlock.getHeight() / 2f);
+      if (unlock.getVisibility() == View.VISIBLE) {
+        tap(unlock, unlock.getWidth() / 2f, unlock.getHeight() / 2f);
+      } else {
+        // No left-side room: the approved fallback is the settings unlock command.
+        WindowManager.LayoutParams unlockLayout = (WindowManager.LayoutParams) field(service, "unlockLp");
+        assertEquals(0f, unlockLayout.alpha, 0.001f);
+        assertTrue((unlockLayout.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0);
+        main(() -> manager.setFloatingLyricLocked(false));
+      }
       awaitControlsAlpha(1f);
       assertFalse(interaction.locked());
       assertFalse((boolean) field(service, "unlockAttached"));

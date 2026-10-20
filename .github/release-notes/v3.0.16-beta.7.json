@@ -173,7 +173,7 @@
       "evidence": "这是预发布版本，建议先备份数据；跨版本降级时的数据兼容性无法保证。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:a25193392968ab67d8fc61bc4270cfac4fd14c1a",
       "classification": "user-visible",
       "release_ids": [
         "compact",
@@ -197,6 +197,12 @@
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "已有发布恢复工具维护，不作为用户功能更新。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "修复远程 UI 测试的重载引用、窗口密度和已批准隐藏解锁入口前提；保留原八项与原性能阈值，无应用功能或签名变化。"
     }
   ]
 }

@@ -81,7 +81,7 @@ public class PlaybackTransitionTest {
   @Test public void fartherResolvedSongCannotCancelImmediateNextAudioWarmup() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer()) {
       try(var in=f.inst.getContext().getAssets().open("r23-player-fixture.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
-      f.js("p7Init().then(()=>window.transitionReady=true)");f.await("window.transitionReady===true");
+      f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.transitionReady=true})");f.await("window.transitionReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       String next=server.url("next");
       try {
@@ -107,7 +107,7 @@ public class PlaybackTransitionTest {
   @Test public void naturalHttpAudioEndAdvancesAndRecordsTheFirstPlayingEvent() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true)) {
       try(var in=f.inst.getContext().getAssets().open("r23-player-fixture.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
-      f.js("p7Init().then(()=>window.transitionReady=true)");f.await("window.transitionReady===true");
+      f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.transitionReady=true})");f.await("window.transitionReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       org.json.JSONArray events=new org.json.JSONArray();
       long[] ended={0},nextPlaying={0};
@@ -148,7 +148,7 @@ public class PlaybackTransitionTest {
   @Test public void rapidSelectionsDoNotWaitForOrReturnToTheOldHttpAudio() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true)) {
       try(var in=f.inst.getContext().getAssets().open("r23-player-fixture.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
-      f.js("p7Init().then(()=>window.rapidReady=true)");f.await("window.rapidReady===true");
+      f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.rapidReady=true})");f.await("window.rapidReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       String urls=new org.json.JSONArray(Arrays.asList(server.url("slow"),server.url("middle"),server.url("final"))).toString();
       // Cached final audio can become ready before metadata IPC; exercise that real timing too.
@@ -164,7 +164,10 @@ public class PlaybackTransitionTest {
         assertTrue("First track must actually be loading over HTTP",server.slowRequests.get()>0);
         f.js("window.rapidSelectedAt=Date.now();fixtureStatus.playIndex=1;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[1],autoPlay:true});fixtureStatus.playIndex=2;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[2],autoPlay:true})");
         f.await("rapidEvents.some(e=>e.id===991562)");
-        assertEquals("Slow old request must not hold final selection for seconds","true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
+        java.io.File timingDir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(timingDir.exists()||timingDir.mkdirs());
+        String timing=f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt})");
+        try(var out=new PrintWriter(new File(timingDir,"rapid-http-first-playing.json"),"UTF-8")){out.print(timing);}
+        assertEquals("Slow old request must not hold final selection for seconds: "+timing,"true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
         SystemClock.sleep(2000);
         java.io.File dir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(dir.exists()||dir.mkdirs());
         try(var out=new PrintWriter(new File(dir,"rapid-http-selections.json"),"UTF-8")){out.print(f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt})"));}

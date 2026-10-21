@@ -255,12 +255,18 @@
       "exclusion_reason": "修正真实触摸测试前提：静置后先触摸空白边距唤醒再点击分页，将动画/命中/监听/视口宽度原子采样；保留原检查及1500ms限值，公开功能与文案不变。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:cc10593a840b9ca181f4ac99c1df15eb6c4c2f8b",
       "classification": "user-visible",
       "release_ids": [
         "transition"
       ],
       "evidence": "修复关闭循环时最后一首自然结束后错误回到第一首；保留手动下一首、列表及单曲循环，增强真实HTTP结束与旧曲不回播回归，原性能限值不变。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "修正原生短触测试的排队时序并共享播放器打开入口，增加无contextmenu断言；应用、公开文案、原测试数量和1500ms/1200ms门槛不变，保留远程时延失败。"
     }
   ]
 }

@@ -74,13 +74,17 @@ final class DeviceWebFixture implements AutoCloseable {
     }
     var p=new org.json.JSONObject(sampledPoint);
     float scale=(float)(web.getWidth()/p.getDouble("viewportWidth"));
-    long down=SystemClock.uptimeMillis();
-    for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP}) {
-      var event=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,(float)p.getDouble("x")*scale,(float)p.getDouble("y")*scale,0);
-      event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
-      inst.runOnMainSync(()->web.dispatchTouchEvent(event));event.recycle();SystemClock.sleep(80);
-    }
-    try { await("window.fixtureClickSeen===true"); }
+    float x=(float)p.getDouble("x")*scale,y=(float)p.getDouble("y")*scale;
+    // Keep a native tap in one main-thread turn: queueing must not age DOWN into a long press.
+    inst.runOnMainSync(() -> {
+      long down=SystemClock.uptimeMillis();
+      for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_UP}) {
+        var event=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x,y,0);
+        event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        web.dispatchTouchEvent(event);event.recycle();
+      }
+    });
+    try { await("window.fixtureClickSeen===true&&!fixtureInputTrace.some(e=>e.type==='contextmenu')"); }
     catch(AssertionError error) {throw new AssertionError("输入事件轨迹="+js("JSON.stringify(fixtureInputTrace)"),error);}
     finally {js("fixtureInputTypes.forEach(t=>document.removeEventListener(t,fixtureInputProbe,true))");}
   }

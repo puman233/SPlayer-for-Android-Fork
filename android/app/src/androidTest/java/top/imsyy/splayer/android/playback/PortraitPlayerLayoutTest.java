@@ -23,15 +23,7 @@ public class PortraitPlayerLayoutTest {
     return new JSONObject((String)new JSONTokener(f.js("JSON.stringify((()=>{const root=document.querySelector('.full-player-mobile'),rect=s=>root.querySelector(s).getBoundingClientRect().toJSON();return {cover:rect('.player-cover'),info:rect('.info-group'),footer:rect('.mobile-player-bottom-controls'),page:rect('.info-page')}})())")).nextValue());
   }
   private void openPlayer(DeviceWebFixture f) throws Exception {
-    f.await("(()=>{const e=document.querySelector('.main-player .play-data .cover');if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()");
-    JSONObject rect=new JSONObject((String)new JSONTokener(f.js("JSON.stringify(document.querySelector('.main-player .play-data .cover').getBoundingClientRect().toJSON())")).nextValue());
-    float scale=(float)(f.web.getWidth()/Double.parseDouble(f.js("innerWidth")));
-    float x=(float)(rect.getDouble("x")+rect.getDouble("width")/2)*scale,y=(float)(rect.getDouble("y")+rect.getDouble("height")/2)*scale;
-    long down=SystemClock.uptimeMillis();
-    for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP}) {
-      MotionEvent event=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x,y,0);event.setSource(InputDevice.SOURCE_TOUCHSCREEN);
-      f.inst.runOnMainSync(()->f.web.dispatchTouchEvent(event));event.recycle();SystemClock.sleep(80);
-    }
+    f.tapVisible("document.querySelector('.main-player .play-data .cover')");
   }
   private void swipe(DeviceWebFixture f) throws Exception {
     JSONObject rect=geometry(f).getJSONObject("info");

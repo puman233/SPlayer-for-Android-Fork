@@ -175,6 +175,7 @@ export interface AndroidNativeDiagnosticLogEvent {
 }
 
 export interface AndroidNativeFloatingLyricDataPayload {
+  songId?: number;
   lrcData: string;
   yrcData: string;
 }
@@ -185,6 +186,7 @@ export interface AndroidNativeFloatingLyricProgressPayload {
 }
 
 export interface AndroidNativeFloatingLyricSongInfoPayload {
+  songId?: number;
   name: string;
   artist: string;
 }

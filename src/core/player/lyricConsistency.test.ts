@@ -32,6 +32,7 @@ function fixture() {
     '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"><body><div><p itunes:key="L1" begin="00:00:01.000" end="00:00:03.000"><span begin="00:00:01.000" end="00:00:02.000">hello </span><span begin="00:00:02.000" end="00:00:03.000">world</span></p></div></body></tt>';
   const pending: Array<{ resolve: (value: any) => void; reject: (error: Error) => void }> = [];
   let delayed = false;
+  let qqResponse: Promise<unknown> = Promise.resolve(null);
   let commits = 0;
   let clock = 0, timerId = 0;
   const timers = new Map<number, { at: number; fn: () => void }>();
@@ -47,10 +48,12 @@ function fixture() {
     lyricPriority: "official",
     cacheEnabled: false,
     enableOnlineTTMLLyric: false,
+    enableQQMusicLyric: false,
     showWordLyrics: false,
   };
   const cache = new Map<string, any>();
   const boundaries: Record<string, any> = {
+    "@/api/qqmusic": { qqMusicMatch: () => qqResponse },
     "@/utils/requestDiagnostics": { requestFailureCategory: (error: unknown) => String(error) },
     "@/stores": {
       useMusicStore: () => music,
@@ -117,6 +120,7 @@ function fixture() {
     delay: () => {
       delayed = true;
     },
+    respondQq: (value: Promise<unknown>) => { qqResponse = value; },
   };
 }
 
@@ -435,4 +439,69 @@ test("auto mode publishes ready TTML without waiting for a stalled official requ
     assert.equal(f.status.usingTTMLLyric, true);
     assert.equal(f.music.songLyric.yrcData[0].words[1].startTime, 2000);
   } finally { f.pending.forEach(p => p.resolve(payload())); await job; }
+});
+
+for (const content of [null, "", "<tt/>", "not XML"] as const) {
+  test(`TTML priority falls back to real LRC for ${JSON.stringify(content)}`, async () => {
+    const f = fixture();
+    f.settings.lyricPriority = "ttml";
+    f.respondTtml(content);
+    await f.run();
+    assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
+    assert.equal(f.status.usingTTMLLyric, false);
+  });
+}
+
+test("TTML priority falls back to LRC after a transport rejection", async () => {
+  const f = fixture();
+  f.settings.lyricPriority = "ttml";
+  f.respondTtml(Promise.reject(new Error("controlled TTML network failure")));
+  await f.run();
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
+  assert.equal(f.status.usingTTMLLyric, false);
+});
+
+test("starting the next lyric request removes the preceding timeline while loading", async () => {
+  const f = fixture();
+  await f.run(1);
+  f.delay();
+  const next = f.run(2);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(f.music.songLyric.lrcData.length, 0);
+    assert.equal(f.music.songLyric.yrcData.length, 0);
+    assert.equal(f.status.lyricLoading, true);
+  } finally {
+    f.pending.forEach((request) => request.resolve(payload()));
+    await next;
+  }
+});
+
+test("TTML priority times out into LRC and ignores the late TTML result", async () => {
+  const f = fixture();
+  f.settings.lyricPriority = "ttml";
+  let finish!: (value: string) => void;
+  f.respondTtml(new Promise((resolve) => { finish = resolve; }));
+  const request = f.run();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  f.advance(6000);
+  await request;
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
+  finish("<tt/>");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(f.status.usingTTMLLyric, false);
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
+});
+
+test("auto mode displays ready LRC while an optional QQ provider is stalled", async () => {
+  const f = fixture();
+  f.settings.lyricPriority = "auto";
+  f.settings.enableQQMusicLyric = true;
+  f.respondQq(new Promise(() => {}));
+  const request = f.run();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
+  f.advance(6000);
+  await request;
+  assert.equal(f.status.lyricLoading, false);
 });

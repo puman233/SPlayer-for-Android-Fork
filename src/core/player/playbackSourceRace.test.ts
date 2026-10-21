@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 import { DJ_MODE_KEYWORDS } from "../../utils/meta";
+import { QualityType } from "../../types/main";
 
 const deferred = () => {
   let resolve!: (value: any) => void;
@@ -50,6 +51,7 @@ function fixture(native = false) {
   };
   const noop = () => {};
   const imports: Record<string, any> = {
+    "@/types/main": { QualityType },
     "@/utils/meta": { DJ_MODE_KEYWORDS },
     "@/utils/requestDiagnostics": { requestFailureCategory: () => "unknown" },
     "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => data },
@@ -60,7 +62,7 @@ function fixture(native = false) {
     "@/core/automix/AutomixManager": { useAutomixManager: () => ({ resetNextAnalysisCache: noop, resetAutomixScheduling: noop }) },
     "@/utils/format": { getPlaySongData: () => data.playList[status.playIndex] || music.playSong, getPlayerInfoObj: () => ({ name: "fixture", artist: "fixture" }) },
     "@/utils/color": { getCoverColor: noop },
-    "@/utils/helper": { sleep: () => { const d = deferred(); retryDelays.push(d); return d.promise; } },
+    "@/utils/helper": { handleSongQuality: () => undefined, sleep: () => { const d = deferred(); retryDelays.push(d); return d.promise; } },
     "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
     "@/utils/time": { calculateProgress: (time: number, duration: number) => time / duration },
     "@/utils/lastfmScrobbler": { default: { resume: () => listeningEvents.push("resume"), pause: () => listeningEvents.push("pause") } },
@@ -86,6 +88,61 @@ function fixture(native = false) {
     delayMetadata: (promise?: Promise<any>) => { metadataCompletion = promise; },
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
     delayResume: (promise: Promise<any>) => { resumeCompletion = promise; } };
+}
+
+test("native track identity survives a reordered web queue", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(3), song(2), song(1)];
+  await f.controller.applyNativeTrackChanged(0, 2, undefined, "auto");
+  assert.equal(f.music.playSong.id, 2);
+  assert.equal(f.music.lyricSongId, 2);
+  assert.equal(f.status.playIndex, 1);
+});
+
+test("an unknown native track cannot assign unrelated indexed lyrics", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), song(2)];
+  await f.controller.applyNativeTrackChanged(1, 999, undefined, "next");
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.music.lyricSongId, 1);
+});
+
+test("legacy native auto-next with an unknown positive ID cannot choose another song", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), song(2)];
+  f.status.playIndex = 0;
+  await f.controller.applyNativeAutoNext(999);
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.music.lyricSongId, 1);
+});
+
+test("a terminal native error cannot start a second web retry loop or skip the song", async () => {
+  const f = fixture(true);
+  f.emitError();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(f.retryDelays.length, 0);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.status.playLoading, false);
+  assert.equal(f.status.playStatus, false);
+});
+
+for (const native of [false, true]) {
+  test(`an unavailable source keeps the requested song paused instead of wrapping the queue (${native ? "native" : "web"})`, async () => {
+    const f = fixture(native);
+    f.data.playList = [song(1), song(2)];
+    f.status.playIndex = 1;
+    const request = f.controller.playSong({ song: f.data.playList[1], autoPlay: true });
+    f.pending[0].resolve({ id: 2, url: undefined });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(f.retryDelays.length, 0);
+    await request;
+    assert.equal(f.music.playSong.id, 2);
+    assert.equal(f.status.playIndex, 1);
+    assert.equal(f.status.playStatus, false);
+    assert.equal(f.status.playLoading, false);
+    assert.equal(f.loadedSources.length, 0);
+  });
 }
 
 test("R11: actual controller buffering events suspend and restore Last.fm listening", () => {

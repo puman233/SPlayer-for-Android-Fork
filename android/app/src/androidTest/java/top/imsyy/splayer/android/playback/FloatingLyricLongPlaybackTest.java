@@ -135,7 +135,15 @@ public class FloatingLyricLongPlaybackTest {
         f.js("window.onlineTargetSongId="+targetSongId+";prepareOnlineTransition().catch(e=>window.onlineError={phase:onlinePhase,type:e.name})");
         for(int i=0;i<600&&!"true".equals(f.js("window.onlinePrepared===true||!!window.onlineError"));i++)SystemClock.sleep(100);
         assertEquals("真实在线首曲准备成功: "+f.js("window.onlineError"),"true",f.js("window.onlinePrepared===true"));
-        f.await("!fixtureStatus.lyricLoading&&fixtureStatus.playStatus&&p7Stores.music.songLyric.lrcData.length>0");
+        try {
+          f.await("!fixtureStatus.lyricLoading&&fixtureStatus.playStatus&&p7Stores.music.songLyric.lrcData.length>0");
+        } catch (AssertionError failure) {
+          JSONObject[] nativeState={null};
+          f.inst.runOnMainSync(()->{try {nativeState[0]=nativeSnapshot(manager);}catch(Exception error){throw new AssertionError(error);}});
+          failure.addSuppressed(new AssertionError("Public online startup native="+nativeState[0]+" web="
+            +f.js("JSON.stringify({songId:p7Stores.music.playSong.id,playing:fixtureStatus.playStatus,loading:fixtureStatus.playLoading,lyricLoading:fixtureStatus.lyricLoading,lrc:p7Stores.music.songLyric.lrcData.length,yrc:p7Stores.music.songLyric.yrcData.length})")));
+          throw failure;
+        }
         // 独立的公开歌词响应仅作预期值，不写入播放器/歌词缓存。
         f.js("fetch('http://127.0.0.1:1145/api/netease/lyric/new?id='+onlineSongs[1].id+'&noCookie=true').then(r=>r.json()).then(r=>window.backgroundExpected=r.lrc?.lyric||'').catch(e=>window.backgroundExpectedError=e.name)");
         f.await("!!window.backgroundExpected||!!window.backgroundExpectedError");

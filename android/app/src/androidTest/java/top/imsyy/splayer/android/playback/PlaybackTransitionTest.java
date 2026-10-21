@@ -27,9 +27,17 @@ public class PlaybackTransitionTest {
     final Thread accept;
     final String prefix="transition-"+UUID.randomUUID();
     final boolean tones;
+    final int seconds;
+    volatile long chunkDelayMs=4;
+    volatile boolean audioOffline=false;
+    volatile long unavailableSongId=0;
     AudioServer() throws Exception {this(false);}
     AudioServer(boolean tones) throws Exception {
+      this(tones, 2);
+    }
+    AudioServer(boolean tones, int seconds) throws Exception {
       this.tones=tones;
+      this.seconds=seconds;
       accept=new Thread(()->{while(!server.isClosed())try {
         Socket socket=server.accept();sockets.add(socket);clients.execute(()->serve(socket));
       }catch(IOException error){if(!server.isClosed())throw new AssertionError(error);}},"transition-test-http");
@@ -40,9 +48,30 @@ public class PlaybackTransitionTest {
         socket.setSoTimeout(3000);
         BufferedReader in=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.US_ASCII));
         String request=in.readLine(),line;long start=0;
+        String requestedHeaders="Content-Type, Authorization, X-Requested-With";
         if(request==null)return;
         while((line=in.readLine())!=null&&!line.isEmpty()) {
+          if(line.toLowerCase(Locale.ROOT).startsWith("access-control-request-headers:")) requestedHeaders=line.substring(line.indexOf(':')+1).trim();
           if(line.toLowerCase(Locale.ROOT).startsWith("range: bytes=")) start=Long.parseLong(line.substring(13).split("-")[0]);
+        }
+        if (request.contains("/lyric") || request.contains("/song/url")) {
+          Uri uri=Uri.parse("http://localhost"+request.split(" ")[1]);
+          String id=uri.getQueryParameter("id");
+          if(id==null)id=uri.getQueryParameter("ids");
+          id=id==null?"991700":id.replaceAll("[^0-9]", "");
+          org.json.JSONObject body=new org.json.JSONObject().put("code",200);
+          if(request.contains("/lyric"))body.put("lrc",new org.json.JSONObject().put("lyric","[00:00.000]HTTP lyric "+id));
+          else body.put("data",new org.json.JSONArray().put(new org.json.JSONObject().put("id",Long.parseLong(id))
+              .put("url",Long.parseLong(id)==unavailableSongId?org.json.JSONObject.NULL:url("song"+id)).put("freeTrialInfo",org.json.JSONObject.NULL)
+              .put("type","wav").put("level","standard").put("time",seconds*1000)));
+          byte[] json=body.toString().getBytes(StandardCharsets.UTF_8);
+          OutputStream output=socket.getOutputStream();
+          output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: https://localhost\r\nAccess-Control-Allow-Credentials: true\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: "+json.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+          output.write(json);output.flush();return;
+        }
+        if (audioOffline) {
+          socket.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+          return;
         }
         if(tones&&request.contains("/slow.wav")){slowRequests.incrementAndGet();SystemClock.sleep(1800);}
         byte[] wave=tones?wave():null;
@@ -55,14 +84,15 @@ public class PlaybackTransitionTest {
           if(tones)out.write(wave,(int)position,(int)Math.min(chunk.length,total-position));
           else out.write(chunk,0,(int)Math.min(chunk.length,total-position));
           out.flush();
-          sent.addAndGet(chunk.length);SystemClock.sleep(4);
+          sent.addAndGet(chunk.length);SystemClock.sleep(chunkDelayMs);
         }
       }catch(IOException expectedCancellation) {
         // Production cancellation and the intentional offline phase close these sockets.
+      }catch(org.json.JSONException invalidFixture){throw new AssertionError(invalidFixture);
       }finally{sockets.remove(socket);}
     }
     byte[] wave() {
-      int samples=32000,bytes=samples*2;
+      int samples=seconds*16000,bytes=samples*2;
       java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(44+bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
       b.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36+bytes).put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII));
       b.putInt(16).putShort((short)1).putShort((short)1).putInt(16000).putInt(32000).putShort((short)2).putShort((short)16);
@@ -77,6 +107,122 @@ public class PlaybackTransitionTest {
   }
   private static PlaybackQueue.Track track(long id,String url) {
     PlaybackQueue.Track t=new PlaybackQueue.Track();t.songId=id;t.url=url;t.playListIndex=(int)(id-991550);t.title="Transition test "+id;return t;
+  }
+  @Test public void twentyBackgroundNaturalHttpTransitionsKeepLyricsAndAudioIdentity() throws Exception {
+    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true,4)) {
+      for(String asset:new String[]{"r23-player-fixture.js","http-lyric-sequence.js"})
+        try(var in=f.inst.getContext().getAssets().open(asset)){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
+      PlaybackManager manager=PlaybackManager.getInstance(f.activity);
+      Set<Long> seen=new HashSet<>();
+      org.json.JSONArray samples=new org.json.JSONArray();
+      try {
+        f.js("prepareHttpLyricSequence("+org.json.JSONObject.quote("http://127.0.0.1:"+server.server.getLocalPort())+").catch(e=>window.httpSequenceError=e.name+': '+e.message)");
+        f.await("window.httpSequenceReady||!!window.httpSequenceError");
+        assertEquals("null",f.js("window.httpSequenceError||null"));
+        f.await("fixturePinia._s.get('music').songLyric.lrcData[0]?.words[0]?.word==='HTTP lyric 991700'");
+        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        long deadline=SystemClock.elapsedRealtime()+150000;
+        while(seen.size()<21&&SystemClock.elapsedRealtime()<deadline) {
+          f.inst.runOnMainSync(()->{
+            try {
+              var state=manager.buildState();long id=state.optLong("songId");
+              var field=PlaybackManager.class.getDeclaredField("floatingLyricService");field.setAccessible(true);
+              var overlay=(FloatingLyricService)field.get(manager);
+              assertNotNull("Actual overlay must remain attached",overlay);
+              String lyric=overlay.lrcLines.isEmpty()?"":overlay.lrcLines.get(0).words.get(0).text;
+              assertTrue("Wrong lyrics for native audio "+id+": "+lyric,lyric.isEmpty()||lyric.equals("HTTP lyric "+id));
+              if(!lyric.isEmpty()&&state.optBoolean("playing")) {
+                assertTrue("Audio URL must belong to its metadata",state.optString("src").contains("song"+id+".wav"));
+                if(seen.add(id)) {
+                  var item=manager.getSession().getPlayer().getCurrentMediaItem();assertNotNull(item);
+                  assertNotNull(item.localConfiguration);
+                  assertTrue("Actual Media3 item must match",item.localConfiguration.uri.getPath().contains("song"+id+".wav"));
+                  assertEquals("HTTP sequence "+id,String.valueOf(item.mediaMetadata.title));
+                  assertEquals("HTTP sequence "+id,overlay.songName);
+                  if(id>991700) {
+                    manager.updateFloatingLyricData("[]","[]",991700);
+                    manager.updateFloatingLyricSongInfo("stale song","stale artist",991700);
+                    assertEquals("Stale bridge data must not clear current lyrics",lyric,overlay.lrcLines.get(0).words.get(0).text);
+                    assertEquals("HTTP sequence "+id,overlay.songName);
+                  }
+                  samples.put(new org.json.JSONObject().put("songId",id).put("lyric",lyric)
+                    .put("mediaSessionTitle",String.valueOf(item.mediaMetadata.title))
+                    .put("positionMs",state.optLong("positionMs")).put("overlayMs",overlay.baseMs));
+                }
+              }
+            }catch(ReflectiveOperationException|org.json.JSONException error){throw new AssertionError(error);}
+          });
+          SystemClock.sleep(100);
+        }
+        assertEquals("Every one of 20 natural transitions must publish its own lyrics: "+samples,21,seen.size());
+        System.out.println("HTTP_LYRIC_SEQUENCE "+samples);
+      } finally {
+        f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");
+        f.await("window.httpSequenceRestored===true");
+        f.inst.runOnMainSync(manager::hideFloatingLyric);
+      }
+    }
+  }
+  @Test public void stableLowThroughputHttpKeepsNativePlaybackAndPausedRecoveryStaysPaused() throws Exception {
+    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true,60)) {
+      server.chunkDelayMs=200; // ~40 KiB/s for 31.25 KiB/s PCM, above the encoded rate.
+      for(String asset:new String[]{"r23-player-fixture.js","http-lyric-sequence.js"})
+        try(var in=f.inst.getContext().getAssets().open(asset)){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
+      PlaybackManager manager=PlaybackManager.getInstance(f.activity);
+      long selectedAt=SystemClock.elapsedRealtime();
+      try {
+        f.js("prepareHttpLyricSequence("+org.json.JSONObject.quote("http://127.0.0.1:"+server.server.getLocalPort())+",1,60000).catch(e=>window.httpSequenceError=e.name+': '+e.message)");
+        f.await("window.httpSequenceReady||!!window.httpSequenceError");
+        assertEquals("null",f.js("window.httpSequenceError||null"));
+        f.await("fixtureStatus.playStatus&&fixtureStatus.currentTime>0");
+        long startupMs=SystemClock.elapsedRealtime()-selectedAt;
+        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        long bufferingMs=0;int bufferingCount=0;boolean wasBuffering=false;
+        long end=SystemClock.elapsedRealtime()+12000;
+        while(SystemClock.elapsedRealtime()<end) {
+          com.getcapacitor.JSObject[] state={null};f.inst.runOnMainSync(()->state[0]=manager.buildState());
+          boolean buffering=state[0].optBoolean("buffering");
+          if(buffering){bufferingMs+=100;if(!wasBuffering)bufferingCount++;}
+          wasBuffering=buffering;
+          assertEquals(991700,state[0].optLong("songId"));
+          SystemClock.sleep(100);
+        }
+        assertTrue("Sustainable HTTP throughput must not cause prolonged buffering: "+bufferingMs,bufferingMs<1500);
+        System.out.println("HTTP_WEAK_METRICS startupMs="+startupMs+" bufferCount="+bufferingCount+" bufferMs="+bufferingMs+" sampleMs=12000");
+        // Disconnect actual media sockets, then pause before the existing retry delay.
+        server.audioOffline=true;for(Socket socket:server.sockets)socket.close();
+        f.inst.runOnMainSync(manager::pause);
+        SystemClock.sleep(2500);server.audioOffline=false;
+        SystemClock.sleep(5500);
+        f.inst.runOnMainSync(()->{
+          var state=manager.buildState();assertFalse(state.optBoolean("playing"));
+          assertEquals(991700,state.optLong("songId"));
+        });
+      } finally {
+        f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");f.await("window.httpSequenceRestored===true");
+        f.inst.runOnMainSync(manager::hideFloatingLyric);
+      }
+    }
+  }
+  @Test public void unavailableNextHttpSourceStopsWithoutWrappingToTheFirstSong() throws Exception {
+    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true,4)) {
+      server.unavailableSongId=991701;
+      for(String asset:new String[]{"r23-player-fixture.js","http-lyric-sequence.js"})
+        try(var in=f.inst.getContext().getAssets().open(asset)){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
+      PlaybackManager manager=PlaybackManager.getInstance(f.activity);
+      try {
+        f.js("prepareHttpLyricSequence("+org.json.JSONObject.quote("http://127.0.0.1:"+server.server.getLocalPort())+",2).catch(e=>window.httpSequenceError=e.name+': '+e.message)");
+        f.await("window.httpSequenceReady||!!window.httpSequenceError");assertEquals("null",f.js("window.httpSequenceError||null"));
+        f.await("fixtureStatus.playStatus&&fixtureStatus.currentTime>0");
+        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        SystemClock.sleep(12000);
+        f.inst.runOnMainSync(()->assertFalse("An unavailable next song must not restart the first",manager.buildState().optBoolean("playing")));
+        assertEquals("The failed target must remain selected with loading settled","true",f.js("fixturePinia._s.get('music').playSong.id===991701&&fixtureStatus.playIndex===1&&!fixtureStatus.playStatus&&!fixtureStatus.playLoading"));
+      } finally {
+        f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");f.await("window.httpSequenceRestored===true");
+        f.inst.runOnMainSync(manager::hideFloatingLyric);
+      }
+    }
   }
   @Test public void fartherResolvedSongCannotCancelImmediateNextAudioWarmup() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer()) {

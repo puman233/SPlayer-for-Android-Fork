@@ -35,3 +35,16 @@
 后台歌词通过原生 ExoPlayer 进度和状态直接驱动，WebView 延迟消息不得覆盖原生时钟；远程 JS 播放模式仍使用既有回传。冷启动和回前台查询实际窗口状态，恢复已开启但丢失的悬浮窗；按钮在窗口实际附着后才显示开启。设备测试使用生成的测试音频与同目录 LRC，连续五分钟留在后台，验证两次自动切歌、进度与歌词数据，无需真实账号。
 
 手机详情头部使用自然高度和实测列表偏移，覆盖长标题、放大字体、隐藏封面、折叠与滚动。UI 工作流执行八项测试，保存详情页和播放器截图；歌手专辑网格同时检查实际滚动与卡片宽度。当前测试迭代为 `3.0.16-beta.5`，构建号 `30028`。
+
+## 在线播放与后台歌词的排查边界
+
+- 音频链路：`SongManager.getAudioSource` → `PlayerController.loadAndPlay` → `AudioManager` → `AndroidNativeAudioPlayer` / WebView。原生 `PlaybackManager` 持有实际 Media3 媒体、MediaSession、队列与播放位置。
+- 歌词链路：`setupSongUI` → `LyricManager.handleLyric` → 在线/本地/远程来源 → TTML/YRC/LRC 解析 → `musicStore.songLyric` → 主歌词与 Android 悬浮窗。请求代次拒绝旧结果；预载按歌曲类型、ID、本地路径及远程服务器身份区分。
+- 后台链路：原生 ENDED/通知/媒体按键 → 原生队列切歌 → `trackChanged` → 前端按歌曲 ID 校验并更新索引与歌词。原生切歌先清空旧悬浮时间轴；桥接数据携带歌曲 ID，不能覆盖另一首原生歌曲。
+- 悬浮进度由原生 `player.isPlaying()`、实际位置和速度驱动，缓冲或暂停不继续插值。WebView 恢复与悬浮服务重建沿用既有同步入口，不增加歌词轮询器。
+- 自动歌词可先展示已就绪 LRC/YRC，再升级 TTML；可选歌词来源分别隔离异常并限定等待时间。显式来源优先级保留，TTML 失败允许回退。新用户沿用既有自动模式，不迁移覆盖保存的手动偏好。
+- 原生错误仅由原生恢复流程处理，最终错误不再触发第二轮网页重试或自动跳歌。临时 HTTP 错误与权限/缺失资源分别处理；暂停取消待执行恢复。缓冲阈值未凭经验调大。
+
+相关确定性测试位于 `lyricConsistency.test.ts`、`playbackSourceRace.test.ts`、`PlaybackRecoveryPolicyTest.java`。设备测试 `PlaybackTransitionTest` 包含 20 次后台自然 HTTP 切歌、实际 Media3 媒体与 MediaSession 元信息校验、旧歌词桥接拒绝，以及低吞吐和断网后暂停场景。
+
+受控 HTTP 测试只替换网络端点，并将测试服务器的 HTTPS 地址映射回其本机 HTTP 端口；播放器、队列、解析器、Store 与悬浮窗使用实际实现。此测试不能替代真实在线提供方、蓝牙硬件、跨厂商省电策略或修改前后的弱网性能对比。只在隔离 Debug 包运行，保留首次失败记录，不清理用户数据。

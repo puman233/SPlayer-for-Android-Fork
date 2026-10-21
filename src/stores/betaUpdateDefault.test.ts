@@ -21,6 +21,11 @@ test("a fresh setting store keeps Beta updates opt-in without changing another p
   );
   const optedIn = module.exports.useSettingStore(createPinia());
   assert.equal(optedIn.checkBetaUpdates, false);
+  assert.equal(optedIn.lyricPriority, "auto");
+  assert.equal(optedIn.enableOnlineTTMLLyric, true);
+  optedIn.lyricPriority = "official";
+  assert.equal(module.exports.useSettingStore(createPinia()).lyricPriority, "auto");
+  assert.equal(optedIn.lyricPriority, "official");
   optedIn.checkBetaUpdates = true;
   assert.equal(module.exports.useSettingStore(createPinia()).checkBetaUpdates, false);
   assert.equal(optedIn.checkBetaUpdates, true);

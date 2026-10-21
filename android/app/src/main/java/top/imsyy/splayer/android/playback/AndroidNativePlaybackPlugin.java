@@ -457,7 +457,8 @@ public class AndroidNativePlaybackPlugin extends Plugin {
     runOnMainThread(
         call,
         () -> {
-          PlaybackManager.getInstance(getContext()).updateFloatingLyricData(lrcJson, yrcJson);
+          PlaybackManager.getInstance(getContext()).updateFloatingLyricData(
+              lrcJson, yrcJson, call.getData().optLong("songId", 0L));
           call.resolve();
         });
   }
@@ -483,7 +484,8 @@ public class AndroidNativePlaybackPlugin extends Plugin {
     runOnMainThread(
         call,
         () -> {
-          PlaybackManager.getInstance(getContext()).updateFloatingLyricSongInfo(name, artist);
+          PlaybackManager.getInstance(getContext()).updateFloatingLyricSongInfo(
+              name, artist, call.getData().optLong("songId", 0L));
           call.resolve();
         });
   }

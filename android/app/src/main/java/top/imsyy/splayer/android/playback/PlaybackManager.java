@@ -393,7 +393,10 @@ public final class PlaybackManager {
     playbackRequested = autoPlay;
     boolean applyStagedMetadata =
         stagedMetadata != null && url != null && url.equals(stagedMetadataSource);
-    if (applyStagedMetadata) currentMetadata = stagedMetadata;
+    if (applyStagedMetadata) {
+      if (currentMetadata.songId != stagedMetadata.songId) clearFloatingLyricForTrack(stagedMetadata);
+      currentMetadata = stagedMetadata;
+    }
     stagedMetadata = null;
     stagedMetadataSource = null;
     currentSource = url == null ? "" : url;
@@ -458,6 +461,9 @@ public final class PlaybackManager {
     ensureInitialized();
     ensureServiceRunning();
     playbackRequested = true;
+    if (player.getPlayerError() != null && recoverCurrentTrackAfterError(player.getPlayerError())) {
+      return buildState();
+    }
     player.play();
     emitPlaybackDiagnostic("play", null);
     updateNotification();
@@ -468,7 +474,8 @@ public final class PlaybackManager {
   public synchronized JSObject pause() {
     ensureInitialized();
     playbackRequested = false;
-    cancelRecoveryReset();
+    resetNativeRecoveryState();
+    resolveTokenCounter.incrementAndGet();
     player.pause();
     emitPlaybackDiagnostic("pause", null);
     updateNotification();
@@ -1008,7 +1015,7 @@ public final class PlaybackManager {
             if (isPlaying) {
               startProgressUpdates();
               scheduleRecoveryResetIfStable();
-            } else if (!player.getPlayWhenReady()) {
+            } else {
               cancelRecoveryReset();
             }
             updateNotification();
@@ -1443,7 +1450,7 @@ public final class PlaybackManager {
     Uri sourceUri = Uri.parse(currentSource);
     String sourceScheme = sourceUri.getScheme();
     if (!"http".equals(sourceScheme) && !"https".equals(sourceScheme)) return false;
-    if (!PlaybackRecoveryPolicy.isRecoverable(error.errorCode)) return false;
+    if (!playbackRequested || !PlaybackRecoveryPolicy.isRecoverable(error)) return false;
     if (nativeRecoverySongId != songId) {
       resetNativeRecoveryState();
       nativeRecoverySongId = songId;
@@ -1654,6 +1661,7 @@ public final class PlaybackManager {
       return;
     }
 
+    clearFloatingLyricForTrack(metadata);
     currentSource = source == null ? "" : source;
     playbackRequested = true;
     currentMetadata = metadata == null ? new TrackMetadata() : metadata.copy();
@@ -2627,6 +2635,20 @@ public final class PlaybackManager {
     if (floatingLyricService != null) floatingLyricService.pushLyrics(lrcJson, yrcJson);
   }
 
+  public synchronized void updateFloatingLyricData(String lrcJson, String yrcJson, long songId) {
+    if (!remoteMode && songId > 0 && songId != currentMetadata.songId) return;
+    updateFloatingLyricData(lrcJson, yrcJson);
+  }
+
+  private synchronized void clearFloatingLyricForTrack(@Nullable TrackMetadata metadata) {
+    updateFloatingLyricData("[]", "[]");
+    updateFloatingLyricSongInfo(metadata == null ? "" : metadata.title,
+        metadata == null ? "" : metadata.artist);
+    bufferedTimeMs = 0L;
+    bufferedPlaying = false;
+    if (floatingLyricService != null) floatingLyricService.pushProgress(0L, false);
+  }
+
   /** 推送进度 */
   public synchronized void updateFloatingLyricProgress(long timeMs, boolean playing) {
     // 原生播放期间不接受延迟到达的 WebView 进度/暂停消息。
@@ -2655,6 +2677,11 @@ public final class PlaybackManager {
     bufferedSongName = name;
     bufferedArtist = artist;
     if (floatingLyricService != null) floatingLyricService.pushSongInfo(name, artist);
+  }
+
+  public synchronized void updateFloatingLyricSongInfo(String name, String artist, long songId) {
+    if (!remoteMode && songId > 0 && songId != currentMetadata.songId) return;
+    updateFloatingLyricSongInfo(name, artist);
   }
 
   /** 来自应用内入口的一次性解锁，不混入缓存配置。 */

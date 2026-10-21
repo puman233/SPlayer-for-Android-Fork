@@ -8,6 +8,16 @@ import androidx.media3.common.PlaybackException;
 import org.junit.Test;
 
 public class PlaybackRecoveryPolicyTest {
+  @Test public void httpRecoveryDistinguishesTemporaryFailuresFromPermissionsAndMissingMedia() {
+    for (int status : new int[] {408, 429, 500, 502, 503, 504}) {
+      assertTrue(PlaybackRecoveryPolicy.isRetryableHttpStatus(status));
+    }
+    for (int status : new int[] {400, 401, 403, 404, 410, 416, 200}) {
+      assertFalse(PlaybackRecoveryPolicy.isRetryableHttpStatus(status));
+    }
+    assertFalse(PlaybackRecoveryPolicy.isRecoverable(PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE));
+    assertFalse(PlaybackRecoveryPolicy.isRecoverable(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND));
+  }
   @Test
   public void retryDelayUsesBoundedBackoff() {
     assertEquals(750L, PlaybackRecoveryPolicy.retryDelayMs(1));

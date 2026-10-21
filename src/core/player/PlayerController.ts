@@ -363,13 +363,14 @@ class PlayerController {
       if (requestToken === this.currentRequestToken) {
         if (audioManager.engineType === "android-native") audioManager.stop();
         console.error("❌ 播放初始化失败:", requestFailureCategory(error));
-        // 播放无权限，给出准确提示并跳过
+        // No playable candidate is not proof of a permission error. Keep this song
+        // selected; a source failure must not silently choose a different recording.
         if (error instanceof Error && error.message === "AUDIO_SOURCE_EMPTY") {
-          console.warn(`⚠️ 歌曲暂无权限播放，已跳过`);
-          window.$message.warning("该歌曲暂无权限播放，请检查权限，现已跳过");
+          console.warn("当前歌曲没有可用播放地址");
+          window.$message.warning("当前歌曲暂无可用音源，请稍后重试或手动选择音源");
           statusStore.playLoading = false;
+          statusStore.playStatus = false;
           this.retryInfo.count = 0;
-          await this.skipToNextWithDelay();
         } else {
           this.handlePlaybackError(undefined);
         }
@@ -660,6 +661,11 @@ class PlayerController {
     const musicStore = useMusicStore();
     const settingStore = useSettingStore();
     const songManager = useSongManager();
+    // Lyrics may have resolved before native committed the matching audio identity.
+    if (musicStore.playSong.id === song.id && musicStore.playSong.type === song.type) {
+      this.syncFloatingLyricSongInfo();
+      this.syncFloatingLyricData();
+    }
     // 记录播放历史 (非电台)
     if (song.type !== "radio") this.runIdleWithTimeout(() => void dataStore.setHistory(song), 1000);
     // 更新歌曲数据
@@ -948,21 +954,13 @@ class PlayerController {
     const musicStore = useMusicStore();
     const statusStore = useStatusStore();
 
-    let nextSong: SongType | undefined;
-
-    if (statusStore.personalFmMode) {
-      const fmList = musicStore.personalFM.list;
-      if (playListIndex >= 0 && playListIndex < fmList.length) {
-        musicStore.personalFM.playIndex = playListIndex;
-        nextSong = fmList[playListIndex];
-      }
-    } else {
-      const playList = dataStore.playList;
-      if (playListIndex >= 0 && playListIndex < playList.length) {
-        statusStore.playIndex = playListIndex;
-        nextSong = playList[playListIndex];
-      }
+    const list = statusStore.personalFmMode ? musicStore.personalFM.list : dataStore.playList;
+    let index = playListIndex;
+    // Native identifies the audio it actually loaded. A web queue can have been reordered.
+    if (typeof songId === "number" && songId > 0 && list[index]?.id !== songId) {
+      index = list.findIndex((song) => song.id === songId);
     }
+    const nextSong: SongType | undefined = list[index];
 
     if (!nextSong) {
       console.warn("[Android] applyNativeTrackChanged: playListIndex 越界，忽略", {
@@ -972,14 +970,10 @@ class PlayerController {
       return;
     }
 
-    // songId 校验仅告警：playListIndex 为权威来源
-    if (typeof songId === "number" && typeof nextSong.id === "number" && songId !== nextSong.id) {
-      console.warn("[Android] applyNativeTrackChanged: songId 与 playListIndex 不一致", {
-        expected: songId,
-        actual: nextSong.id,
-        playListIndex,
-      });
-    }
+    if (statusStore.personalFmMode) musicStore.personalFM.playIndex = index;
+    else statusStore.playIndex = index;
+    // Invalidate source lookups/retries started before native advanced the audio.
+    this.currentRequestToken++;
 
     if (typeof liked === "boolean" && typeof nextSong.id === "number") {
       this.applySongLikeState(nextSong.id, liked);
@@ -1041,6 +1035,12 @@ class PlayerController {
     const dataStore = useDataStore();
     const musicStore = useMusicStore();
     const statusStore = useStatusStore();
+
+    if (songId > 0) {
+      const list = statusStore.personalFmMode ? musicStore.personalFM.list : dataStore.playList;
+      const index = list.findIndex((song) => song.id === songId);
+      return this.applyNativeTrackChanged(index, songId, liked, "auto");
+    }
 
     let nextSong: SongType | undefined;
     // 是否通过 ID 匹配定位到（false 时走"下一索引"兜底）
@@ -1374,6 +1374,16 @@ class PlayerController {
    * @param currentSeek 当前播放位置 (用于恢复)
    */
   private async handlePlaybackError(errCode: number | undefined, currentSeek: number = 0) {
+    // Native has already exhausted/classified its retries. Do not create a second loop
+    // or silently advance the queue when it reports a terminal failure.
+    if (useAudioManager().engineType === "android-native") {
+      const statusStore = useStatusStore();
+      statusStore.playLoading = false;
+      statusStore.playStatus = false;
+      this.retryInfo.count = 0;
+      window.$message.error("当前歌曲播放失败，请稍后重试");
+      return;
+    }
     const requestToken = this.currentRequestToken;
     // 错误防抖
     const now = Date.now();
@@ -2305,6 +2315,7 @@ class PlayerController {
       const lrcData = toRaw(musicStore.songLyric.lrcData ?? []);
       const yrcData = toRaw(musicStore.songLyric.yrcData ?? []);
       AndroidNativePlayback.updateFloatingLyricData({
+        songId: typeof musicStore.playSong.id === "number" ? musicStore.playSong.id : undefined,
         lrcData: JSON.stringify(lrcData),
         yrcData: JSON.stringify(yrcData),
       }).catch(() => {});
@@ -2344,7 +2355,9 @@ class PlayerController {
     const statusStore = useStatusStore();
     if (!statusStore.showDesktopLyric) return;
     const info = getPlayerInfoObj();
+    const song = useMusicStore().playSong;
     AndroidNativePlayback.updateFloatingLyricSongInfo({
+      songId: typeof song.id === "number" ? song.id : undefined,
       name: info?.name ?? "",
       artist: info?.artist ?? "",
     }).catch(() => {});

@@ -17,6 +17,7 @@ const song = (id: number) => ({ id, name: `song${id}`, duration: 60000, type: "r
 // Exercise the full controller through its public commands. Deferred source and
 // audio adapters represent network/media execution; no controller methods are replaced.
 function fixture(native = false) {
+  let now = 10000;
   const listeningEvents: string[] = [];
   const loadedSources: string[] = [];
   const loadedOptions: any[] = [];
@@ -31,8 +32,9 @@ function fixture(native = false) {
   const retryDelays: ReturnType<typeof deferred>[] = [];
   const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, disableDjMode: false, lastfm: { enabled: false } };
   const status: any = { currentTime: 1000, duration: 60000, playStatus: true, playLoading: false,
-    playRate: 1, playVolume: 1, abLoop: {}, $patch(fn: (state: any) => void) { fn(status); } };
-  const music: any = { playSong: song(1), lyricSongId: 1 };
+    playRate: 1, playVolume: 1, abLoop: {}, getSongOffset: () => 0,
+    $patch(update: any) { if (typeof update === "function") update(status); else Object.assign(status, update); } };
+  const music: any = { playSong: song(1), lyricSongId: 1, songLyric: { lrcData: [], yrcData: [] } };
   const callbacks = new Map<string, (event?: any) => void>();
   const audio = {
     src: "audio1", paused: false, currentTime: 1, duration: 60, engineType: native ? "android-native" : "element",
@@ -51,8 +53,10 @@ function fixture(native = false) {
   };
   const noop = () => {};
   const imports: Record<string, any> = {
+    vue: { toRaw: (value: any) => value },
     "@/types/main": { QualityType },
     "@/utils/meta": { DJ_MODE_KEYWORDS },
+    "@/utils/calc": { calculateLyricIndex: () => -1 },
     "@/utils/requestDiagnostics": { requestFailureCategory: () => "unknown" },
     "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => data },
     "@/utils/env": { isCapacitorAndroid: native, isElectron: false, isMac: false },
@@ -76,6 +80,7 @@ function fixture(native = false) {
     compilerOptions: { module: ModuleKind.CommonJS },
   }).outputText, {
     module, exports: module.exports, Error,
+    Date: class extends Date { static now() { return now; } },
     require: (name: string) => imports[name] || {},
     console: { log: noop, warn: noop, error: noop },
     window: { document: {}, $message: { error: (s: string) => notices.push(s), warning: (s: string) => notices.push(s) } },
@@ -83,7 +88,8 @@ function fixture(native = false) {
   });
   return { controller: module.exports.usePlayerController(), status, music, audio, data, settings, pending, notices,
     listeningEvents, loadedSources, loadedOptions, metadataUpdates, emit: (name: string) => callbacks.get(name)?.(),
-    retryDelays, emitError: () => callbacks.get("error")?.({ detail: { errorCode: 2 } }),
+    retryDelays, emitError: (errorCode = 2) => callbacks.get("error")?.({ detail: { errorCode } }),
+    advance: (ms: number) => { now += ms; },
     delayContext: (promise?: Promise<any>) => { contextCompletion = promise; },
     delayMetadata: (promise?: Promise<any>) => { metadataCompletion = promise; },
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
@@ -142,6 +148,65 @@ for (const native of [false, true]) {
     assert.equal(f.status.playStatus, false);
     assert.equal(f.status.playLoading, false);
     assert.equal(f.loadedSources.length, 0);
+  });
+}
+
+for (const radio of [false, true]) {
+  test(`exhausted web recovery stops the current ${radio ? "radio" : "song"} without advancing the queue`, async () => {
+    const f = fixture();
+    f.music.playSong = { ...song(1), type: radio ? "radio" : "song", ...(radio ? { dj: { id: 99 } } : {}) };
+    f.data.playList = [f.music.playSong, { ...song(2), type: "song" }];
+    f.status.playIndex = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      f.advance(1000);
+      f.emitError();
+      f.retryDelays[attempt].resolve(undefined);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      f.pending[attempt].resolve({ id: 1, url: "audio1" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    f.advance(1000);
+    f.emitError();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(f.retryDelays.length, 3);
+    assert.equal(f.pending.length, 3);
+    assert.equal(f.music.playSong.id, 1);
+    assert.equal(f.status.playIndex, 0);
+    assert.equal(f.status.playStatus, false);
+    assert.equal(f.status.playLoading, false);
+});
+}
+
+test("stable web playback earns a new bounded recovery budget", async () => {
+  const f = fixture();
+  f.music.playSong = { ...song(1), type: "song" };
+  f.data.playList = [f.music.playSong];
+  f.status.playIndex = 0;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt === 3) {
+      f.audio.currentTime = 1; f.emit("timeupdate");
+      f.audio.currentTime = 11; f.emit("timeupdate");
+    }
+    f.advance(1000); f.emitError();
+    assert.equal(f.retryDelays.length, attempt + 1);
+    f.retryDelays[attempt].resolve(undefined);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    f.pending[attempt].resolve({ id: 1, url: "audio1" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.status.playStatus, true);
+});
+
+for (const local of [false, true]) {
+  test(`a permanent ${local ? "local file" : "unsupported format"} error preserves the selected song`, async () => {
+    const f = fixture();
+    if (local) f.music.playSong.path = "file:///missing-test.wav";
+    f.emitError(local ? 2 : 4);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(f.retryDelays.length, 0);
+    assert.equal(f.status.playStatus, false);
+    assert.equal(f.music.playSong.id, 1);
   });
 }
 

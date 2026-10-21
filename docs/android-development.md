@@ -44,6 +44,7 @@
 - 悬浮进度由原生 `player.isPlaying()`、实际位置和速度驱动，缓冲或暂停不继续插值。WebView 恢复与悬浮服务重建沿用既有同步入口，不增加歌词轮询器。
 - 自动歌词可先展示已就绪 LRC/YRC，再升级 TTML；可选歌词来源分别隔离异常并限定等待时间。显式来源优先级保留，TTML 失败允许回退。新用户沿用既有自动模式，不迁移覆盖保存的手动偏好。
 - 原生错误仅由原生恢复流程处理，最终错误不再触发第二轮网页重试或自动跳歌。临时 HTTP 错误与权限/缺失资源分别处理；暂停取消待执行恢复。缓冲阈值未凭经验调大。
+- WebView 恢复最多三次，等待按 1/2/4 秒退避；仅在连续实际时间轴推进 10 秒后重置预算。缓冲、暂停和 Seek 重新累计，格式或本地文件错误及重试耗尽均停止当前曲目，不自动更换歌曲。
 
 相关确定性测试位于 `lyricConsistency.test.ts`、`playbackSourceRace.test.ts`、`PlaybackRecoveryPolicyTest.java`。设备测试 `PlaybackTransitionTest` 包含 20 次后台自然 HTTP 切歌、实际 Media3 媒体与 MediaSession 元信息校验、旧歌词桥接拒绝，以及低吞吐和断网后暂停场景。
 

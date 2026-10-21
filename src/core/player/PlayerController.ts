@@ -44,13 +44,12 @@ class PlayerController {
   private readonly MAX_RETRY_COUNT = 3;
   /** 当前曲目重试信息（按歌曲维度） */
   private retryInfo: { songId: number | string; count: number } = { songId: 0, count: 0 };
+  private retryProgressStart: number | null = null;
   /** 当前播放请求标识 */
   public currentRequestToken = 0;
   /** Transport commands do not cancel pending quality/source preparation. */
   public playbackIntentRevision = 0;
   private seekRevision = 0;
-  /** 连续跳过计数 */
-  private failSkipCount = 0;
   /** 是否正在进行 Automix 过渡 */
   public isTransitioning = false;
   /** 负责管理播放模式相关的逻辑 */
@@ -226,7 +225,8 @@ class PlayerController {
       state.abLoop.pointB = null;
     });
     // 重置重试计数
-    const sid = song.type === "radio" ? song.dj?.id : song.id;
+    // Recovery is keyed by the selected track, not a radio's underlying API ID.
+    const sid = song.id;
     if (this.retryInfo.songId !== sid) {
       this.retryInfo = { songId: sid || 0, count: 0 };
     }
@@ -1217,9 +1217,8 @@ class PlayerController {
       playerIpc.sendMediaPlayState("Playing");
       mediaSessionManager.updatePlaybackStatus(true);
       window.document.title = `${playTitle} | SPlayer`;
-      // 只有真正播放了才重置重试计数
-      if (this.retryInfo.count > 0) this.retryInfo.count = 0;
-      // 注意：failSkipCount 的重置移至 onTimeUpdate，确保有实际进度
+      // 重新开始累计稳定播放进度，不能仅凭 play 事件清空恢复预算。
+      this.retryProgressStart = null;
       // Last.fm Scrobbler
       lastfmScrobbler.resume();
       // IPC 通知
@@ -1242,10 +1241,14 @@ class PlayerController {
       }
     });
     // Buffering is not effective listening time; actual playback resumes the interval.
-    audioManager.addEventListener("waiting", () => lastfmScrobbler.pause());
+    audioManager.addEventListener("waiting", () => {
+      this.retryProgressStart = null;
+      lastfmScrobbler.pause();
+    });
     audioManager.addEventListener("playing", () => lastfmScrobbler.resume());
     // 暂停
     audioManager.addEventListener("pause", () => {
+      this.retryProgressStart = null;
       statusStore.playStatus = false;
       useAutomixManager().resetAutomixScheduling("IDLE");
       playerIpc.sendMediaPlayState("Paused");
@@ -1272,6 +1275,7 @@ class PlayerController {
     });
     // 拖动进度条
     audioManager.addEventListener("seeking", () => {
+      this.retryProgressStart = null;
       useAutomixManager().resetAutomixScheduling("MONITORING");
     });
     // 播放结束
@@ -1315,9 +1319,15 @@ class PlayerController {
         progress: calculateProgress(currentTime, duration),
         lyricIndex,
       });
-      // 成功播放一段距离后，重置失败跳过计数
-      if (currentTime > 500 && this.failSkipCount > 0) {
-        this.failSkipCount = 0;
+      // A play event can be followed immediately by another network failure.
+      // Reset the budget only after actual uninterrupted timeline progress.
+      if (this.retryInfo.count > 0 && statusStore.playStatus && !audioManager.paused) {
+        if (this.retryProgressStart === null || currentTime < this.retryProgressStart) {
+          this.retryProgressStart = currentTime;
+        } else if (currentTime - this.retryProgressStart >= 10000) {
+          this.retryInfo.count = 0;
+          this.retryProgressStart = null;
+        }
       }
       // 更新系统 MediaSession
       mediaSessionManager.updateState(duration, currentTime);
@@ -1408,11 +1418,11 @@ class PlayerController {
     }
     // 格式不支持
     if (errCode === AudioErrorCode.SRC_NOT_SUPPORTED || errCode === 9) {
-      console.warn(`⚠️ 音频格式不支持 (Code: ${errCode}), 跳过`);
-      window.$message.error("该歌曲无法播放，已自动跳过");
+      console.warn(`音频格式不支持 (Code: ${errCode})`);
+      window.$message.error("该歌曲的音频格式无法播放，请手动选择其他音源");
       statusStore.playLoading = false;
       this.retryInfo.count = 0;
-      await this.skipToNextWithDelay();
+      await this.pause(true);
       return;
     }
     // 本地文件错误
@@ -1421,7 +1431,7 @@ class PlayerController {
       window.$message.error("本地文件无法播放");
       statusStore.playLoading = false;
       this.retryInfo.count = 0;
-      await this.skipToNextWithDelay();
+      await this.pause(true);
       return;
     }
     // 在线/流媒体错误处理
@@ -1431,7 +1441,7 @@ class PlayerController {
     );
     // 未超过重试次数 -> 尝试重新获取 URL（可能是过期）
     if (this.retryInfo.count <= this.MAX_RETRY_COUNT) {
-      await sleep(1000);
+      await sleep(Math.min(1000 * 2 ** (this.retryInfo.count - 1), 5000));
       if (requestToken !== this.currentRequestToken || this.retryInfo.count === 0) return;
       if (this.retryInfo.count === 1) {
         statusStore.playLoading = true;
@@ -1440,40 +1450,12 @@ class PlayerController {
       await this.playSong({ autoPlay: true, seek: currentSeek });
       return;
     }
-    // 超过重试次数 -> 跳下一首
-    console.error("❌ 超过最大重试次数，跳过当前歌曲");
+    // Exhaustion is a failure of this resource, not permission to choose another song.
+    console.error("超过最大重试次数，停止当前歌曲");
     this.retryInfo.count = 0;
-    window.$message.error("播放失败，已自动跳过");
-    await this.skipToNextWithDelay();
-  }
-
-  /**
-   * 带延迟的跳转下一首
-   */
-  private async skipToNextWithDelay() {
-    const requestToken = this.currentRequestToken;
-    const dataStore = useDataStore();
-    const statusStore = useStatusStore();
-    this.failSkipCount++;
-    // 连续跳过 3 首 -> 停止播放
-    if (this.failSkipCount >= 3) {
-      window.$message.error("播放失败次数过多，已停止播放");
-      statusStore.playLoading = false;
-      this.pause(true);
-      this.failSkipCount = 0;
-      return;
-    }
-    // 列表只有一首 -> 停止播放
-    if (dataStore.playList.length <= 1) {
-      window.$message.error("当前已无可播放歌曲");
-      this.cleanPlayList();
-      this.failSkipCount = 0;
-      return;
-    }
-    // 添加延迟，避免快速切歌导致卡死
-    await sleep(500);
-    if (requestToken !== this.currentRequestToken) return;
-    await this.nextOrPrev("next");
+    window.$message.error("当前歌曲恢复失败，请稍后重试或手动选择音源");
+    statusStore.playLoading = false;
+    await this.pause(true);
   }
 
   /** 播放 */

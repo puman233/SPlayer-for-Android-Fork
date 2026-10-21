@@ -49,3 +49,7 @@
 相关确定性测试位于 `lyricConsistency.test.ts`、`playbackSourceRace.test.ts`、`PlaybackRecoveryPolicyTest.java`。设备测试 `PlaybackTransitionTest` 包含 20 次后台自然 HTTP 切歌、实际 Media3 媒体与 MediaSession 元信息校验、旧歌词桥接拒绝，以及低吞吐和断网后暂停场景。
 
 受控 HTTP 测试只替换网络端点，并将测试服务器的 HTTPS 地址映射回其本机 HTTP 端口；播放器、队列、解析器、Store 与悬浮窗使用实际实现。此测试不能替代真实在线提供方、蓝牙硬件、跨厂商省电策略或修改前后的弱网性能对比。只在隔离 Debug 包运行，保留首次失败记录，不清理用户数据。
+
+真实在线验收使用 `FloatingLyricLongPlaybackTest`。默认用例继承已保存的音源偏好：关闭备用源且官方未返回地址时，应停在当前歌曲失败，不能为让测试通过而永久启用备用源。`explicitAutomaticSourceBackgroundNaturalEndKeepsRealTrackAndLyrics` 和 `fiveMinutesExplicitAutomaticSourceKeepsRealTrackAndLyrics` 是显式自动来源场景，临时只启用项目已配置的按歌曲 ID 取源入口，结束恢复完整设置、队列及播放速度；不增加外部服务或替换真实音频、歌词响应。
+
+前一用例以三倍速自然结束，后一用例以原速连续在后台观察五分钟，期间不打开页面、不 Seek、不发送下一首命令。两者同时校验实际音频时长与公开元数据、下一曲 ID、MediaSession 标题及独立歌词响应；音源不可用仍判失败，不跳过测试。诊断仅记录取源路由、耗时、业务状态与是否有地址，不保存媒体 URL、Cookie 或认证信息。真实提供方可用性会波动，因此单次通过不能证明所有歌曲或长期可用性。

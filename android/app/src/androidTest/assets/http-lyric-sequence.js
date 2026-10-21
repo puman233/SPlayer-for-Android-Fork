@@ -1,20 +1,20 @@
 // Controlled HTTP only: production controller, native queue, HTTP client and lyric parser.
 window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
-  await p7Init();
-  const data = fixturePinia._s.get("data");
+  await window.p7Init();
+  const data = window.fixturePinia._s.get("data");
   window.httpSequenceSaved = { list: data.playList, original: data.originalPlayList, history: data.setHistory };
   data.setHistory = async () => {};
-  Object.assign(fixtureSetting, { useNextPrefetch: count > 1, lyricPriority: "official",
+  Object.assign(window.fixtureSetting, { useNextPrefetch: count > 1, lyricPriority: "official",
     enableOnlineTTMLLyric: false, enableQQMusicLyric: false, enableAutomix: false,
     cacheEnabled: false, useSongUnlock: false, songLevel: "standard", androidAllowMixWithOthers: true });
-  Object.assign(fixtureStatus, { repeatMode: "off", shuffleMode: "off", personalFmMode: false, playIndex: 0, showFullPlayer: false });
+  Object.assign(window.fixtureStatus, { repeatMode: "off", shuffleMode: "off", personalFmMode: false, playIndex: 0, showFullPlayer: false });
   window.httpSequenceOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url, ...args) {
     const original = new URL(String(url), location.href);
     if (/\/(lyric|song\/url)/.test(original.pathname)) {
       url = base + (original.pathname.includes("lyric") ? "/lyric" : "/song/url") + original.search;
     }
-    return httpSequenceOpen.call(this, method, url, ...args);
+    return window.httpSequenceOpen.call(this, method, url, ...args);
   };
   window.httpSequenceNative = window.Capacitor.nativePromise;
   window.Capacitor.nativePromise = function (plugin, method, options) {
@@ -29,7 +29,7 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
     if (plugin === "AndroidNativePlayback" && method === "syncApiContext") {
       options = { ...options, apiBaseUrl: base, cookie: "" };
     }
-    return httpSequenceNative.call(this, plugin, method, options);
+    return window.httpSequenceNative.call(this, plugin, method, options);
   };
   data.playList = Array.from({ length: count }, (_, i) => ({ id: 991700 + i, type: "song",
     name: "HTTP sequence " + (991700 + i), duration, cover: "/images/song.jpg",
@@ -42,14 +42,14 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
 };
 window.restoreHttpLyricSequence = async () => {
   await window.__SPLAYER_PLAYER_CONTROLLER__.pause();
-  if (window.httpSequenceOpen) XMLHttpRequest.prototype.open = httpSequenceOpen;
-  if (window.httpSequenceNative) window.Capacitor.nativePromise = httpSequenceNative;
+  if (window.httpSequenceOpen) XMLHttpRequest.prototype.open = window.httpSequenceOpen;
+  if (window.httpSequenceNative) window.Capacitor.nativePromise = window.httpSequenceNative;
   if (window.httpSequenceSaved) {
-    const data = fixturePinia._s.get("data");
-    data.playList = httpSequenceSaved.list;
-    data.originalPlayList = httpSequenceSaved.original;
-    data.setHistory = httpSequenceSaved.history;
+    const data = window.fixturePinia._s.get("data");
+    data.playList = window.httpSequenceSaved.list;
+    data.originalPlayList = window.httpSequenceSaved.original;
+    data.setHistory = window.httpSequenceSaved.history;
   }
-  await p7Restore();
+  await window.p7Restore();
   await window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext();
 };

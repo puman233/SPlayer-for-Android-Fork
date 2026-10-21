@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
+import { DJ_MODE_KEYWORDS } from "../../utils/meta";
 
 const deferred = () => {
   let resolve!: (value: any) => void;
@@ -19,6 +20,7 @@ function fixture(native = false) {
   const loadedSources: string[] = [];
   const loadedOptions: any[] = [];
   const metadataUpdates: any[] = [];
+  const data: any = { playList: [] };
   const pending: ReturnType<typeof deferred>[] = [];
   const notices: string[] = [];
   let loadCompletion: Promise<any> | undefined;
@@ -26,7 +28,7 @@ function fixture(native = false) {
   let metadataCompletion: Promise<any> | undefined;
   let contextCompletion: Promise<any> | undefined;
   const retryDelays: ReturnType<typeof deferred>[] = [];
-  const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, lastfm: { enabled: false } };
+  const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, disableDjMode: false, lastfm: { enabled: false } };
   const status: any = { currentTime: 1000, duration: 60000, playStatus: true, playLoading: false,
     playRate: 1, playVolume: 1, abLoop: {}, $patch(fn: (state: any) => void) { fn(status); } };
   const music: any = { playSong: song(1), lyricSongId: 1 };
@@ -48,14 +50,15 @@ function fixture(native = false) {
   };
   const noop = () => {};
   const imports: Record<string, any> = {
+    "@/utils/meta": { DJ_MODE_KEYWORDS },
     "@/utils/requestDiagnostics": { requestFailureCategory: () => "unknown" },
-    "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => ({}) },
+    "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => data },
     "@/utils/env": { isCapacitorAndroid: native, isElectron: false, isMac: false },
     "./AudioManager": { useAudioManager: () => audio },
     "./SongManager": { useSongManager: () => ({ clearPrefetch: noop, prefetchCover: noop, getAudioSource: () => { const d = deferred(); pending.push(d); return d.promise; } }) },
     "./LyricManager": { useLyricManager: () => ({ handleLyric: (s: any) => { music.lyricSongId = s.id; } }) },
     "@/core/automix/AutomixManager": { useAutomixManager: () => ({ resetNextAnalysisCache: noop, resetAutomixScheduling: noop }) },
-    "@/utils/format": { getPlaySongData: () => music.playSong, getPlayerInfoObj: () => ({ name: "fixture", artist: "fixture" }) },
+    "@/utils/format": { getPlaySongData: () => data.playList[status.playIndex] || music.playSong, getPlayerInfoObj: () => ({ name: "fixture", artist: "fixture" }) },
     "@/utils/color": { getCoverColor: noop },
     "@/utils/helper": { sleep: () => { const d = deferred(); retryDelays.push(d); return d.promise; } },
     "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
@@ -76,7 +79,7 @@ function fixture(native = false) {
     window: { document: {}, $message: { error: (s: string) => notices.push(s), warning: (s: string) => notices.push(s) } },
     setTimeout: () => 0, clearTimeout: noop,
   });
-  return { controller: module.exports.usePlayerController(), status, music, audio, pending, notices,
+  return { controller: module.exports.usePlayerController(), status, music, audio, data, settings, pending, notices,
     listeningEvents, loadedSources, loadedOptions, metadataUpdates, emit: (name: string) => callbacks.get(name)?.(),
     retryDelays, emitError: () => callbacks.get("error")?.({ detail: { errorCode: 2 } }),
     delayContext: (promise?: Promise<any>) => { contextCompletion = promise; },
@@ -313,4 +316,72 @@ test("a superseded native crossfade cannot stage another track's metadata after 
   await obsolete;
   assert.deepEqual([...f.metadataUpdates], []);
   assert.deepEqual([...f.loadedSources], ["latest-native-audio"]);
+});
+
+
+test("a natural end at the last track with repeat off cannot restart the old first song", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), song(2)];
+  f.status.playIndex = 1;
+  f.status.repeatMode = "off";
+  f.music.playSong = song(2);
+  const ended = f.controller.nextOrPrev("next", true, true);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  try {
+    assert.equal(f.pending.length, 0, "natural completion must not request another source");
+    assert.equal(f.status.playIndex, 1);
+    assert.equal(f.status.playStatus, false);
+    assert.equal(f.status.playLoading, false);
+    assert.deepEqual([...f.loadedSources], []);
+  } finally {
+    for (const request of f.pending) request.resolve({ url: "unexpected-first-audio" });
+    await ended;
+  }
+});
+
+
+test("automatic repeat-off completion does not wrap past a blocked last track", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), { ...song(2), name: "DJ blocked track" }];
+  f.settings.disableDjMode = true;
+  f.status.playIndex = 0;
+  f.status.repeatMode = "off";
+  await f.controller.nextOrPrev("next", true, true);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.status.playIndex, 0);
+  assert.equal(f.status.playLoading, false);
+  assert.equal(f.status.playStatus, false);
+});
+
+test("manual next and enabled repeat modes retain their existing wrap or replay behavior", async () => {
+  for (const [repeatMode, autoEnd, expectedIndex] of [["off", false, 0], ["list", true, 0], ["one", true, 1]] as const) {
+    const f = fixture(true);
+    f.data.playList = [song(1), song(2)];
+    f.status.playIndex = 1;
+    f.status.repeatMode = repeatMode;
+    f.music.playSong = song(2);
+    const job = f.controller.nextOrPrev("next", true, autoEnd);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    try {
+      assert.equal(f.pending.length, 1, `${repeatMode}/${autoEnd} must still prepare playback`);
+      assert.equal(f.status.playIndex, expectedIndex);
+    } finally {
+      for (const request of f.pending) request.resolve({ url: "compatible-audio" });
+      await job;
+    }
+    assert.deepEqual([...f.loadedSources], ["compatible-audio"]);
+    assert.equal(f.music.playSong.id, expectedIndex + 1);
+  }
+});
+
+test("non-native natural completion also stops at repeat-off list end", async () => {
+  const f = fixture();
+  f.data.playList = [song(1)];
+  f.status.playIndex = 0;
+  f.status.repeatMode = "off";
+  await f.controller.nextOrPrev("next", true, true);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.status.playIndex, 0);
+  assert.equal(f.status.playLoading, false);
+  assert.equal(f.status.playStatus, false);
 });

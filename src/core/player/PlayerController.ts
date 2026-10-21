@@ -1587,7 +1587,14 @@ class PlayerController {
     while (attempts < maxAttempts) {
       nextIndex += type === "next" ? 1 : -1;
       // 边界处理 (索引越界)
-      if (nextIndex >= playListLength) nextIndex = 0;
+      if (nextIndex >= playListLength) {
+        if (autoEnd && statusStore.repeatMode === "off") {
+          statusStore.playStatus = false;
+          statusStore.playLoading = false;
+          return;
+        }
+        nextIndex = 0;
+      }
       if (nextIndex < 0) nextIndex = playListLength - 1;
       const nextSong = dataStore.playList[nextIndex];
       if (!this.shouldSkipSong(nextSong)) {

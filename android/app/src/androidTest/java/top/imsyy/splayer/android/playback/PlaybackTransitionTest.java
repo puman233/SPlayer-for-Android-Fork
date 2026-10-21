@@ -152,8 +152,14 @@ public class PlaybackTransitionTest {
       f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.rapidReady=true})");f.await("window.rapidReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       String urls=new org.json.JSONArray(Arrays.asList(server.url("slow"),server.url("middle"),server.url("final"))).toString();
-      long[] nativeFinalPlayingAt={0};
+      long[] nativeFinalPlayingAt={0},nativeFinalEndedAt={0};
       androidx.media3.common.Player.Listener nativeTiming=new androidx.media3.common.Player.Listener() {
+        @Override public void onPlaybackStateChanged(int state) {
+          if(state!=androidx.media3.common.Player.STATE_ENDED)return;
+          var snapshot=manager.buildState();
+          if(snapshot.optLong("songId")==991562&&server.url("final").equals(snapshot.optString("src")))
+            nativeFinalEndedAt[0]=SystemClock.elapsedRealtime();
+        }
         @Override public void onIsPlayingChanged(boolean playing) {
           var state=manager.buildState();
           if(playing&&state.optLong("songId")==991562&&server.url("final").equals(state.optString("src"))&&nativeFinalPlayingAt[0]==0)
@@ -182,11 +188,21 @@ public class PlaybackTransitionTest {
         try(var out=new PrintWriter(new File(timingDir,"rapid-http-first-playing.json"),"UTF-8")){out.print(timing);}
         assertTrue("Native final playback must meet the same latency limit: "+timing,nativeAt[0]>=selectedAt&&nativeAt[0]-selectedAt<1500);
         assertEquals("Slow old request must not hold final selection for seconds: "+timing,"true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
+        long completionDeadline=SystemClock.elapsedRealtime()+5000;
+        long[] completedAt={0};
+        do {
+          f.inst.runOnMainSync(()->completedAt[0]=nativeFinalEndedAt[0]);
+          if(completedAt[0]>0)break;
+          SystemClock.sleep(50);
+        }while(SystemClock.elapsedRealtime()<completionDeadline);
+        assertTrue("Final HTTP audio must actually reach its natural end",completedAt[0]>0);
+        // Keep the original late-response observation after the actual terminal event.
         SystemClock.sleep(2000);
         java.io.File dir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(dir.exists()||dir.mkdirs());
         try(var out=new PrintWriter(new File(dir,"rapid-http-selections.json"),"UTF-8")){out.print(f.js("JSON.stringify({events:rapidEvents,finalDelayMs:rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt})"));}
         assertEquals("Every native resource event must carry its matching identity: "+f.js("JSON.stringify(rapidIdentityErrors)"),"true",f.js("rapidIdentityErrors.length===0"));
         assertEquals("Old and intermediate audio must never play after final selection: "+f.js("JSON.stringify(rapidEvents)"),"true",f.js("rapidEvents.filter(e=>e.at>=rapidSelectedAt).every(e=>e.id===991562&&e.source==='final.wav')"));
+        assertEquals("Repeat off must stop at the final song without leaving loading active","true",f.js("!fixtureStatus.playStatus&&!fixtureStatus.playLoading&&fixturePinia._s.get('music').playSong.id===991562"));
       } finally {
         f.js("window.rapidObserver?.disconnect();if(window.rapidNativePromise)window.Capacitor.nativePromise=rapidNativePromise;if(window.rapidStorageSetItem)Storage.prototype.setItem=rapidStorageSetItem");
         f.inst.runOnMainSync(()->{manager.getSession().getPlayer().removeListener(nativeTiming);manager.pause();});

@@ -90,26 +90,20 @@ onMounted(() => {
   }
 });
 
-let disposeTimer: ReturnType<typeof setTimeout> | null = null;
+let unmountingRenderer: AbstractBaseRenderer | undefined;
 
 onBeforeUnmount(() => {
   const renderer = bgRenderRef.value;
   if (renderer) {
     renderer.pause();
     bgRenderRef.value = undefined;
-    // 延迟销毁
-    disposeTimer = setTimeout(() => {
-      renderer.dispose();
-      disposeTimer = null;
-    }, 500);
+    unmountingRenderer = renderer;
   }
 });
 
 onUnmounted(() => {
-  if (disposeTimer) {
-    clearTimeout(disposeTimer);
-    disposeTimer = null;
-  }
+  unmountingRenderer?.dispose();
+  unmountingRenderer = undefined;
 });
 
 watch(

@@ -32,6 +32,11 @@
       "summary": "修复播放页信息区独立位移与滑动抖动，保留整页滑动切换；调整封面上限、横屏圆角及控件淡出。"
     },
     {
+      "id": "background",
+      "category": "fixes",
+      "summary": "修复动态背景关闭后渲染资源未释放的问题。"
+    },
+    {
       "id": "actions",
       "category": "fixes",
       "summary": "修复音源、音质、歌词菜单及更多操作响应，按可用空间展示歌曲列表和桌面歌词按钮。"
@@ -263,10 +268,26 @@
       "evidence": "修复关闭循环时最后一首自然结束后错误回到第一首；保留手动下一首、列表及单曲循环，增强真实HTTP结束与旧曲不回播回归，原性能限值不变。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:91f93df8c339625f4fffdb307268d37b0004af16",
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "修正原生短触测试的排队时序并共享播放器打开入口，增加无contextmenu断言；应用、公开文案、原测试数量和1500ms/1200ms门槛不变，保留远程时延失败。"
+    },
+    {
+      "source": "changelog:5601e7d757fc590b",
+      "classification": "user-visible",
+      "release_ids": [
+        "background"
+      ],
+      "evidence": "修复动态背景关闭后渲染资源未释放的问题。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "user-visible",
+      "release_ids": [
+        "background"
+      ],
+      "evidence": "BackgroundRender真实Vue卸载时先暂停，再在onUnmounted释放Core渲染器；移除被取消的500ms释放定时器。真实Core工厂与公开renderer属性的四次挂载/卸载回归先红后绿，不改变视觉参数或依赖。"
     }
   ]
 }

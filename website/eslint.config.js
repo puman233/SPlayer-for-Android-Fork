@@ -6,6 +6,23 @@ export default [
   { ignores: ["dist/**", "node_modules/**"] },
   js.configs.recommended,
   {
+    files: ["scripts/*check.mjs", "scripts/browser-driver.mjs"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        innerWidth: "readonly",
+        matchMedia: "readonly",
+        performance: "readonly",
+        sessionStorage: "readonly",
+        localStorage: "readonly",
+        getComputedStyle: "readonly",
+        structuredClone: "readonly",
+        WebSocket: "readonly",
+      },
+    },
+  },
+  {
     files: ["**/*.ts"],
     languageOptions: {
       parser: tsParser,
@@ -30,6 +47,7 @@ export default [
         process: "readonly",
         fetch: "readonly",
         AbortController: "readonly",
+        AbortSignal: "readonly",
         URL: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",

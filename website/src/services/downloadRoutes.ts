@@ -191,6 +191,8 @@ export async function probeRoute(
     const reachable = await isReachableOpaque(url, controller.signal);
     return reachable ? manualOnly(route.id) : unavailable(route.id, true);
   } finally {
+    // Opaque responses expose no readable body to cancel; abort the underlying fetch.
+    controller.abort();
     clearTimeout(timer);
   }
 }

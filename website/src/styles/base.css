@@ -6,7 +6,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  scroll-padding-top: calc(var(--header-h) + 12px);
+  scroll-padding-top: calc(var(--sticky-h, var(--header-h)) + 12px);
 }
 
 body {
@@ -16,7 +16,7 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.7;
-  overflow-x: hidden;
+  overflow-wrap: anywhere;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -52,6 +52,11 @@ p:last-child {
 a {
   color: var(--accent);
   text-decoration: none;
+}
+
+p a:not(.btn) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 a:hover {

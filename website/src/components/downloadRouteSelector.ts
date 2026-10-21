@@ -44,7 +44,7 @@ export function mountRouteSelector(
 
   const autoOption = document.createElement("option");
   autoOption.value = AUTO_ROUTE_ID;
-  autoOption.textContent = "自动选择";
+  autoOption.textContent = "自动选择最快线路";
   options.append(autoOption);
 
   for (const route of getEnabledRoutes()) {
@@ -56,7 +56,7 @@ export function mountRouteSelector(
   }
 
   select.replaceChildren(options);
-  select.value = AUTO_ROUTE_ID;
+  select.value = ORIGINAL_ROUTE_ID;
 
   const setStatus = (text: string): void => {
     status.textContent = text;

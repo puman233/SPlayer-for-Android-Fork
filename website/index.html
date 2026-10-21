@@ -7,7 +7,7 @@
     <title>SPlayer for Android Fork</title>
     <meta
       name="description"
-      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+      content="免费开源的 Android 音乐播放器社区 Fork，支持本地与远程曲库、歌词和后台播放。查看界面、稳定版与 Beta 下载及安装帮助。"
     />
     <link rel="canonical" href="https://puman233.github.io/SPlayer-for-Android-Fork/" />
 
@@ -19,7 +19,7 @@
     <meta property="og:title" content="SPlayer for Android Fork" />
     <meta
       property="og:description"
-      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+      content="免费开源的 Android 音乐播放器社区 Fork。本地音乐、歌词、后台播放与远程曲库。"
     />
     <meta property="og:url" content="https://puman233.github.io/SPlayer-for-Android-Fork/" />
     <meta
@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="SPlayer for Android Fork" />
     <meta
       name="twitter:description"
-      content="一个基于 SPlayer for Android 的个人 Fork，记录 Android 端界面、播放、歌词和本地音乐相关的一些修改和尝试。"
+      content="免费开源的 Android 音乐播放器社区 Fork。本地音乐、歌词、后台播放与远程曲库。"
     />
     <meta
       name="twitter:image"
@@ -47,6 +47,8 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <link rel="preload" as="image" href="/screenshots/mobile-lyrics.webp" />
     <link rel="stylesheet" href="/src/styles/main.css" />
   </head>
 
@@ -86,6 +88,7 @@
             <li><a href="#features" data-nav-link>功能</a></li>
             <li><a href="#screenshots" data-nav-link>界面</a></li>
             <li><a href="#download" data-nav-link>下载</a></li>
+            <li><a href="#faq" data-nav-link>帮助</a></li>
             <li><a href="#about" data-nav-link>关于</a></li>
             <li>
               <a
@@ -97,6 +100,14 @@
             </li>
           </ul>
         </nav>
+        <label class="theme-picker"
+          ><span class="sr-only">网站主题</span
+          ><select id="theme-select" aria-label="网站主题">
+            <option value="system">跟随系统</option>
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select></label
+        >
       </div>
     </header>
 
@@ -115,15 +126,14 @@
               decoding="async"
             />
             <h1 id="hero-title">SPlayer for Android Fork</h1>
-            <p class="hero-lead">
-              一个基于 SPlayer for Android 的个人 Fork，记录一些 Android 端的修改和尝试。
-            </p>
+            <p class="hero-lead">让音乐，融入每一天。</p>
             <p class="hero-sub">
-              主要是根据自己在 Android 上的使用需求，做一些界面、播放、歌词和本地音乐相关的调整。
+              免费开源的 Android 音乐播放器社区 Fork。本地收藏、在线曲库与逐字歌词，在熟悉的 SPlayer
+              界面中随时聆听。
             </p>
 
             <p class="hero-actions">
-              <a class="btn btn-primary" href="#download">下载最新版</a>
+              <a class="btn btn-primary" href="#download">下载稳定版</a>
               <a
                 class="btn btn-ghost"
                 href="https://github.com/puman233/SPlayer-for-Android-Fork"
@@ -136,7 +146,7 @@
               <li>Android 10+</li>
               <li>AGPL-3.0</li>
               <li>非官方社区 Fork</li>
-              <li>当前版本 3.0.14</li>
+              <li id="hero-version">版本信息见下载区</li>
             </ul>
           </div>
 
@@ -207,7 +217,10 @@
       <section class="section" id="screenshots" aria-labelledby="screenshots-title">
         <div class="wrap">
           <h2 id="screenshots-title">界面预览</h2>
-          <p class="section-intro">下面是当前 Android 版本的一些实际界面。</p>
+          <p class="section-intro">
+            既有 Android 界面截图，可点击放大、切换查看。截图未记录对应 APK
+            版本，供界面参考，具体外观以所安装版本为准。
+          </p>
 
           <div class="shot-gallery" id="shot-gallery" data-state="pending"></div>
         </div>
@@ -216,12 +229,23 @@
       <!-- 下载 -->
       <section class="section" id="download" aria-labelledby="download-title">
         <div class="wrap">
-          <h2 id="download-title">下载</h2>
+          <h2 id="download-title">下载 SPlayer</h2>
           <p class="section-intro">安装包发布在 GitHub Releases。</p>
 
+          <div class="channel-picker">
+            <label for="release-channel">发布渠道</label
+            ><select id="release-channel" disabled>
+              <option value="stable">稳定版（推荐）</option>
+              <option value="beta">Beta 测试版</option>
+            </select>
+          </div>
+          <p id="release-status" class="muted" role="status">
+            正在读取版本数据；也可直接访问下方 GitHub Releases。
+          </p>
+          <p id="channel-warning" class="muted">默认推荐稳定版，请按设备实际 ABI 选择。</p>
           <div class="release" id="release-panel" data-mode="fallback">
             <p class="release-line">
-              <span class="release-key">最新版本</span>
+              <span class="release-key">所选版本</span>
               <span class="release-value" id="release-tag"
                 ><a
                   href="https://github.com/puman233/SPlayer-for-Android-Fork/releases/latest"
@@ -285,6 +309,7 @@
             <p class="release-actions">
               <a
                 class="btn btn-primary"
+                data-release-link
                 href="https://github.com/puman233/SPlayer-for-Android-Fork/releases/latest"
                 rel="noopener"
                 >前往 GitHub Releases 获取最新版</a
@@ -298,7 +323,22 @@
             </p>
 
             <p class="route-note" id="route-note" hidden>
-              加速线路由第三方公共代理提供，如不可用可切换为 GitHub 原始线路。
+              加速线路由第三方提供，可通过下载线路菜单切换。请核对发布源
+              SHA-256；不一致时不要安装，并切回 GitHub。缺少摘要时请查阅发布说明。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="updates" aria-labelledby="updates-title">
+        <div class="wrap">
+          <h2 id="updates-title">近期更新</h2>
+          <p class="section-intro">稳定版与 Beta 分别展示，完整变化以对应发布说明为准。</p>
+          <div id="release-updates" class="release-updates">
+            <p data-updates-fallback>
+              <a href="https://github.com/puman233/SPlayer-for-Android-Fork/releases"
+                >在 GitHub 查看更新记录</a
+              >
             </p>
           </div>
         </div>
@@ -319,12 +359,44 @@
       <section class="section" id="faq" aria-labelledby="faq-title">
         <div class="wrap narrow">
           <h2 id="faq-title">常见问题</h2>
+          <details class="faq-item">
+            <summary>如何安装和升级？</summary>
+            <div class="faq-body">
+              <p>
+                下载适合设备架构的 APK，按 Android
+                提示允许当前浏览器或文件管理器安装未知应用。升级应使用同一来源、同一签名的较新版本覆盖安装。安装失败先核对
+                ABI、版本与签名，不要通过卸载或清空数据解决。
+              </p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>下载失败或找不到安装包？</summary>
+            <div class="faq-body">
+              <p>
+                打开所选版本的发布页，确认附件存在。GitHub
+                连接困难时可选择第三方线路，下载后核对摘要。网页快照和缓存可能滞后，以 GitHub
+                Releases 为准。
+              </p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>后台播放、悬浮歌词或媒体权限有问题？</summary>
+            <div class="faq-body">
+              <p>
+                检查系统中的通知、音乐与音频、悬浮窗权限及电池后台限制，仅按需要开启。各厂商后台策略不同；在线播放还取决于服务端和账号权限。
+              </p>
+              <p>
+                <a href="https://github.com/puman233/SPlayer-for-Android-Fork/issues">反馈问题</a
+                >时请提供版本、设备、复现步骤及脱敏日志。
+              </p>
+            </div>
+          </details>
 
           <details class="faq-item">
             <summary>应该下载哪个版本？</summary>
             <div class="faq-body">
               <p>
-                多数现代 Android 手机选择 <code>arm64-v8a</code>。2015 年前后的老设备通常是
+                多数现代 Android 手机选择 <code>arm64-v8a</code>。部分旧设备使用
                 <code>armeabi-v7a</code>，<code>x86_64</code> 和 <code>x86</code> 基本只用于模拟器。
               </p>
             </div>
@@ -416,6 +488,18 @@
             不存在官方隶属、合作、授权背书或认可。上游的代码、设计与维护工作归上游作者所有。
           </p>
 
+          <p class="muted">
+            第三方代码与素材声明请查看对应 Release
+            的许可材料。应用通知图标字体仍有部分再分发授权证据未确认，见 CHANGELOG
+            与发布说明；本网站不加载或分发该字体。
+          </p>
+          <p>
+            <a href="https://github.com/puman233/SPlayer-for-Android-Fork/blob/dev/CONTRIBUTING.md"
+              >参与贡献</a
+            >
+            / <a href="https://github.com/puman233/SPlayer-for-Android-Fork/issues">报告问题</a>
+          </p>
+          <p><a href="./THIRD-PARTY-NOTICES.txt">网站第三方软件许可</a></p>
           <h2 class="sub-heading" id="license-title">License</h2>
           <p>
             <code>AGPL-3.0</code> ·

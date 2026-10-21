@@ -1,13 +1,21 @@
 {
   "name": "SPlayer for Android Fork",
   "short_name": "SPlayer Fork",
-  "description": "一个基于 SPlayer for Android 的个人 Fork，记录一些 Android 端的修改和尝试。",
+  "description": "免费开源的 Android 音乐播放器社区 Fork。本地音乐、歌词、后台播放与远程曲库。",
   "lang": "zh-CN",
   "start_url": "./",
   "scope": "./",
   "display": "browser",
   "icons": [
-    { "src": "icons/favicon-192x192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/app-icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "icons/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }

@@ -4,8 +4,8 @@ export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "";
 
   const mb = bytes / (1024 * 1024);
-  if (mb >= 1000) return `${Math.round(mb)} MB`;
-  return `${mb.toFixed(1)} MB`;
+  if (mb >= 1000) return `${Math.round(mb)} MiB`;
+  return `${mb.toFixed(1)} MiB`;
 }
 
 /** 把 ISO 时间转成中文日期；无效输入返回空字符串。 */

@@ -1,14 +1,15 @@
 /* 设计变量：浅色为默认，深色跟随系统。颜色刻意保持低饱和，主色只用于链接、按钮和状态标记。 */
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --bg-soft: #f7f8fa;
   --border: #e3e6ea;
   --border-strong: #d0d5db;
 
   --text: #1c1f23;
-  --text-muted: #626a73;
+  --text-muted: #58616c;
 
-  --accent: #3a6ea5;
+  --accent: #315f91;
   --accent-strong: #2f5c8c;
   --accent-soft: rgba(58, 110, 165, 0.08);
   --accent-contrast: #ffffff;
@@ -31,17 +32,40 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111318;
+  --bg-soft: #181b20;
+  --border: #2a2f37;
+  --border-strong: #3b424c;
+
+  --text: #e5e8ec;
+  --text-muted: #aeb7c2;
+
+  --accent: #8db7e4;
+  --accent-strong: #9dc0e6;
+  --accent-soft: rgba(127, 169, 214, 0.12);
+  --accent-contrast: #111318;
+
+  --code-bg: #22262c;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Preserve system colors before the deferred application script starts. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
+    color-scheme: dark;
     --bg: #111318;
     --bg-soft: #181b20;
     --border: #2a2f37;
     --border-strong: #3b424c;
 
     --text: #e5e8ec;
-    --text-muted: #9aa3ad;
+    --text-muted: #aeb7c2;
 
-    --accent: #7fa9d6;
+    --accent: #8db7e4;
     --accent-strong: #9dc0e6;
     --accent-soft: rgba(127, 169, 214, 0.12);
     --accent-contrast: #111318;

@@ -12,6 +12,8 @@
 /* ---------- 顶部导航 ---------- */
 
 .site-header {
+  max-height: 100dvh;
+  overflow-y: auto;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -39,6 +41,8 @@
   gap: 9px;
   min-height: 44px;
   margin-right: auto;
+  min-width: 0;
+  max-width: calc(100% - 52px);
   color: var(--text);
   font-weight: 600;
   font-size: 0.9375rem;
@@ -198,7 +202,7 @@
 }
 
 .section h2 {
-  scroll-margin-top: calc(var(--header-h) + 16px);
+  scroll-margin-top: calc(var(--sticky-h, var(--header-h)) + 16px);
 }
 
 @media (min-width: 900px) {
@@ -211,7 +215,8 @@
 
 .hero {
   border-top: 0;
-  padding-block: 36px 40px;
+  padding-block: 44px 52px;
+  background: var(--bg-soft);
 }
 
 .hero-grid {
@@ -299,7 +304,7 @@
 }
 
 .hero-figure--phone img {
-  width: min(240px, 68%);
+  width: min(240px, 100%);
 }
 
 .hero-figure--wide {
@@ -337,9 +342,9 @@
   }
 
   .hero-grid {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 52px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    align-items: center;
+    gap: 40px;
   }
 
   .hero-text {
@@ -347,11 +352,12 @@
   }
 
   .hero-shots {
-    width: 560px;
+    width: 100%;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   }
 
   .hero-figure--phone img {
-    width: 204px;
+    width: 100%;
   }
 
   .hero-grid[data-has-shot="false"] {

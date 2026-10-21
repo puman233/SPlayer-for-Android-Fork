@@ -1,272 +1,176 @@
-/**
- * 下载区块。
- *
- * 页面 HTML 里已经带了一份可用的静态 fallback（架构说明 + 前往 Releases 的入口）。
- * 这里只在 GitHub API 成功返回时把它升级成带版本、日期、大小和直链的表格；
- * 失败时什么都不做，因此不会出现 loading、白屏或错误弹窗。
- *
- * 下载线路：拿到 Release 附件后，为每条线路现算下载地址（不预先写死所有 URL）。
- * 探测在下载区进入视口后才开始，全部逻辑在 services/downloadRoutes.ts。
- */
-
-import { loadLatestRelease } from "../services/github";
-import type { ReleaseAsset, ReleaseInfo } from "../services/github";
-import {
-  AUTO_ROUTE_ID,
-  ORIGINAL_ROUTE_ID,
-  getRoute,
-  isSelectableRoute,
-} from "../data/downloadRoutes";
+/** Download UI: shared channel renderer with IP-country default and manual override. */
+import { loadReleaseCatalog, RELEASES_URL } from "../services/github";
+import type { Channel, ReleaseInfo } from "../services/github";
+import { getRoute, getProbeRoutes, ORIGINAL_ROUTE_ID, AUTO_ROUTE_ID } from "../data/downloadRoutes";
+import { detectCountry } from "../services/region";
+import { createReleaseNotes } from "./releaseNotes";
 import {
   buildDownloadUrl,
   probeConfiguredRoutes,
-  readManualRouteId,
-  readRouteCache,
   selectBestRoute,
-  writeManualRouteId,
-  writeRouteCache,
 } from "../services/downloadRoutes";
-import type { RouteProbeResult } from "../services/downloadRoutes";
 import { mountRouteSelector } from "./downloadRouteSelector";
-import type { RouteSelectorHandle } from "./downloadRouteSelector";
-import { ABI_SPECS, assetMatchesAbi, isInstallableApk } from "../utils/abi";
+import { assetMatchesAbi } from "../utils/abi";
 import { formatBytes, formatDate } from "../utils/format";
-
-/** 只用推荐架构做代表文件探测，结果应用于全部 ABI */
-const PROBE_ABI = "arm64-v8a";
-const IDLE_FALLBACK_DELAY_MS = 1500;
-
-interface DownloadState {
-  readonly tag: string;
-  readonly originalUrls: Map<string, string>;
-  readonly links: Map<string, HTMLAnchorElement>;
-  /** 用户当前选择（可能是 AUTO_ROUTE_ID） */
-  routeId: string;
-  /** 实际生效的线路 id */
-  resolvedRouteId: string;
-}
-
-let state: DownloadState | null = null;
-let selector: RouteSelectorHandle | null = null;
-let observer: IntersectionObserver | null = null;
-let probing = false;
 
 export function mountReleasePanel(): void {
   const panel = document.getElementById("release-panel");
-  if (!panel) return;
-
-  void loadLatestRelease().then((release) => {
-    if (!release) return;
-    applyRelease(panel, release);
+  const status = document.getElementById("release-status");
+  if (!panel || !status) return;
+  let current: ReleaseInfo | null = null;
+  let routeId = ORIGINAL_ROUTE_ID;
+  let defaultRouteId = ORIGINAL_ROUTE_ID;
+  let manualSelection = false;
+  let generation = 0;
+  const refreshLinks = (): void => {
+    const route = getRoute(routeId) ?? getRoute(ORIGINAL_ROUTE_ID);
+    if (!route) return;
+    for (const link of panel.querySelectorAll<HTMLAnchorElement>("a[data-original]")) {
+      link.href = buildDownloadUrl(link.dataset["original"] ?? "", route);
+    }
+  };
+  const selector = mountRouteSelector((selected) => {
+    manualSelection = true;
+    generation++;
+    if (selected !== AUTO_ROUTE_ID) {
+      routeId = selected;
+      refreshLinks();
+      selector?.showManual(selected);
+      return;
+    }
+    const asset = current?.assets[0];
+    if (!asset) return;
+    const token = generation;
+    selector?.showProbing();
+    void probeConfiguredRoutes(asset.downloadUrl)
+      .then((results) => {
+        if (token !== generation) return;
+        routeId = selectBestRoute(results);
+        refreshLinks();
+        selector?.showAutoResult(
+          routeId,
+          results.find((r) => r.id === routeId)?.latency ?? null,
+          !results.some((r) => r.available),
+        );
+      })
+      .catch(() => {
+        if (token !== generation) return;
+        routeId = ORIGINAL_ROUTE_ID;
+        refreshLinks();
+        selector?.showManual(routeId);
+      });
   });
-}
-
-function applyRelease(panel: HTMLElement, release: ReleaseInfo): void {
-  const candidates = release.assets.filter((asset) => isInstallableApk(asset.name));
-
-  const matched = new Map<string, ReleaseAsset>();
-  for (const spec of ABI_SPECS) {
-    const asset = candidates.find((item) => assetMatchesAbi(item.name, spec.id));
-    if (asset) matched.set(spec.id, asset);
-  }
-
-  // 一个可识别的 APK 都没有时保持 fallback，避免出现空表格。
-  if (matched.size === 0) return;
-
-  const originalUrls = new Map<string, string>();
-  const links = new Map<string, HTMLAnchorElement>();
-
-  for (const row of panel.querySelectorAll<HTMLTableRowElement>("tr[data-abi]")) {
-    const abi = row.dataset["abi"];
-    const asset = abi ? matched.get(abi) : undefined;
-
-    if (!asset) {
-      // 当前 Release 缺少该架构：只隐藏这一行，不提示错误。
-      row.hidden = true;
-      continue;
+  const render = (release: ReleaseInfo | null, channel: Channel): void => {
+    generation++;
+    current = release;
+    if (!manualSelection) routeId = defaultRouteId;
+    selector?.setValue(routeId);
+    selector?.showManual(routeId);
+    panel.dataset["mode"] = release ? "release" : "fallback";
+    const tag = document.getElementById("release-tag");
+    const date = document.getElementById("release-date");
+    if (tag) tag.textContent = release?.tag ?? "暂无可用的已验证安装包";
+    if (date) date.textContent = release ? `发布于 ${formatDate(release.publishedAt)}` : "";
+    if (selector && release) selector.show();
+    const picker = document.getElementById("route-picker");
+    if (picker) picker.hidden = !release;
+    for (const row of panel.querySelectorAll<HTMLTableRowElement>("tr[data-abi]")) {
+      const abi = row.dataset["abi"] ?? "";
+      const asset = release?.assets.find((a) => assetMatchesAbi(a.name, abi));
+      row.hidden = release !== null && !asset;
+      const size = row.querySelector<HTMLElement>("[data-size]");
+      if (size) size.textContent = asset ? formatBytes(asset.size) : "—";
+      const action = row.querySelector<HTMLElement>("[data-action]");
+      if (!action) continue;
+      action.replaceChildren();
+      if (!asset) continue;
+      const link = document.createElement("a");
+      link.className = "btn btn-ghost btn-sm";
+      link.href = asset.downloadUrl;
+      link.dataset["original"] = asset.downloadUrl;
+      link.textContent = "下载 APK";
+      link.setAttribute("aria-label", `下载 ${asset.name}`);
+      const filename = document.createElement("span");
+      filename.className = "asset-name";
+      filename.textContent = asset.name;
+      const details = document.createElement("details");
+      details.className = "digest";
+      const summary = document.createElement("summary");
+      summary.textContent = "SHA-256";
+      const code = document.createElement("code");
+      code.textContent =
+        asset.digest?.replace(/^sha256:/i, "") ??
+        "发布来源未提供摘要，请查看 Release 附件中的校验资料。";
+      details.append(summary, code);
+      action.append(link, filename, details);
     }
-
-    const sizeCell = row.querySelector<HTMLElement>("[data-size]");
-    if (sizeCell) sizeCell.textContent = formatBytes(asset.size) || "—";
-
-    const link = createDownloadLink(asset);
-    const actionCell = row.querySelector<HTMLElement>("[data-action]");
-    if (actionCell) actionCell.replaceChildren(link);
-
-    if (abi) {
-      links.set(abi, link);
-      originalUrls.set(abi, asset.downloadUrl);
+    // Newly rendered channel links must inherit the resolved or manually chosen route.
+    refreshLinks();
+    for (const link of panel.querySelectorAll<HTMLAnchorElement>("[data-release-link]")) {
+      link.href = release?.htmlUrl ?? RELEASES_URL;
+      link.textContent = release ? "查看此版本发布说明" : "前往 GitHub Releases 查找版本";
     }
-  }
-
-  const tagSlot = panel.querySelector<HTMLElement>("#release-tag");
-  if (tagSlot) {
-    const link = document.createElement("a");
-    link.href = release.htmlUrl;
-    link.rel = "noopener";
-    link.textContent = release.tag;
-    tagSlot.replaceChildren(link);
-  }
-
-  const dateSlot = panel.querySelector<HTMLElement>("#release-date");
-  if (dateSlot) {
-    const formatted = formatDate(release.publishedAt);
-    dateSlot.textContent = formatted ? `发布于 ${formatted}` : "";
-  }
-
-  panel.dataset["mode"] = "release";
-
-  state = {
-    tag: release.tag,
-    originalUrls,
-    links,
-    routeId: AUTO_ROUTE_ID,
-    resolvedRouteId: ORIGINAL_ROUTE_ID,
+    const warning = document.getElementById("channel-warning");
+    if (warning)
+      warning.textContent =
+        channel === "beta"
+          ? "Beta 为测试版本，可能存在问题；安装前请阅读发布说明并备份重要数据。"
+          : "默认推荐稳定版。请按设备实际 ABI 选择，网站不会通过浏览器推测架构。";
   };
-  setupRoutes(panel);
-}
-
-function createDownloadLink(asset: ReleaseAsset): HTMLAnchorElement {
-  const link = document.createElement("a");
-  link.className = "btn btn-ghost btn-sm";
-  link.href = asset.downloadUrl;
-  link.rel = "noopener";
-  link.textContent = "下载";
-  link.setAttribute("aria-label", `下载 ${asset.name}`);
-  return link;
-}
-
-/* ---------- 下载线路 ---------- */
-
-function activeRouteId(): string {
-  if (!state) return ORIGINAL_ROUTE_ID;
-  return state.routeId === AUTO_ROUTE_ID ? state.resolvedRouteId : state.routeId;
-}
-
-/** 按当前线路为每个 ABI 现算下载地址 */
-function refreshDownloadLinks(): void {
-  if (!state) return;
-
-  const route = getRoute(activeRouteId()) ?? getRoute(ORIGINAL_ROUTE_ID);
-  if (!route) return;
-
-  for (const [abi, link] of state.links) {
-    const original = state.originalUrls.get(abi);
-    if (original) link.href = buildDownloadUrl(original, route);
-  }
-}
-
-function setupRoutes(panel: HTMLElement): void {
-  if (!state) return;
-
-  selector = selector ?? mountRouteSelector(onRouteSelected);
-  if (!selector) return;
-  selector.show();
-
-  const manual = readManualRouteId();
-  if (manual && manual !== AUTO_ROUTE_ID && isSelectableRoute(manual)) {
-    state.routeId = manual;
-    state.resolvedRouteId = manual;
-    selector.setValue(manual);
-    selector.showManual(manual);
-    refreshDownloadLinks();
-    return;
-  }
-
-  const cached = readRouteCache(state.tag);
-  if (cached) {
-    applySelection(cached.selectedRouteId, cached.results);
-    return;
-  }
-
-  scheduleProbe(panel);
-}
-
-/** 下载区进入视口后才探测；不支持 IntersectionObserver 时退化为延迟 1.5 秒 */
-function scheduleProbe(panel: HTMLElement): void {
-  if (probing) return;
-
-  const start = (): void => {
-    void runProbe();
-  };
-
-  if (typeof IntersectionObserver === "undefined") {
-    window.setTimeout(start, IDLE_FALLBACK_DELAY_MS);
-    return;
-  }
-
-  observer?.disconnect();
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      observer?.disconnect();
-      observer = null;
-      start();
-    },
-    { rootMargin: "0px 0px -10% 0px" },
-  );
-
-  observer.observe(document.getElementById("download") ?? panel);
-}
-
-async function runProbe(): Promise<void> {
-  if (!state || probing) return;
-
-  const original = state.originalUrls.get(PROBE_ABI) ?? [...state.originalUrls.values()][0];
-  if (!original) return;
-
-  const tag = state.tag;
-  probing = true;
-  selector?.showProbing();
-
-  try {
-    const results = await probeConfiguredRoutes(original);
-    if (!state || state.tag !== tag) return;
-
-    const best = selectBestRoute(results);
-    writeRouteCache(tag, { selectedRouteId: best, checkedAt: Date.now(), results });
-    applySelection(best, results);
-  } finally {
-    probing = false;
-  }
-}
-
-function applySelection(routeId: string, results: readonly RouteProbeResult[]): void {
-  if (!state || !selector) return;
-
-  state.resolvedRouteId = routeId;
-  refreshDownloadLinks();
-
-  if (state.routeId !== AUTO_ROUTE_ID) {
-    selector.showManual(state.routeId);
-    return;
-  }
-
-  const hasUsableProxy = results.some((item) => item.probeable && item.available);
-  const latency = results.find((item) => item.id === routeId)?.latency ?? null;
-  selector.showAutoResult(routeId, latency, !hasUsableProxy);
-}
-
-/** 用户手动选线后不再自动覆盖，本次会话内一直尊重该选择 */
-function onRouteSelected(routeId: string): void {
-  if (!state || !selector) return;
-
-  writeManualRouteId(routeId);
-
-  if (routeId !== AUTO_ROUTE_ID && isSelectableRoute(routeId)) {
-    state.routeId = routeId;
-    state.resolvedRouteId = routeId;
-    refreshDownloadLinks();
-    selector.showManual(routeId);
-    return;
-  }
-
-  state.routeId = AUTO_ROUTE_ID;
-  const cached = readRouteCache(state.tag);
-  if (cached) {
-    applySelection(cached.selectedRouteId, cached.results);
-    return;
-  }
-
-  void runProbe();
+  void loadReleaseCatalog()
+    .then((result) => {
+      if (!result) {
+        status.textContent = "版本数据暂时不可用，请前往 GitHub Releases 下载。";
+        return;
+      }
+      const { catalog, source } = result;
+      status.textContent =
+        source === "api"
+          ? "数据来自本次 GitHub API 查询。"
+          : `${source === "cache" ? "会话缓存" : "站点快照"} · 生成于 ${new Date(catalog.generatedAt).toLocaleString("zh-CN")}；可能不是最新，请核对发布页。`;
+      render(catalog.stable, "stable");
+      const choice = document.getElementById("release-channel");
+      if (choice instanceof HTMLSelectElement) {
+        choice.disabled = false;
+        choice.addEventListener("change", () => {
+          const channel: Channel = choice.value === "beta" ? "beta" : "stable";
+          render(catalog[channel], channel);
+        });
+      }
+      const hero = document.getElementById("hero-version");
+      if (hero && catalog.stable) hero.textContent = `稳定版 ${catalog.stable.tag}（数据见下载区）`;
+      const updates = document.getElementById("release-updates");
+      if (updates) {
+        for (const channel of ["stable", "beta"] as const) {
+          const release = catalog[channel];
+          if (!release) continue;
+          const article = document.createElement("article");
+          const title = document.createElement("h3");
+          const link = document.createElement("a");
+          link.href = release.htmlUrl;
+          link.textContent = `${channel === "stable" ? "稳定版" : "Beta"} ${release.tag}`;
+          title.append(link);
+          const date = document.createElement("p");
+          date.className = "muted";
+          date.textContent = formatDate(release.publishedAt);
+          const details = createReleaseNotes(release);
+          article.append(title, date, details);
+          updates.append(article);
+        }
+        updates.querySelector("[data-updates-fallback]")?.remove();
+      }
+    })
+    .catch(() => {
+      status.textContent = "版本读取失败，请使用 GitHub Releases 入口。";
+    });
+  // No geo banner or permission prompt. Explicit manual choices always win.
+  void detectCountry().then((country) => {
+    if (country !== "CN") return;
+    defaultRouteId = getProbeRoutes()[0]?.id ?? ORIGINAL_ROUTE_ID;
+    if (manualSelection) return;
+    routeId = defaultRouteId;
+    refreshLinks();
+    selector?.setValue(routeId);
+    selector?.showManual(routeId);
+  });
 }

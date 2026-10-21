@@ -12,6 +12,15 @@ export function mountNav(): void {
   mountScrollState(header);
   mountActiveSection();
   mountDisclosure(toggle, nav);
+  // Theme controls and wrapped navigation can make the sticky header taller.
+  const measure = (): void => {
+    document.documentElement.style.setProperty(
+      "--sticky-h",
+      `${header.getBoundingClientRect().height}px`,
+    );
+  };
+  measure();
+  new ResizeObserver(measure).observe(header);
 }
 
 function mountScrollState(header: HTMLElement): void {
@@ -62,6 +71,14 @@ function mountDisclosure(toggle: HTMLElement | null, nav: HTMLElement | null): v
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") close(true);
+  });
+  document.getElementById("site-header")?.addEventListener("focusout", (event) => {
+    if (
+      !desktop.matches &&
+      event.relatedTarget instanceof Node &&
+      !document.getElementById("site-header")?.contains(event.relatedTarget)
+    )
+      close(false);
   });
 
   const onBreakpointChange = (): void => {

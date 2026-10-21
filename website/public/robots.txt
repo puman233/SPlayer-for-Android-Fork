@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://puman233.github.io/SPlayer-for-Android-Fork/sitemap.xml

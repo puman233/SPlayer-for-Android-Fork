@@ -1,12 +1,12 @@
 // Controlled HTTP only: production controller, native queue, HTTP client and lyric parser.
-window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
+window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000, options = {}) => {
   await window.p7Init();
   const data = window.fixturePinia._s.get("data");
   window.httpSequenceSaved = { list: data.playList, original: data.originalPlayList, history: data.setHistory };
   data.setHistory = async () => {};
   Object.assign(window.fixtureSetting, { useNextPrefetch: count > 1, lyricPriority: "official",
     enableOnlineTTMLLyric: false, enableQQMusicLyric: false, enableAutomix: false,
-    cacheEnabled: false, useSongUnlock: false, songLevel: "standard", androidAllowMixWithOthers: true });
+    cacheEnabled: false, useSongUnlock: false, songLevel: "standard", androidAllowMixWithOthers: options.allowMix ?? true });
   Object.assign(window.fixtureStatus, { repeatMode: "off", shuffleMode: "off", personalFmMode: false, playIndex: 0, showFullPlayer: false });
   window.httpSequenceOpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url, ...args) {
@@ -36,6 +36,7 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
     artists: [{ id: 1, name: "Synthetic artist" }], album: { id: 1, name: "Synthetic album" } }));
   data.originalPlayList = data.playList.slice();
   const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
+  if (options.beforePlay) await options.beforePlay();
   await controller.setDesktopLyricShow(true);
   window.httpSequenceSelectedAt = Date.now();
   await controller.playSong({ song: data.playList[0], autoPlay: true });

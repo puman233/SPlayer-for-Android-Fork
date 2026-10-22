@@ -96,7 +96,7 @@ public class WeakNetworkPlaybackTest {
       // bind the real native resolver too, then restore its exact prior context in close().
       fixture.inst.runOnMainSync(() -> manager.syncApiContext(
           "http://127.0.0.1:" + server.server.getLocalPort(), "", "standard", true, false));
-      fixture.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+      fixture.moveToBackground();
     }
 
     JSONObject sample() throws Exception {

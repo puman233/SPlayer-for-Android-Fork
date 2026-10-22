@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.os.SystemClock;
 import android.webkit.WebView;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
+import androidx.test.runner.lifecycle.Stage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import top.imsyy.splayer.android.MainActivity;
@@ -52,6 +54,42 @@ final class DeviceWebFixture implements AutoCloseable {
         + "; layout=" + js("JSON.stringify({viewport:[innerWidth,innerHeight],screen:[screen.width,screen.height],dpr:devicePixelRatio,deviceMode:window.fixtureSetting?.androidDeviceModeOverride,pageZoom:window.fixtureSetting?.pageZoom,portrait:!!document.querySelector('.full-player-mobile'),landscape:!!document.querySelector('.full-player-mobile-landscape'),desktop:!!document.querySelector('.full-player.pad-desktop'),playerVisible:window.fixtureStatus?.showFullPlayer,textZoom:document.querySelector('.info-page .meta-actions-row')?.getBoundingClientRect().toJSON()})")
         + "; nativeDisplay=" + activity.getDisplay().getDisplayId()
         + "; nativeSize=" + web.getWidth() + "x" + web.getHeight());
+  }
+  Stage moveToBackground() throws Exception {
+    inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+    Stage[] stage = {null};
+    long deadline = SystemClock.elapsedRealtime() + 500;
+    do {
+      inst.runOnMainSync(() -> stage[0] = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity));
+      if (stage[0] == Stage.STOPPED) return stage[0];
+      SystemClock.sleep(50);
+    } while (SystemClock.elapsedRealtime() < deadline);
+    // HOME may target the default display while this Activity remains resumed
+    // on a MuMu secondary display. Move the actual task, then prove it stopped.
+    boolean[] moved = {false};
+    inst.runOnMainSync(() -> moved[0] = activity.moveTaskToBack(true));
+    assertTrue("The target task must move behind its display's foreground", moved[0]);
+    deadline = SystemClock.elapsedRealtime() + 500;
+    do {
+      inst.runOnMainSync(() -> stage[0] = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity));
+      if (stage[0] == Stage.STOPPED) return stage[0];
+      SystemClock.sleep(100);
+    } while (SystemClock.elapsedRealtime() < deadline);
+    // MuMu can keep the sole Activity resumed on a display with no secondary
+    // launcher. A real opaque Activity in the test APK represents switching apps.
+    Intent cover = new Intent(inst.getContext(), BackgroundCoverActivity.class)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+    var options = android.app.ActivityOptions.makeBasic();
+    options.setLaunchDisplayId(activity.getDisplay().getDisplayId());
+    inst.getContext().startActivity(cover, options.toBundle());
+    deadline = SystemClock.elapsedRealtime() + 5000;
+    do {
+      inst.runOnMainSync(() -> stage[0] = ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity));
+      if (stage[0] == Stage.STOPPED) return stage[0];
+      SystemClock.sleep(100);
+    } while (SystemClock.elapsedRealtime() < deadline);
+    assertEquals("The actual target Activity must stop before background observation", Stage.STOPPED, stage[0]);
+    return stage[0];
   }
   void tapVisible(String expression) throws Exception { tapVisible(expression, 0.5, 0.5); }
   void tapVisible(String expression, double fractionX, double fractionY) throws Exception {

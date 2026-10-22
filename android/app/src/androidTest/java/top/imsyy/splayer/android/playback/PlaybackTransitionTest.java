@@ -75,11 +75,15 @@ public class PlaybackTransitionTest {
           output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: https://localhost\r\nAccess-Control-Allow-Credentials: true\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: "+json.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
           output.write(json);output.flush();return;
         }
+        String audioCors="Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\n";
+        if(request.startsWith("OPTIONS")){
+          socket.getOutputStream().write(("HTTP/1.1 204 No Content\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));return;
+        }
         int audioRequest=audioRequests.incrementAndGet();
         if(headerDelayMs>0)SystemClock.sleep(headerDelayMs);
         if (audioOffline) {
           failures.incrementAndGet();
-          socket.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+          socket.getOutputStream().write(("HTTP/1.1 503 Service Unavailable\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
           return;
         }
         if(tones&&request.contains("/slow.wav")){slowRequests.incrementAndGet();SystemClock.sleep(1800);}
@@ -87,7 +91,7 @@ public class PlaybackTransitionTest {
         int total=tones?wave.length:3*1024*1024;
         OutputStream out=socket.getOutputStream();
         String header=start>0?"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes "+start+"-"+(total-1)+"/"+total+"\r\n":"HTTP/1.1 200 OK\r\n";
-        out.write((header+"Content-Length: "+(total-start)+"\r\nContent-Type: audio/wav\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        out.write((header+audioCors+"Accept-Ranges: bytes\r\nContent-Length: "+(total-start)+"\r\nContent-Type: audio/wav\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
         byte[] chunk=new byte[8192];Arrays.fill(chunk,(byte)(request.contains("/next.wav")?71:93));
         int chunkIndex=0;
         for(long position=start;position<total;position+=chunk.length) {
@@ -139,7 +143,7 @@ public class PlaybackTransitionTest {
         f.await("window.httpSequenceReady||!!window.httpSequenceError");
         assertEquals("null",f.js("window.httpSequenceError||null"));
         f.await("fixturePinia._s.get('music').songLyric.lrcData[0]?.words[0]?.word==='HTTP lyric 991700'");
-        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        f.moveToBackground();
         long deadline=SystemClock.elapsedRealtime()+150000;
         while(seen.size()<21&&SystemClock.elapsedRealtime()<deadline) {
           f.inst.runOnMainSync(()->{
@@ -176,6 +180,7 @@ public class PlaybackTransitionTest {
         assertEquals("Every one of 20 natural transitions must publish its own lyrics: "+samples,21,seen.size());
         System.out.println("HTTP_LYRIC_SEQUENCE "+samples);
       } finally {
+        f.activity.startActivity(new android.content.Intent(f.activity,top.imsyy.splayer.android.MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
         f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");
         f.await("window.httpSequenceRestored===true");
         f.inst.runOnMainSync(manager::hideFloatingLyric);

@@ -163,6 +163,22 @@ public class WebViewNetworkPlaybackTest {
     try (Scenario scenario = new Scenario("initial-503")) {
       scenario.server.audioOffline = true;
       scenario.start();
+      assertTerminalFailure(scenario);
+      scenario.passed = true;
+    }
+  }
+  @Test public void permanentAndUnobservableFailuresNeverRetryAs503() throws Exception {
+    for(String profile:new String[]{"missing-404","invalid-format","cors-denied"})try (Scenario scenario = new Scenario(profile)) {
+      scenario.server.audioStatus = profile.equals("missing-404")?404:200;
+      scenario.server.invalidAudio = profile.equals("invalid-format");
+      scenario.server.audioCorsEnabled = !profile.equals("cors-denied");
+      scenario.metrics.put("responseStatus",scenario.server.audioStatus).put("corsEnabled",scenario.server.audioCorsEnabled);
+      scenario.start();
+      assertTerminalFailure(scenario);
+      scenario.passed = true;
+    }
+  }
+  private void assertTerminalFailure(Scenario scenario) throws Exception {
       long deadline = SystemClock.elapsedRealtime() + 30000;
       JSONObject state;
       do {
@@ -178,8 +194,7 @@ public class WebViewNetworkPlaybackTest {
       assertTrue(state.getBoolean("paused"));
       assertEquals("Terminal source failure must stop resolving", urls, scenario.server.urlRequests.get());
       assertTrue(scenario.server.urlRequests.get() <= 4);
-      scenario.passed = true;
-    }
+      assertEquals(0,scenario.maxWebRetries);
   }
   @Test public void webMediaRecoversFromActualTcpResetWithoutChangingSong() throws Exception {
     try (Scenario scenario = new Scenario("tcp-reset")) {

@@ -35,6 +35,8 @@ public class PlaybackTransitionTest {
     volatile long headerDelayMs=0,jitterDelayMs=0,interruptAfterBytes=0,firstReadStallMs=0;
     volatile int jitterEveryChunks=0;
     volatile boolean audioOffline=false;
+    volatile int audioStatus=200;
+    volatile boolean audioCorsEnabled=true,invalidAudio=false;
     volatile long unavailableSongId=0;
     AudioServer() throws Exception {this(false);}
     AudioServer(boolean tones) throws Exception {
@@ -76,15 +78,20 @@ public class PlaybackTransitionTest {
           output.write(json);output.flush();return;
         }
         String audioCors="Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\n";
+        if(!audioCorsEnabled)audioCors="";
         if(request.startsWith("OPTIONS")){
           socket.getOutputStream().write(("HTTP/1.1 204 No Content\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));return;
         }
         int audioRequest=audioRequests.incrementAndGet();
         if(headerDelayMs>0)SystemClock.sleep(headerDelayMs);
-        if (audioOffline) {
+        if (audioOffline || audioStatus!=200) {
           failures.incrementAndGet();
-          socket.getOutputStream().write(("HTTP/1.1 503 Service Unavailable\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+          int status=audioOffline?503:audioStatus;
+          socket.getOutputStream().write(("HTTP/1.1 "+status+" Test Failure\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
           return;
+        }
+        if(invalidAudio){
+          socket.getOutputStream().write(("HTTP/1.1 200 OK\r\n"+audioCors+"Content-Type: audio/wav\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-wave").getBytes(StandardCharsets.US_ASCII));return;
         }
         if(tones&&request.contains("/slow.wav")){slowRequests.incrementAndGet();SystemClock.sleep(1800);}
         byte[] wave=tones?wave():null;

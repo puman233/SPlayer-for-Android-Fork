@@ -344,6 +344,10 @@ public final class PlaybackManager {
     service = playbackService;
     serviceStarted = true;
     ensureInitialized();
+    // A cold remote/failed load may already be paused or have no metadata when
+    // onCreate runs. Fulfill startForegroundService's contract before the normal
+    // notification policy is allowed to demote or clear this service.
+    service.startForeground(PlaybackConstants.NOTIFICATION_ID, buildNotification());
     updateNotification();
   }
 

@@ -30,7 +30,8 @@ export function createBrowserDriver() {
       if (entry) {
         clearTimeout(entry.timer);
         calls.delete(data.id);
-        data.error ? entry.reject(Error(JSON.stringify(data.error))) : entry.resolve(data.result);
+        if (data.error) entry.reject(Error(JSON.stringify(data.error)));
+        else entry.resolve(data.result);
       }
     });
     const rpc = (method, params = {}, sessionId) =>

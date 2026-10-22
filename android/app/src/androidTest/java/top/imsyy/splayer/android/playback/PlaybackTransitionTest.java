@@ -19,16 +19,21 @@ import top.imsyy.splayer.android.cache.AudioCacheProvider;
 /** Real queue commands and HTTP/cache playback, without deleting existing user cache. */
 @RunWith(AndroidJUnit4.class)
 public class PlaybackTransitionTest {
-  private static final class AudioServer implements AutoCloseable {
+  static final class AudioServer implements AutoCloseable {
     final ServerSocket server=new ServerSocket(0,8,InetAddress.getByName("127.0.0.1"));
     final ExecutorService clients=Executors.newCachedThreadPool();
     final Set<Socket> sockets=ConcurrentHashMap.newKeySet();
     final AtomicInteger sent=new AtomicInteger(),slowRequests=new AtomicInteger();
+    final AtomicInteger audioRequests=new AtomicInteger(),urlRequests=new AtomicInteger(),failures=new AtomicInteger();
+    final AtomicInteger interruptedResponses=new AtomicInteger();
+    final AtomicInteger stalledResponses=new AtomicInteger();
     final Thread accept;
     final String prefix="transition-"+UUID.randomUUID();
     final boolean tones;
     final int seconds;
     volatile long chunkDelayMs=4;
+    volatile long headerDelayMs=0,jitterDelayMs=0,interruptAfterBytes=0,firstReadStallMs=0;
+    volatile int jitterEveryChunks=0;
     volatile boolean audioOffline=false;
     volatile long unavailableSongId=0;
     AudioServer() throws Exception {this(false);}
@@ -55,6 +60,7 @@ public class PlaybackTransitionTest {
           if(line.toLowerCase(Locale.ROOT).startsWith("range: bytes=")) start=Long.parseLong(line.substring(13).split("-")[0]);
         }
         if (request.contains("/lyric") || request.contains("/song/url")) {
+          if(request.contains("/song/url")&&!request.startsWith("OPTIONS"))urlRequests.incrementAndGet();
           Uri uri=Uri.parse("http://localhost"+request.split(" ")[1]);
           String id=uri.getQueryParameter("id");
           if(id==null)id=uri.getQueryParameter("ids");
@@ -69,7 +75,10 @@ public class PlaybackTransitionTest {
           output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: https://localhost\r\nAccess-Control-Allow-Credentials: true\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: "+json.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
           output.write(json);output.flush();return;
         }
+        int audioRequest=audioRequests.incrementAndGet();
+        if(headerDelayMs>0)SystemClock.sleep(headerDelayMs);
         if (audioOffline) {
+          failures.incrementAndGet();
           socket.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
           return;
         }
@@ -80,11 +89,21 @@ public class PlaybackTransitionTest {
         String header=start>0?"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes "+start+"-"+(total-1)+"/"+total+"\r\n":"HTTP/1.1 200 OK\r\n";
         out.write((header+"Content-Length: "+(total-start)+"\r\nContent-Type: audio/wav\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
         byte[] chunk=new byte[8192];Arrays.fill(chunk,(byte)(request.contains("/next.wav")?71:93));
+        int chunkIndex=0;
         for(long position=start;position<total;position+=chunk.length) {
           if(tones)out.write(wave,(int)position,(int)Math.min(chunk.length,total-position));
           else out.write(chunk,0,(int)Math.min(chunk.length,total-position));
           out.flush();
-          sent.addAndGet(chunk.length);SystemClock.sleep(chunkDelayMs);
+          sent.addAndGet((int)Math.min(chunk.length,total-position));SystemClock.sleep(chunkDelayMs);
+          chunkIndex++;
+          if(jitterEveryChunks>0&&chunkIndex%jitterEveryChunks==0)SystemClock.sleep(jitterDelayMs);
+          if(audioRequest==1&&firstReadStallMs>0&&position+chunk.length-start>=65536&&stalledResponses.compareAndSet(0,1)){
+            SystemClock.sleep(firstReadStallMs);
+          }
+          // A single real TCP reset; subsequent HTTP ranges can recover the media.
+          if(audioRequest==1&&interruptAfterBytes>0&&position+chunk.length-start>=interruptAfterBytes){
+            interruptedResponses.incrementAndGet();socket.setSoLinger(true,0);return;
+          }
         }
       }catch(IOException expectedCancellation) {
         // Production cancellation and the intentional offline phase close these sockets.

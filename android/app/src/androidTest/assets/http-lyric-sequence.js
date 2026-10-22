@@ -37,6 +37,7 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000) => {
   data.originalPlayList = data.playList.slice();
   const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
   await controller.setDesktopLyricShow(true);
+  window.httpSequenceSelectedAt = Date.now();
   await controller.playSong({ song: data.playList[0], autoPlay: true });
   window.httpSequenceReady = true;
 };

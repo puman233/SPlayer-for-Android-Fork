@@ -3,6 +3,8 @@ package top.imsyy.splayer.android.playback;
 import static org.junit.Assert.*;
 import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
+import androidx.test.runner.lifecycle.Stage;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.lang.reflect.Field;
@@ -185,12 +187,18 @@ public class FloatingLyricLongPlaybackTest {
         if(explicitAutomaticSource&&mode==BackgroundAdvance.NATURAL_END)f.inst.runOnMainSync(()->{
           try {savedRate[0]=((androidx.media3.exoplayer.ExoPlayer)field(manager,"player")).getPlaybackParameters().speed;manager.setRate(1f);}catch(Exception e){throw new AssertionError(e);}
         });
-        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        Stage backgroundStage=f.moveToBackground();
+        assertEquals("Online media page must actually be hidden before background observation","true",f.js("document.hidden"));
+        long backgroundStarted=SystemClock.elapsedRealtime();
         JSONArray timeline=new JSONArray();
         for(int i=0;i<(mode==BackgroundAdvance.FAST_NATURAL_END?22:naturalEnd?60:automatic?14:4);i++) {
           SystemClock.sleep(5000);JSONObject[] sample={null};
-          f.inst.runOnMainSync(()->{try {sample[0]=nativeSnapshot(manager);}catch(Exception e){throw new AssertionError(e);}});
-          timeline.put(sample[0].put("elapsedMs",(i+1)*5000));
+          f.inst.runOnMainSync(()->{try {
+            Stage stage=ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(f.activity);
+            sample[0]=nativeSnapshot(manager).put("activityStage",stage.name());
+            assertEquals("Online observation must remain truly backgrounded",Stage.STOPPED,stage);
+          }catch(Exception e){throw new AssertionError(e);}});
+          timeline.put(sample[0].put("elapsedMs",SystemClock.elapsedRealtime()-backgroundStarted));
           assertTrue("后台歌词窗口必须保持实际显示且显示器有效: "+sample[0],sample[0].getBoolean("overlayShown"));
         }
         f.inst.runOnMainSync(()->{
@@ -210,6 +218,8 @@ public class FloatingLyricLongPlaybackTest {
           JSONObject sample=new JSONObject();StringBuilder text=new StringBuilder();long[] id={0};
           f.inst.runOnMainSync(()->{
             try {
+              assertEquals("Target and lyrics must match before returning to the app",Stage.STOPPED,
+                ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(f.activity));
               PlaybackManager.TrackMetadata metadata=(PlaybackManager.TrackMetadata)field(manager,"currentMetadata");
               id[0]=metadata==null?0:metadata.songId;
               FloatingLyricService overlay=(FloatingLyricService)field(manager,"floatingLyricService");
@@ -231,11 +241,13 @@ public class FloatingLyricLongPlaybackTest {
         String evidence=mode==BackgroundAdvance.FAST_NATURAL_END?"online-background-fast-natural.json":naturalEnd?"online-background-five-minutes.json":automatic?"online-background-ended-transition.json":prepareAudio?"online-background-prepared-transition.json":"online-background-lyric-transition.json";
         if(targetSongId!=186016L)evidence=evidence.replace(".json","-"+targetSongId+".json");
         if(explicitAutomaticSource)evidence=evidence.replace(".json","-automatic.json");
+        evidence=evidence.replace(".json","-stopped.json");
         android.graphics.Bitmap screen=f.inst.getUiAutomation().takeScreenshot();
         if(screen!=null)try(var out=new FileOutputStream(new File(dir,evidence.replace(".json","-screen.png")))){screen.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}finally{screen.recycle();}
         try(var out=new java.io.PrintWriter(new File(dir,evidence),"UTF-8")){out.print(samples);}
         try(var out=new java.io.PrintWriter(new File(dir,evidence.replace(".json","-diagnostic.json")),"UTF-8")) {
-          out.print(new JSONObject().put("timeline",timeline).put("upstreamAudio",probeObservedAudio(f,target)).put("uiAfterObservation",new JSONTokener((String)new JSONTokener(f.js("JSON.stringify({songId:p7Stores.music.playSong.id,list:fixturePinia._s.get('data').playList.map(s=>s.id),index:fixtureStatus.playIndex,repeat:fixtureStatus.repeatMode,mix:fixtureSetting.androidAllowMixWithOthers,automix:fixtureSetting.enableAutomix,abLoop:fixtureStatus.abLoop,context:onlineContext,sources:onlineSources,requests:onlineRequests,trace:onlineTrace,actions:onlineActions,nativeEvents:onlineNativeEvents})")).nextValue()).nextValue()));
+          out.print(new JSONObject().put("backgroundLifecycle",backgroundStage.name()).put("documentHiddenAtEntry",true)
+            .put("observationMs",SystemClock.elapsedRealtime()-backgroundStarted).put("timeline",timeline).put("upstreamAudio",probeObservedAudio(f,target)).put("uiAfterObservation",new JSONTokener((String)new JSONTokener(f.js("JSON.stringify({songId:p7Stores.music.playSong.id,list:fixturePinia._s.get('data').playList.map(s=>s.id),index:fixtureStatus.playIndex,repeat:fixtureStatus.repeatMode,mix:fixtureSetting.androidAllowMixWithOthers,automix:fixtureSetting.enableAutomix,abLoop:fixtureStatus.abLoop,context:onlineContext,sources:onlineSources,requests:onlineRequests,trace:onlineTrace,actions:onlineActions,nativeEvents:onlineNativeEvents})")).nextValue()).nextValue()));
         }
         assertTrue("后台原生下一首必须播放目标曲并显示该曲歌词，无需返回App。末态="+samples.opt(samples.length()-1),matched);
         if(explicitAutomaticSource)f.inst.runOnMainSync(()->{

@@ -3,6 +3,7 @@ package top.imsyy.splayer.android.playback;
 import static org.junit.Assert.*;
 import android.os.SystemClock;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
 import androidx.test.runner.lifecycle.Stage;
 import java.io.File;
@@ -96,6 +97,10 @@ public class FloatingLyricLongPlaybackTest {
         .put("queueSongId",current==null?0:current.songId).put("queueIndex",current==null?-1:current.playListIndex)
         .put("positionMs",player==null?-1:player.getCurrentPosition()).put("durationMs",player==null?-1:player.getDuration())
         .put("playing",player!=null&&player.isPlaying()).put("rate",player==null?0:player.getPlaybackParameters().speed)
+        .put("buffering",player!=null&&player.getPlaybackState()==androidx.media3.common.Player.STATE_BUFFERING)
+        .put("mediaUriMatchesLoadedSource",player!=null&&player.getCurrentMediaItem()!=null
+            &&player.getCurrentMediaItem().localConfiguration!=null
+            &&player.getCurrentMediaItem().localConfiguration.uri.toString().equals(manager.buildState().optString("src")))
         .put("overlayShown",overlayView!=null&&overlayView.isShown()&&overlayView.getDisplay()!=null&&overlayView.getDisplay().isValid())
         .put("overlayDisplayId",overlayView==null||overlayView.getDisplay()==null?-1:overlayView.getDisplay().getDisplayId())
         .put("lyrics",String.join("|",lines));
@@ -110,6 +115,13 @@ public class FloatingLyricLongPlaybackTest {
     assertBackgroundOnlineNext(BackgroundAdvance.SEEK_END);
   }
   @Test public void fiveMinutesBackgroundRealOnlineSongEndsAndLoadsNextLyrics() throws Exception {
+    assertBackgroundOnlineNext(BackgroundAdvance.NATURAL_END);
+  }
+  @Test public void realPlaylistSongsKeepBackgroundAudioAndLyricsAtNormalRate() throws Exception {
+    String ids=InstrumentationRegistry.getArguments().getString("real_playlist_ids");
+    assertNotNull("Pass two song IDs observed in the actual user's playlist",ids);
+    assertTrue("Only real numeric song IDs are accepted",ids.matches("[1-9][0-9]*,[1-9][0-9]*"));
+    assertNotEquals("Natural transition needs two distinct real songs",ids.split(",")[0],ids.split(",")[1]);
     assertBackgroundOnlineNext(BackgroundAdvance.NATURAL_END);
   }
   @Test public void acceleratedBackgroundRealOnlineNaturalEndLoadsNextLyrics() throws Exception {
@@ -143,6 +155,11 @@ public class FloatingLyricLongPlaybackTest {
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       Float[] savedRate={null};
       try {
+        String playlistIds=InstrumentationRegistry.getArguments().getString("real_playlist_ids");
+        if(playlistIds!=null) {
+          assertTrue(playlistIds.matches("[1-9][0-9]*,[1-9][0-9]*"));
+          f.js("window.onlinePlaylistSongIds="+JSONObject.quote(playlistIds));
+        }
         f.js("window.onlineTargetSongId="+targetSongId+";window.onlineUseConfiguredIdSource="+explicitAutomaticSource+";prepareOnlineTransition().catch(e=>window.onlineError={phase:onlinePhase,type:e.name})");
         for(int i=0;i<600&&!"true".equals(f.js("window.onlinePrepared===true||!!window.onlineError"));i++)SystemClock.sleep(100);
         assertEquals("真实在线首曲准备成功: "+f.js("window.onlineError"),"true",f.js("window.onlinePrepared===true"));
@@ -161,11 +178,11 @@ public class FloatingLyricLongPlaybackTest {
         f.await("!!window.backgroundExpected||!!window.backgroundExpectedError");
         String raw=(String)new JSONTokener(f.js("backgroundExpected")).nextValue();
         assertTrue("目标在线歌曲必须有歌词",raw.length()>20);
-        long target=Long.parseLong(f.js("onlineSongs[1].id"));
+        long target=((Number)new JSONTokener(f.js("onlineSongs[1].id")).nextValue()).longValue();
         long firstExpectedDuration=Long.parseLong(f.js("onlineSongs[0].duration"));
         long nextExpectedDuration=Long.parseLong(f.js("onlineSongs[1].duration"));
         String nextExpectedTitle=(String)new JSONTokener(f.js("onlineSongs[1].name")).nextValue();
-        if(explicitAutomaticSource)f.inst.runOnMainSync(()->{
+        if(explicitAutomaticSource||playlistIds!=null)f.inst.runOnMainSync(()->{
           try {
             var nativePlayer=(androidx.media3.exoplayer.ExoPlayer)field(manager,"player");
             assertTrue("Actual first audio duration must match its public track metadata",
@@ -184,13 +201,18 @@ public class FloatingLyricLongPlaybackTest {
         if(mode==BackgroundAdvance.FAST_NATURAL_END)f.inst.runOnMainSync(()->{
           try {savedRate[0]=((androidx.media3.exoplayer.ExoPlayer)field(manager,"player")).getPlaybackParameters().speed;manager.setRate(3f);}catch(Exception e){throw new AssertionError(e);}
         });
-        if(explicitAutomaticSource&&mode==BackgroundAdvance.NATURAL_END)f.inst.runOnMainSync(()->{
-          try {savedRate[0]=((androidx.media3.exoplayer.ExoPlayer)field(manager,"player")).getPlaybackParameters().speed;manager.setRate(1f);}catch(Exception e){throw new AssertionError(e);}
-        });
+        if(mode==BackgroundAdvance.NATURAL_END||playlistIds!=null) {
+          f.inst.runOnMainSync(()->{
+            try {savedRate[0]=((androidx.media3.exoplayer.ExoPlayer)field(manager,"player")).getPlaybackParameters().speed;}catch(Exception e){throw new AssertionError(e);}
+          });
+          f.js("window.__SPLAYER_PLAYER_CONTROLLER__.setRate(1)");
+        }
         Stage backgroundStage=f.moveToBackground();
         assertEquals("Online media page must actually be hidden before background observation","true",f.js("document.hidden"));
         long backgroundStarted=SystemClock.elapsedRealtime();
         JSONArray timeline=new JSONArray();
+        long firstId=((Number)new JSONTokener(f.js("onlineSongs[0].id")).nextValue()).longValue();
+        long stalledSince=-1;
         for(int i=0;i<(mode==BackgroundAdvance.FAST_NATURAL_END?22:naturalEnd?60:automatic?14:4);i++) {
           SystemClock.sleep(5000);JSONObject[] sample={null};
           f.inst.runOnMainSync(()->{try {
@@ -200,6 +222,16 @@ public class FloatingLyricLongPlaybackTest {
           }catch(Exception e){throw new AssertionError(e);}});
           timeline.put(sample[0].put("elapsedMs",SystemClock.elapsedRealtime()-backgroundStarted));
           assertTrue("后台歌词窗口必须保持实际显示且显示器有效: "+sample[0],sample[0].getBoolean("overlayShown"));
+          if(playlistIds!=null) {
+            long id=sample[0].getLong("songId");
+            assertTrue("Audio must remain in the actual two-song playlist",id==firstId||id==target);
+            assertTrue("Actual Media3 audio must match the current loaded source",sample[0].getBoolean("mediaUriMatchesLoadedSource"));
+            assertEquals("Real playlist observation must use normal speed",1.0,sample[0].getDouble("rate"),0.001);
+            if(sample[0].getBoolean("playing"))stalledSince=-1;
+            else if(stalledSince<0)stalledSince=SystemClock.elapsedRealtime();
+            else assertTrue("Real playlist audio must not remain interrupted across samples",
+                SystemClock.elapsedRealtime()-stalledSince<6000);
+          }
         }
         f.inst.runOnMainSync(()->{
           if(naturalEnd)return; // 五分钟组完全由真实音频自然结束推进，不seek、不发下一首。
@@ -250,7 +282,7 @@ public class FloatingLyricLongPlaybackTest {
             .put("observationMs",SystemClock.elapsedRealtime()-backgroundStarted).put("timeline",timeline).put("upstreamAudio",probeObservedAudio(f,target)).put("uiAfterObservation",new JSONTokener((String)new JSONTokener(f.js("JSON.stringify({songId:p7Stores.music.playSong.id,list:fixturePinia._s.get('data').playList.map(s=>s.id),index:fixtureStatus.playIndex,repeat:fixtureStatus.repeatMode,mix:fixtureSetting.androidAllowMixWithOthers,automix:fixtureSetting.enableAutomix,abLoop:fixtureStatus.abLoop,context:onlineContext,sources:onlineSources,requests:onlineRequests,trace:onlineTrace,actions:onlineActions,nativeEvents:onlineNativeEvents})")).nextValue()).nextValue()));
         }
         assertTrue("后台原生下一首必须播放目标曲并显示该曲歌词，无需返回App。末态="+samples.opt(samples.length()-1),matched);
-        if(explicitAutomaticSource)f.inst.runOnMainSync(()->{
+        if(explicitAutomaticSource||playlistIds!=null)f.inst.runOnMainSync(()->{
           try {
             var nativePlayer=(androidx.media3.exoplayer.ExoPlayer)field(manager,"player");
             assertTrue("Actual next audio duration must match its public track metadata",
@@ -259,6 +291,14 @@ public class FloatingLyricLongPlaybackTest {
             System.out.println("PUBLIC_ONLINE_FINAL "+nativeSnapshot(manager));
           }catch(Exception error){throw new AssertionError(error);}
         });
+        if(playlistIds!=null) {
+          f.activity.startActivity(new android.content.Intent(f.activity,top.imsyy.splayer.android.MainActivity.class)
+              .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+          f.await("!document.hidden");
+          f.js("fixtureStatus.showFullPlayer=true;window.$modal?.destroyAll()");
+          f.await("!!document.querySelector('.full-player')");
+          f.capture("real-playlist-player");
+        }
       } finally {
         if(savedRate[0]!=null)f.inst.runOnMainSync(()->manager.setRate(savedRate[0]));
         f.activity.startActivity(new android.content.Intent(f.activity,top.imsyy.splayer.android.MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));

@@ -246,6 +246,33 @@ public class PlaybackTransitionTest {
       }
     }
   }
+  @Test public void httpScenarioNormalizesAndRestoresPersistedPlaybackRate() throws Exception {
+    try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true,60)) {
+      for(String asset:new String[]{"r23-player-fixture.js","http-lyric-sequence.js"})
+        try(var in=f.inst.getContext().getAssets().open(asset)){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
+      PlaybackManager manager=PlaybackManager.getInstance(f.activity);
+      String originalRate=f.js("fixtureStatus.playRate");
+      try {
+        f.js("window.__SPLAYER_PLAYER_CONTROLLER__.setRate(2);prepareHttpLyricSequence("+
+            org.json.JSONObject.quote("http://127.0.0.1:"+server.server.getLocalPort())+
+            ",1,60000).catch(e=>window.httpSequenceError=e.name+': '+e.message)");
+        f.await("window.httpSequenceReady||!!window.httpSequenceError");
+        assertEquals("null",f.js("window.httpSequenceError||null"));
+        f.inst.runOnMainSync(()->assertEquals(1.0,manager.buildState().optDouble("playbackRate"),0.001));
+      } finally {
+        f.restoreNativeApiContext();
+        f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");
+        f.await("window.httpSequenceRestored===true");
+        try {
+          f.await("fixtureStatus.playRate===2");
+          f.inst.runOnMainSync(()->assertEquals(2.0,manager.buildState().optDouble("playbackRate"),0.001));
+        } finally {
+          f.js("window.__SPLAYER_PLAYER_CONTROLLER__.setRate("+originalRate+")");
+          f.inst.runOnMainSync(manager::hideFloatingLyric);
+        }
+      }
+    }
+  }
   @Test public void stableLowThroughputHttpKeepsNativePlaybackAndPausedRecoveryStaysPaused() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true,60)) {
       server.chunkDelayMs=200; // ~40 KiB/s for 31.25 KiB/s PCM, above the encoded rate.
@@ -258,6 +285,8 @@ public class PlaybackTransitionTest {
         f.await("window.httpSequenceReady||!!window.httpSequenceError");
         assertEquals("null",f.js("window.httpSequenceError||null"));
         f.await("fixtureStatus.playStatus&&fixtureStatus.currentTime>0");
+        f.inst.runOnMainSync(() -> assertEquals("The throughput scenario requires nominal playback speed",
+            1.0, manager.buildState().optDouble("playbackRate"), 0.001));
         long startupMs=SystemClock.elapsedRealtime()-selectedAt;
         f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
         long bufferingMs=0;int bufferingCount=0;boolean wasBuffering=false;

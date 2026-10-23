@@ -15,7 +15,10 @@ import java.io.IOException;
 
 /** A real SAF provider without rename support; never exposes user files. */
 public final class DownloadFixtureProvider extends DocumentsProvider {
-  static final String AUTHORITY = "top.imsyy.splayer.android.debug.test.downloadfixture";
+  static String authority() {
+    return androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+        .getContext().getPackageName() + ".downloadfixture";
+  }
   private File base;
   private volatile boolean failWrite;
   private volatile int deleteDelay;
@@ -102,8 +105,8 @@ public final class DownloadFixtureProvider extends DocumentsProvider {
       } else if (method.equals("fixture:root") || method.equals("fixture:grant")) {
         File root = file(arg);
         if (method.equals("fixture:root") ? !root.mkdir() : !root.isDirectory()) throw new IOException("Invalid fixture root");
-        getContext().grantUriPermission("top.imsyy.splayer.android.debug",
-            android.provider.DocumentsContract.buildTreeDocumentUri(AUTHORITY,arg),
+        getContext().grantUriPermission(getContext().getPackageName().replaceFirst("\\.test$", ""),
+            android.provider.DocumentsContract.buildTreeDocumentUri(getContext().getPackageName()+".downloadfixture",arg),
             android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION | android.content.Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
       } else if (method.equals("fixture:put")) {
         File f = file(arg); if (!f.createNewFile()) throw new IOException("Refusing overwrite");

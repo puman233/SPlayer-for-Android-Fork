@@ -32,7 +32,7 @@ public class DownloadDeviceRegressionTest {
   private String root;
   private Server server;
   private final JSONObject evidence = new JSONObject();
-  private final Uri provider = Uri.parse("content://" + DownloadFixtureProvider.AUTHORITY);
+  private final Uri provider = Uri.parse("content://" + DownloadFixtureProvider.authority());
   private String viewport() throws Exception {
     return (String)value("JSON.stringify({innerWidth,innerHeight,devicePixelRatio,visualViewport:{width:visualViewport.width,height:visualViewport.height,scale:visualViewport.scale},screen:{width:screen.width,height:screen.height},userAgent:navigator.userAgent})");
   }
@@ -51,14 +51,15 @@ public class DownloadDeviceRegressionTest {
     return inst.getTargetContext().getContentResolver().call(tree!=null?tree:provider,"fixture:configure",null,b);
   }
   @Before public void setup() throws Exception {
-    assertEquals("top.imsyy.splayer.android.debug",inst.getTargetContext().getPackageName());
+    assertTrue(java.util.Arrays.asList("top.imsyy.splayer.android.debug", "top.imsyy.splayer.android.phase1verify")
+        .contains(inst.getTargetContext().getPackageName()));
     root=InstrumentationRegistry.getArguments().getString("safetyRoot","run-"+UUID.randomUUID());
     assertTrue("Only isolated UUID fixture roots",root.matches("run-[a-f0-9-]{36}"));
     evidence.put("test",testName.getMethodName());
     inst.getUiAutomation().adoptShellPermissionIdentity("android.permission.MANAGE_DOCUMENTS");
     try { inst.getTargetContext().getContentResolver().call(provider,InstrumentationRegistry.getArguments().containsKey("safetyRoot")?"fixture:grant":"fixture:root",root,new Bundle()); }
     finally { inst.getUiAutomation().dropShellPermissionIdentity(); }
-    tree=DocumentsContract.buildTreeDocumentUri(DownloadFixtureProvider.AUTHORITY,root);
+    tree=DocumentsContract.buildTreeDocumentUri(DownloadFixtureProvider.authority(),root);
     configure(false,0); server=new Server();
     activity=(MainActivity)inst.startActivitySync(new Intent(inst.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     web=activity.getBridge().getWebView(); await("!!document.querySelector('#app')?.__vue_app__");
@@ -186,7 +187,7 @@ public class DownloadDeviceRegressionTest {
     inst.getUiAutomation().adoptShellPermissionIdentity("android.permission.MANAGE_DOCUMENTS");
     try{inst.getTargetContext().getContentResolver().call(provider,"fixture:root",secondRoot,new Bundle());}finally{inst.getUiAutomation().dropShellPermissionIdentity();}
     String savedRoot=root;Uri savedTree=tree;
-    try{root=secondRoot;tree=DocumentsContract.buildTreeDocumentUri(DownloadFixtureProvider.AUTHORITY,root);download("directorySwitch","normal","switched.wav","");assertEquals("success",result("directorySwitch").getString("status"));assertArrayEquals(Server.wav,read("switched.wav"));}
+    try{root=secondRoot;tree=DocumentsContract.buildTreeDocumentUri(DownloadFixtureProvider.authority(),root);download("directorySwitch","normal","switched.wav","");assertEquals("success",result("directorySwitch").getString("status"));assertArrayEquals(Server.wav,read("switched.wav"));}
     finally{root=savedRoot;tree=savedTree;}
     evidence.put("userFragmentPreserved",true);
   }

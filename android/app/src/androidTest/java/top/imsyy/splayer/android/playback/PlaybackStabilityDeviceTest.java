@@ -47,7 +47,8 @@ public class PlaybackStabilityDeviceTest {
     return state[0];
   }
   @Before public void setup() throws Exception {
-    assertTrue(java.util.Arrays.asList("top.imsyy.splayer.android.debug", "top.imsyy.splayer.android.debug.sec17").contains(inst.getTargetContext().getPackageName()));
+    assertTrue(java.util.Arrays.asList("top.imsyy.splayer.android.debug", "top.imsyy.splayer.android.debug.sec17",
+        "top.imsyy.splayer.android.phase1verify").contains(inst.getTargetContext().getPackageName()));
     server = new Server();
     activity = (MainActivity) inst.startActivitySync(new Intent(inst.getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     web = activity.getBridge().getWebView(); await("!!window.$message && !!window.__SPLAYER_PLAYER_CONTROLLER__");

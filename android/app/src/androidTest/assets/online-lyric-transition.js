@@ -46,8 +46,8 @@ window.prepareOnlineTransition = async () => {
   try {
     details = await (
       await fetch(
-        "http://127.0.0.1:1145/api/netease/song/detail?ids=28941713," +
-          (window.onlineTargetSongId || 186016) +
+        "http://127.0.0.1:1145/api/netease/song/detail?ids=" +
+          (window.onlinePlaylistSongIds || "28941713," + (window.onlineTargetSongId || 186016)) +
           "&noCookie=true",
         { signal: abort.signal },
       )

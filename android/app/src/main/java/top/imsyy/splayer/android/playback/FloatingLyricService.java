@@ -51,10 +51,17 @@ public class FloatingLyricService extends Service {
   private static final String PREFS = "floating_lyric_prefs";
   private static final long HIDE_DELAY_MS = 2500;
   private WindowManager wm;
+  private DisplayManager displayManager;
+  private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+    @Override public void onDisplayAdded(int id) { ensureOverlayWindow(); }
+    @Override public void onDisplayChanged(int id) { ensureOverlayWindow(); }
+    @Override public void onDisplayRemoved(int id) { ensureOverlayWindow(); }
+  };
   private Context overlayContext;
   private boolean overlayCallbacksRegistered;
   private final ComponentCallbacks overlayConfiguration = new ComponentCallbacks() {
     @Override public void onConfigurationChanged(Configuration config) {
+      if (!ensureOverlayWindow()) return;
       refreshViewport(null);
       if (view != null) view.requestApplyInsets();
     }
@@ -64,7 +71,7 @@ public class FloatingLyricService extends Service {
   private WindowManager.LayoutParams lp, unlockLp;
   private View unlockBtnView;
   private SharedPreferences prefs;
-  private boolean attached, unlockAttached, destroyed, positionReady;
+  private boolean attached, windowAttachPending, unlockAttached, destroyed, positionReady;
   private final Rect safeArea = new Rect();
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final FloatingLyricInteraction interaction = new FloatingLyricInteraction();
@@ -111,12 +118,20 @@ public class FloatingLyricService extends Service {
     prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
     restoreConfigFromPrefs();
     if (prefs.getBoolean("locked", false)) interaction.lock();
-    DisplayManager displays = getSystemService(DisplayManager.class);
-    Display desktop = displays == null ? null : displays.getDisplay(Display.DEFAULT_DISPLAY);
-    if (desktop == null || !desktop.isValid()) {
-      Log.w(TAG, "桌面显示器不可用，停止创建悬浮歌词");
+    displayManager = getSystemService(DisplayManager.class);
+    if (!attachOverlayWindow()) {
       stopSelf();
       return;
+    }
+    if (displayManager != null) displayManager.registerDisplayListener(displayListener, handler);
+    PlaybackManager.getInstance(this).attachFloatingLyricService(this);
+  }
+
+  private boolean attachOverlayWindow() {
+    Display desktop = displayManager == null ? null : displayManager.getDisplay(Display.DEFAULT_DISPLAY);
+    if (desktop == null || !desktop.isValid()) {
+      Log.w(TAG, "桌面显示器暂不可用");
+      return false;
     }
     try {
       // 整个初始化都可能遇到显示器失效；桌面窗口复用独立 UI 上下文。
@@ -127,6 +142,10 @@ public class FloatingLyricService extends Service {
       }
       wm = (WindowManager) overlayContext.getSystemService(WINDOW_SERVICE);
       view = new LyricView(overlayContext);
+      view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+        @Override public void onViewAttachedToWindow(View v) { if (view == v) windowAttachPending = false; }
+        @Override public void onViewDetachedFromWindow(View v) { if (view == v) windowAttachPending = false; }
+      });
       lp = new WindowManager.LayoutParams(1, 1,
           WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
           WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -144,6 +163,7 @@ public class FloatingLyricService extends Service {
         overlayCallbacksRegistered = true;
       }
       refreshViewport(null);
+      windowAttachPending = true;
       wm.addView(view, lp);
       attached = true;
       view.requestApplyInsets();
@@ -151,11 +171,40 @@ public class FloatingLyricService extends Service {
     } catch (SecurityException | IllegalArgumentException | WindowManager.BadTokenException
         | WindowManager.InvalidDisplayException e) {
       Log.e(TAG, "悬浮歌词窗口创建失败", e);
-      stopSelf();
-      return;
+      releaseOverlayWindow();
+      return false;
     }
     if (interaction.locked()) showUnlockBtn();
-    PlaybackManager.getInstance(this).attachFloatingLyricService(this);
+    postRedraw();
+    return true;
+  }
+
+  /** 显示器移除后保留播放与歌词状态，只重建失效的窗口。 */
+  private boolean ensureOverlayWindow() {
+    if (destroyed) return false;
+    Display display = view == null ? null : view.getDisplay();
+    if (display == null && wm != null) display = wm.getDefaultDisplay();
+    if (attached && (windowAttachPending || view.isAttachedToWindow())
+        && display != null && display.isValid()) return true;
+    releaseOverlayWindow();
+    return attachOverlayWindow();
+  }
+
+  private void releaseOverlayWindow() {
+    if (overlayCallbacksRegistered) {
+      overlayContext.unregisterComponentCallbacks(overlayConfiguration);
+      overlayCallbacksRegistered = false;
+    }
+    if (controlsAnimator != null) controlsAnimator.cancel();
+    removeUnlockBtn();
+    if (attached && wm != null && view != null) {
+      try { wm.removeView(view); }
+      catch (IllegalArgumentException e) { Log.w(TAG, "歌词窗口已移除", e); }
+    }
+    attached = false;
+    windowAttachPending = false;
+    view = null;
+    iconCache.clear();
   }
 
   private void restoreConfigFromPrefs() {
@@ -187,16 +236,22 @@ public class FloatingLyricService extends Service {
         .putString("alignPosition", alignPosition).apply();
   }
 
-  @Override public int onStartCommand(Intent intent, int flags, int id) { return START_STICKY; }
+  @Override public int onStartCommand(Intent intent, int flags, int id) {
+    ensureOverlayWindow();
+    return START_STICKY;
+  }
   @Nullable @Override public IBinder onBind(Intent intent) { return null; }
 
   boolean isOverlayVisible() {
-    return attached && !destroyed && view != null && view.isAttachedToWindow();
+    Display display = view == null ? null : view.getDisplay();
+    return attached && !destroyed && view != null && view.isAttachedToWindow()
+        && display != null && display.isValid();
   }
 
   @Override
   public void onConfigurationChanged(Configuration config) {
     super.onConfigurationChanged(config);
+    if (!ensureOverlayWindow()) return;
     refreshViewport(null);
     if (view != null) view.requestApplyInsets();
   }
@@ -204,21 +259,10 @@ public class FloatingLyricService extends Service {
   @Override
   public void onDestroy() {
     destroyed = true;
-    if (overlayCallbacksRegistered) {
-      overlayContext.unregisterComponentCallbacks(overlayConfiguration);
-      overlayCallbacksRegistered = false;
-    }
+    if (displayManager != null) displayManager.unregisterDisplayListener(displayListener);
     handler.removeCallbacks(autoHide);
-    if (controlsAnimator != null) controlsAnimator.cancel();
     PlaybackManager.getInstance(this).detachFloatingLyricService(this);
-    removeUnlockBtn();
-    if (attached) {
-      try { wm.removeView(view); }
-      catch (IllegalArgumentException e) { Log.w(TAG, "歌词窗口已移除", e); }
-      attached = false;
-    }
-    view = null;
-    iconCache.clear();
+    releaseOverlayWindow();
     Log.i(TAG, "overlay destroy");
     super.onDestroy();
   }
@@ -328,6 +372,7 @@ public class FloatingLyricService extends Service {
   }
 
   public void pushProgress(long ms, boolean isPlaying) {
+    ensureOverlayWindow();
     long previous = seekMs();
     baseMs = ms;
     anchorNano = System.nanoTime();

@@ -63,6 +63,9 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000, opti
     artists: [{ id: 1, name: "Synthetic artist" }], album: { id: 1, name: "Synthetic album" } }));
   data.originalPlayList = data.playList.slice();
   const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
+  // Throughput and wall-clock assertions assume normal speed, independent of
+  // the isolated app's persisted setting. p7Restore restores the saved status.
+  controller.setRate(1);
   if (options.beforePlay) await options.beforePlay();
   await controller.setDesktopLyricShow(true);
   window.httpSequenceSelectedAt = Date.now();
@@ -92,5 +95,6 @@ window.restoreHttpLyricSequence = async () => {
       song: window.p7Saved.music.playSong, autoPlay: playing, seek: window.p7Saved.status.currentTime,
     });
   } else await window.p7Restore();
+  window.__SPLAYER_PLAYER_CONTROLLER__.setRate(window.p7Saved.status.playRate);
   await window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext();
 };

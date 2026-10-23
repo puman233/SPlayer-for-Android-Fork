@@ -1,0 +1,271 @@
+{
+  "previous_tag": "v3.0.16-beta.7",
+  "changes": [
+    {
+      "id": "queue",
+      "category": "highlights",
+      "summary": "修复随机与心动模式反复切换后的切歌错序，让后台队列、通知栏操作和实际播放保持一致。"
+    },
+    {
+      "id": "lyrics",
+      "category": "fixes",
+      "summary": "歌词按实际播放曲目更新，清除旧请求影响；TTML失败或超时后继续使用可用歌词。"
+    },
+    {
+      "id": "recovery",
+      "category": "fixes",
+      "summary": "改善弱网播放恢复和快速切歌的错误处理，限制重试预算，暂停或切源时取消旧恢复任务。"
+    },
+    {
+      "id": "webdav",
+      "category": "fixes",
+      "summary": "修复WebDAV更换服务器凭据后仍显示旧身份曲目和标签的问题。"
+    },
+    {
+      "id": "security",
+      "category": "fixes",
+      "summary": "增加应用内特殊代理路径的导航拦截，按框架官方方案缓解已知安全问题。"
+    },
+    {
+      "id": "service",
+      "category": "android",
+      "summary": "修复首次播放失败或远程暂停时，播放服务可能未及时进入前台而崩溃的问题。"
+    },
+    {
+      "id": "website",
+      "category": "features",
+      "summary": "完善项目网站的版本下载、更新说明展示和手机访问布局。"
+    },
+    {
+      "id": "device",
+      "category": "known_issues",
+      "summary": "平板批量回归仍有一项间歇前置异常，独立及组合复验通过但原因未关闭；部分上游音源可能不可用。"
+    },
+    {
+      "id": "risks",
+      "category": "known_issues",
+      "summary": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
+    }
+  ],
+  "coverage": [
+    {
+      "source": "changelog:aab1037772da48b7",
+      "classification": "user-visible",
+      "release_ids": [
+        "webdav"
+      ],
+      "evidence": "修复 WebDAV 更换服务器凭据后仍复用旧身份曲目索引和标签的问题。"
+    },
+    {
+      "source": "changelog:6f5120098d2b8f2a",
+      "classification": "user-visible",
+      "release_ids": [
+        "security"
+      ],
+      "evidence": "增加应用内特殊代理路径的导航拦截，按框架官方方案缓解已知安全问题；后续仍需升级框架修复版本。"
+    },
+    {
+      "source": "changelog:7a6b681b1e38909a",
+      "classification": "user-visible",
+      "release_ids": [
+        "queue"
+      ],
+      "evidence": "修复随机与心动模式反复切换后的后台切歌错序：同步当前曲目、队列和原生窗口，撤销旧推荐、预载及切歌回包，保留各模式既有规则。"
+    },
+    {
+      "source": "changelog:2474858b0021e989",
+      "classification": "user-visible",
+      "release_ids": [
+        "queue",
+        "lyrics"
+      ],
+      "evidence": "修复大列表循环补窗、暂停期间迟到补窗续播及不循环尾部重排问题；TTML 回退截止时同步取消网络请求。"
+    },
+    {
+      "source": "changelog:fa4cf1d659108eb8",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "Android WebView 仅在确认临时 HTTP 错误后进行有界恢复，格式、权限、资源缺失或状态不可见时不误重试；暂停、切源和清空列表会取消探测及旧请求。"
+    },
+    {
+      "source": "changelog:1ff0649b5599fb19",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "恢复耗尽后忽略同一请求的迟到错误，避免重复开启恢复预算；明确点击播放可重新获取当前歌曲资源。"
+    },
+    {
+      "source": "changelog:08a952bf6131ea5f",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery",
+        "service"
+      ],
+      "evidence": "修复快速切歌时上一曲错误防抖吞掉新曲失败状态，以及不可播放音源触发前台服务启动超时崩溃的问题。"
+    },
+    {
+      "source": "changelog:2ef34f24e209ef4a",
+      "classification": "user-visible",
+      "release_ids": [
+        "lyrics"
+      ],
+      "evidence": "切歌加载期间清除上一首歌词，按原生实际歌曲 ID 校验队列事件与悬浮歌词更新。"
+    },
+    {
+      "source": "changelog:6b20361f7c7b0a76",
+      "classification": "user-visible",
+      "release_ids": [
+        "lyrics"
+      ],
+      "evidence": "TTML 请求、解析失败或超时后继续尝试 LRC；自动模式下可选来源不再阻塞已就绪歌词。"
+    },
+    {
+      "source": "changelog:6314d8bdce1ee9a5",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "原生播放失败后不再叠加网页重试或自动跳歌；按 HTTP 状态区分可恢复错误，暂停取消待执行恢复。"
+    },
+    {
+      "source": "changelog:9274209213e99b0c",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "当前歌曲没有可用音源时保留曲目并提示重试，避免误判权限或绕回上一首。"
+    },
+    {
+      "source": "changelog:0b269434103be404",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "WebView 引擎仅在持续实际播放后重置恢复预算，避免短暂恢复反复触发无限重试；耗尽后停止当前歌曲。"
+    },
+    {
+      "source": "changelog:1de844c8d8fcb77a",
+      "classification": "user-visible",
+      "release_ids": [
+        "device"
+      ],
+      "evidence": "平板批量测试仍有一项间歇前置异常，独立及组合复验通过但原因尚未关闭；部分真实在线音源可能不可用。"
+    },
+    {
+      "source": "changelog:3b1e593aa425c212",
+      "classification": "user-visible",
+      "release_ids": [
+        "risks"
+      ],
+      "evidence": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
+    },
+    {
+      "source": "commit:6e655ae490e0d820ac42a5e708a6c5087ff35aff",
+      "classification": "user-visible",
+      "release_ids": [
+        "website"
+      ],
+      "evidence": "website/版本下载、Markdown净化、响应式布局及对应测试。"
+    },
+    {
+      "source": "commit:676aa3660fd297c7a56ab26a3616a58e5d7e307a",
+      "classification": "user-visible",
+      "release_ids": [
+        "lyrics",
+        "recovery"
+      ],
+      "evidence": "LyricManager和PlaybackManager按实际曲目身份过滤歌词及恢复回调。"
+    },
+    {
+      "source": "commit:78ecbb032b8920ac8ef589cb464e1c72ca35edc7",
+      "classification": "user-visible",
+      "release_ids": [
+        "recovery"
+      ],
+      "evidence": "PlayerController限制WebView恢复预算并取消过期恢复。"
+    },
+    {
+      "source": "commit:feaeeb6801afaeece588ae99c28ea8031c0ef0a5",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：test(android): validate real online background transitions"
+    },
+    {
+      "source": "commit:3afecf208c071f944314b8a5b6fe7d55bb6ef5b5",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：test(android): verify bounded weak network recovery"
+    },
+    {
+      "source": "commit:6187e0bfe316ad6a633e9ea9a563564fe4970ea9",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：test(android): verify WebView recovery and actual background lifecycle"
+    },
+    {
+      "source": "commit:e1c3a0f1aed2a4d8bdf3753a2c07eb1e9a536696",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：test(android): verify real online playback stays backgrounded"
+    },
+    {
+      "source": "commit:eddde3665a19ecb4467f8ccfaa7e139fd975b903",
+      "classification": "user-visible",
+      "release_ids": [
+        "service"
+      ],
+      "evidence": "PlaybackService先完成startForeground契约，再处理初始暂停与失败状态。"
+    },
+    {
+      "source": "commit:65ae908044b184724d469e4b68b2add04350089a",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：test: fix browser driver callback lint"
+    },
+    {
+      "source": "commit:02b6442d6649681e200f3ecb7f07453586297fe6",
+      "classification": "user-visible",
+      "release_ids": [
+        "queue",
+        "lyrics",
+        "recovery",
+        "webdav",
+        "security"
+      ],
+      "evidence": "PlayModeManager/PlayerController/PlaybackQueue/PlaybackManager、歌词IO取消、WebDAV作用域和原生导航插件及公开边界回归。"
+    },
+    {
+      "source": "commit:3b47097d51642d183c77d02a7f3a5b924c2fcd0d",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：chore(release): prepare 3.0.16-beta.8 candidate"
+    },
+    {
+      "source": "commit:09e0fd3ac1ce329da28d8533010878581e679843",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "仅补齐本版精选中文说明及来源覆盖矩阵，规范版本标题，不改变运行代码或发布门禁。"
+    },
+    {
+      "source": "commit:c02fbf07a0c12a8a9c1283c3b75246db89236427",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "记录维护者明确发布决定、调整公开风险措辞；不构成运行时功能变化。"
+    },
+    {
+      "source": "commit:e1f6043de5a00e6bc62f238a39fd1e76b82c033e",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "仅修复原生快速切歌回归的前置状态与旧请求同步屏障，保留原延迟/身份/自然结束断言。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "为修复后的重新发布准备新候选版本与元数据，保留已推送的旧Tag。"
+    }
+  ]
+}

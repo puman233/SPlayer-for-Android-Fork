@@ -24,6 +24,8 @@ public class PlaybackTransitionTest {
     final ExecutorService clients=Executors.newCachedThreadPool();
     final Set<Socket> sockets=ConcurrentHashMap.newKeySet();
     final AtomicInteger sent=new AtomicInteger(),slowRequests=new AtomicInteger();
+    final AtomicInteger slowResponsesReleased=new AtomicInteger();
+    volatile boolean holdSlowHeaders;
     final AtomicInteger audioRequests=new AtomicInteger(),urlRequests=new AtomicInteger(),failures=new AtomicInteger();
     final AtomicInteger interruptedResponses=new AtomicInteger();
     final AtomicInteger stalledResponses=new AtomicInteger();
@@ -129,7 +131,13 @@ public class PlaybackTransitionTest {
         if(invalidAudio){
           socket.getOutputStream().write(("HTTP/1.1 200 OK\r\n"+audioCors+"Content-Type: audio/wav\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-wave").getBytes(StandardCharsets.US_ASCII));return;
         }
-        if(tones&&request.contains("/slow.wav")){slowRequests.incrementAndGet();SystemClock.sleep(1800);}
+        if(tones&&request.contains("/slow.wav")){
+          slowRequests.incrementAndGet();
+          if(holdSlowHeaders) {
+            while(holdSlowHeaders&&!server.isClosed())SystemClock.sleep(25);
+          } else SystemClock.sleep(1800);
+          slowResponsesReleased.incrementAndGet();
+        }
         byte[] wave=tones?wave(request.contains("/song991700.wav")&&firstSongSeconds>0?firstSongSeconds:seconds):null;
         int total=tones?wave.length:3*1024*1024;
         OutputStream out=socket.getOutputStream();
@@ -370,7 +378,11 @@ public class PlaybackTransitionTest {
 
   @Test public void rapidSelectionsDoNotWaitForOrReturnToTheOldHttpAudio() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture();AudioServer server=new AudioServer(true);
+        AutoCloseable transport=f.useNativeTransport();
         MainThreadTrace trace=new MainThreadTrace(f.activity,"rapid-main-thread")) {
+      // Keep the old HTTP request unresolved through setup and final playback;
+      // a wall-clock sleep can expire while a software renderer is still painting.
+      server.holdSlowHeaders=true;
       try(var in=f.inst.getContext().getAssets().open("r23-player-fixture.js")){f.js(new String(in.readAllBytes(),StandardCharsets.UTF_8));}
       f.js("p7Init().then(()=>{fixtureStatus.showFullPlayer=false;window.rapidReady=true})");f.await("window.rapidReady===true&&!document.querySelector('.full-player')");
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
@@ -402,6 +414,11 @@ public class PlaybackTransitionTest {
         long started=SystemClock.elapsedRealtime();
         while(server.slowRequests.get()==0&&SystemClock.elapsedRealtime()-started<5000)SystemClock.sleep(30);
         assertTrue("First track must actually be loading over HTTP",server.slowRequests.get()>0);
+        // DOM absence does not mean queued native/WebView frames have completed.
+        // Establish the steady foreground scene before measuring the next user action.
+        f.await("document.getAnimations().every(a=>a.effect?.getComputedTiming().iterations===Infinity||a.playState==='finished'||a.playState==='idle')");
+        f.awaitVisualState();
+        assertEquals("The old HTTP response must remain unresolved before selection",0,server.slowResponsesReleased.get());
         f.js("window.rapidSelectedAt=Date.now();rapidTrace.push({mark:'selection',start:rapidSelectedAt-rapidTraceStart});fixtureStatus.playIndex=1;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[1],autoPlay:true});rapidTrace.push({mark:'middle-returned',start:Date.now()-rapidTraceStart});fixtureStatus.playIndex=2;window.__SPLAYER_PLAYER_CONTROLLER__.playSong({song:rapidData.playList[2],autoPlay:true});rapidTrace.push({mark:'final-returned',start:Date.now()-rapidTraceStart})");
         f.await("rapidEvents.some(e=>e.id===991562)");
         java.io.File timingDir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(timingDir.exists()||timingDir.mkdirs());
@@ -411,6 +428,7 @@ public class PlaybackTransitionTest {
         try(var out=new PrintWriter(new File(timingDir,"rapid-http-first-playing.json"),"UTF-8")){out.print(timing);}
         assertTrue("Native final playback must meet the same latency limit: "+timing,nativeAt[0]>=selectedAt&&nativeAt[0]-selectedAt<1500);
         assertEquals("Slow old request must not hold final selection for seconds: "+timing,"true",f.js("rapidEvents.find(e=>e.id===991562).at-rapidSelectedAt<1500"));
+        assertEquals("Final audio must play before the old response is released",0,server.slowResponsesReleased.get());
         long completionDeadline=SystemClock.elapsedRealtime()+5000;
         long[] completedAt={0};
         do {
@@ -419,6 +437,8 @@ public class PlaybackTransitionTest {
           SystemClock.sleep(50);
         }while(SystemClock.elapsedRealtime()<completionDeadline);
         assertTrue("Final HTTP audio must actually reach its natural end",completedAt[0]>0);
+        assertEquals("Old request must remain unresolved through final completion",0,server.slowResponsesReleased.get());
+        server.holdSlowHeaders=false;
         // Keep the original late-response observation after the actual terminal event.
         SystemClock.sleep(2000);
         java.io.File dir=new java.io.File(f.activity.getExternalFilesDir(null),"detail-regression");assertTrue(dir.exists()||dir.mkdirs());
@@ -427,6 +447,7 @@ public class PlaybackTransitionTest {
         assertEquals("Old and intermediate audio must never play after final selection: "+f.js("JSON.stringify(rapidEvents)"),"true",f.js("rapidEvents.filter(e=>e.at>=rapidSelectedAt).every(e=>e.id===991562&&e.source==='final.wav')"));
         assertEquals("Repeat off must stop at the final song without leaving loading active","true",f.js("!fixtureStatus.playStatus&&!fixtureStatus.playLoading&&fixturePinia._s.get('music').playSong.id===991562"));
       } finally {
+        server.holdSlowHeaders=false;
         f.js("window.rapidObserver?.disconnect();if(window.rapidNativePromise)window.Capacitor.nativePromise=rapidNativePromise;if(window.rapidStorageSetItem)Storage.prototype.setItem=rapidStorageSetItem");
         f.inst.runOnMainSync(()->{manager.getSession().getPlayer().removeListener(nativeTiming);manager.pause();});
         f.js("Promise.resolve(rapidListener).then(h=>h.remove());rapidData.playList=rapidSaved.list;rapidData.originalPlayList=rapidSaved.original;rapidData.setHistory=rapidHistory;p7Restore().then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.syncAndroidPlaybackContext())");f.await("window.p7Restored===true");

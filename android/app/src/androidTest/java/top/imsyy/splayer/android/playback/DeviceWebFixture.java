@@ -145,14 +145,28 @@ final class DeviceWebFixture implements AutoCloseable {
     catch(AssertionError error) {throw new AssertionError("输入事件轨迹="+js("JSON.stringify(fixtureInputTrace)"),error);}
     finally {js("fixtureInputTypes.forEach(t=>document.removeEventListener(t,fixtureInputProbe,true))");}
   }
-  private void awaitVisualState() throws Exception {
+  AutoCloseable useNativeTransport() throws Exception {
+    try(var input=inst.getContext().getAssets().open("local-native-lyric.js")) {
+      js(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
+    }
+    js("prepareLocalNativeLyric().catch(e=>window.localLyricNativeError=e.message)");
+    await("window.localLyricNativeReady||!!window.localLyricNativeError");
+    assertEquals("Native test setup must succeed", "null", js("window.localLyricNativeError||null"));
+    assertEquals("The real native engine must be selected", "\"android-native\"", js("window.__SPLAYER_AUDIO_MANAGER__.engineType"));
+    return () -> {
+      js("restoreLocalNativeLyric().catch(e=>window.localLyricRestoreError=e.message)");
+      await("window.localLyricNativeRestored||!!window.localLyricRestoreError");
+      assertEquals("Original transport must be restored", "null", js("window.localLyricRestoreError||null"));
+    };
+  }
+  void awaitVisualState() throws Exception {
     CountDownLatch visual = new CountDownLatch(1);
     inst.runOnMainSync(() -> web.postVisualStateCallback(SystemClock.uptimeMillis(),new WebView.VisualStateCallback() {
       @Override public void onComplete(long id) {
         web.invalidate();web.postOnAnimation(()->web.postOnAnimation(visual::countDown));
       }
     }));
-    assertTrue("截图前WebView绘制状态必须就绪",visual.await(10,TimeUnit.SECONDS));
+    assertTrue("WebView绘制状态必须就绪",visual.await(10,TimeUnit.SECONDS));
   }
   void capture(String name) throws Exception {
     awaitVisualState();

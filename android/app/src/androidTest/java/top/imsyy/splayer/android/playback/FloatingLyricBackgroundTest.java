@@ -80,7 +80,7 @@ public class FloatingLyricBackgroundTest {
       main(() -> manager.updateFloatingLyricData(lines.toString(), "[]"));
       awaitPlaying(overlay, true);
       // Home 后不再发送任何 JS 进度，模拟 WebView 被暂停。
-      inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+      DeviceWebFixture.moveToBackground(inst,activity);
       long[] first = new long[1];
       main(() -> first[0] = overlay.baseMs);
       SystemClock.sleep(2000);

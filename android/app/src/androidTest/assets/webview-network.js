@@ -1,4 +1,21 @@
 // Isolated engine selection and HTTP transport only. Production controller/media run unchanged.
+window.observeWebProbeAndPause = () => {
+  window.webNetOriginalFetch = window.fetch;
+  window.fetch = function (input, init) {
+    const pending = window.webNetOriginalFetch.call(this, input, init);
+    if (init?.headers?.Range === "bytes=0-0") {
+      window.webNetObservedProbeSignal = init.signal;
+      window.webNetProbePauseTimer = setTimeout(() => {
+        const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
+        window.webNetProbePendingAtPause = !!controller.mediaFailureProbe && !init.signal.aborted;
+        controller.pause(true);
+        window.webNetProbePauseComplete = true;
+      }, 300);
+    }
+    return pending;
+  };
+};
+
 window.prepareWebNetwork = async (base) => {
   window.webNetPhase = "module";
   const resource = performance.getEntriesByType("resource").find((entry) => /\/stores-[^/]+\.js/.test(entry.name));
@@ -46,6 +63,13 @@ window.prepareWebNetwork = async (base) => {
         }));
       }
       const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
+      if (window.webNetPauseOnMediaError) audio.addEventListener("error", () => {
+        if (window.webNetRecoveryPauseComplete) return;
+        window.webNetRecoveryAtPause = controller.retryInfo.count;
+        window.webNetErrorCodeAtPause = window.webNetElement.error?.code;
+        controller.pause(true);
+        window.webNetRecoveryPauseComplete = true;
+      });
       window.webNetPrepareSource = controller.prepareAudioSource;
       controller.prepareAudioSource = function (...args) {
         const source = { songId: args[0]?.id, atMs: Date.now() - window.webNetStartedAt };
@@ -68,6 +92,7 @@ window.prepareWebNetwork = async (base) => {
       paused: element.paused, readyState: element.readyState, networkState: element.networkState,
       mediaCode: element.error?.code || 0, sourceBound: element.currentSrc.startsWith(base + "/"),
       retryCount: controller.retryInfo.count, progressStart: controller.retryProgressStart,
+      mediaFailurePending: !!controller.mediaFailureProbe,
       songId: window.fixturePinia._s.get("music").playSong.id,
       storePositionMs: window.fixtureStatus.currentTime,
       playing: window.fixtureStatus.playStatus, loading: window.fixtureStatus.playLoading,
@@ -78,6 +103,8 @@ window.prepareWebNetwork = async (base) => {
 };
 
 window.restoreWebNetwork = async () => {
+  clearTimeout(window.webNetProbePauseTimer);
+  if (window.webNetOriginalFetch) window.fetch = window.webNetOriginalFetch;
   const controller = window.__SPLAYER_PLAYER_CONTROLLER__;
   await controller.pause();
   if (window.webNetPrepareSource) controller.prepareAudioSource = window.webNetPrepareSource;

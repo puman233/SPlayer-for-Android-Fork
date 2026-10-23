@@ -18,6 +18,7 @@ final class DeviceWebFixture implements AutoCloseable {
   final MainActivity activity;
   final WebView web;
   final String savedSettings;
+  final Object[] savedNativeApiContext=new Object[5];
   DeviceWebFixture() throws Exception {
     String pkg = inst.getTargetContext().getPackageName();
     assertTrue(pkg.endsWith(".phase1verify") || pkg.endsWith(".debug"));
@@ -37,6 +38,21 @@ final class DeviceWebFixture implements AutoCloseable {
     }
     js("(()=>{const a=document.querySelector('#app').__vue_app__;window.fixtureRouter=a.config.globalProperties.$router;window.fixturePinia=Reflect.ownKeys(a._context.provides).map(k=>a._context.provides[k]).find(v=>v?._s instanceof Map);window.fixtureStatus=fixturePinia._s.get('status');window.fixtureSetting=fixturePinia._s.get('setting');window.fixtureSaved={agreement:fixtureSetting.userAgreementVersion,update:fixtureSetting.checkUpdateOnStart,show:fixtureStatus.showFullPlayer,hiddenCovers:JSON.parse(JSON.stringify(fixtureSetting.hiddenCovers)),songUnlockServer:JSON.parse(JSON.stringify(fixtureSetting.songUnlockServer)),useSongUnlock:fixtureSetting.useSongUnlock};fixtureSetting.userAgreementVersion='v2.0';fixtureSetting.checkUpdateOnStart=false;fixtureStatus.showFullPlayer=false;window.$modal?.destroyAll();})()");
     savedSettings = (String) new org.json.JSONTokener(js("JSON.stringify(fixtureSaved)")).nextValue();
+    inst.runOnMainSync(()->{
+      try {
+        PlaybackManager manager=PlaybackManager.getInstance(activity);
+        String[] names={"apiBaseUrl","cookie","songLevel","disableAiAudio","playSongDemo"};
+        for(int i=0;i<names.length;i++) {
+          var field=PlaybackManager.class.getDeclaredField(names[i]);field.setAccessible(true);
+          savedNativeApiContext[i]=field.get(manager);
+        }
+      }catch(Exception error){throw new AssertionError(error);}
+    });
+  }
+  void restoreNativeApiContext() {
+    inst.runOnMainSync(()->PlaybackManager.getInstance(activity).syncApiContext(
+        (String)savedNativeApiContext[0],(String)savedNativeApiContext[1],(String)savedNativeApiContext[2],
+        (Boolean)savedNativeApiContext[3],(Boolean)savedNativeApiContext[4]));
   }
   String js(String expression) throws Exception {
     CountDownLatch done = new CountDownLatch(1);
@@ -56,6 +72,9 @@ final class DeviceWebFixture implements AutoCloseable {
         + "; nativeSize=" + web.getWidth() + "x" + web.getHeight());
   }
   Stage moveToBackground() throws Exception {
+    return moveToBackground(inst,activity);
+  }
+  static Stage moveToBackground(Instrumentation inst,MainActivity activity) throws Exception {
     inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
     Stage[] stage = {null};
     long deadline = SystemClock.elapsedRealtime() + 500;
@@ -162,7 +181,7 @@ final class DeviceWebFixture implements AutoCloseable {
       js("(()=>{fixturePinia._s.get('music').$persist?.();fixturePinia._s.get('status').$persist?.();window.dispatchEvent(new Event('pagehide'))})()");
       assertEquals("结束Activity前必须完成原歌曲持久化恢复", "true",js("JSON.parse(localStorage.getItem('music-store')||'null')?.playSong?.id===fixturePinia._s.get('music').playSong.id"));
       assertEquals("测试结束后音源配置必须完整持久化恢复", "true", js("JSON.stringify(JSON.parse(localStorage.getItem('setting-store')).songUnlockServer)===JSON.stringify("+new org.json.JSONObject(savedSettings).getJSONArray("songUnlockServer")+")"));
-    } finally { inst.runOnMainSync(() -> {web.getSettings().setTextZoom(100); activity.finish();}); }
+    } finally { restoreNativeApiContext();inst.runOnMainSync(() -> {web.getSettings().setTextZoom(100); activity.finish();}); }
     }
   }
 }

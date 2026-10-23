@@ -1,5 +1,6 @@
 import type { PlaybackMetadata } from "@/types/shared/playback";
 import { requestFailureCategory } from "@/utils/requestDiagnostics";
+import { probeTransientHttpFailure } from "./httpMediaFailure";
 import { loadFloatingLyricSettings, floatingLyricPayload } from "./floatingLyricSettings";
 import { ensureFloatingLyricVisible } from "./floatingLyricLifecycle";
 import { toRaw } from "vue";
@@ -45,6 +46,14 @@ class PlayerController {
   /** 当前曲目重试信息（按歌曲维度） */
   private retryInfo: { songId: number | string; count: number } = { songId: 0, count: 0 };
   private retryProgressStart: number | null = null;
+  private terminalFailureToken: number | null = null;
+  private pausedFailureToken: number | null = null;
+  private mediaFailureProbe: AbortController | null = null;
+
+  private cancelMediaFailureProbe() {
+    this.mediaFailureProbe?.abort();
+    this.mediaFailureProbe = null;
+  }
   /** 当前播放请求标识 */
   public currentRequestToken = 0;
   /** Transport commands do not cancel pending quality/source preparation. */
@@ -53,11 +62,29 @@ class PlayerController {
   /** 是否正在进行 Automix 过渡 */
   public isTransitioning = false;
   /** 负责管理播放模式相关的逻辑 */
-  private playModeManager = new PlayModeManager();
+  private playModeManager = new PlayModeManager(() => this.onQueueOrderChanged());
+  private androidContextSyncGeneration = 0;
+  private queueOrderRevision = 0;
+
+  private async onQueueOrderChanged() {
+    this.queueOrderRevision++;
+    const status = useStatusStore();
+    if (!status.personalFmMode) {
+      const index = useDataStore().playList.findIndex(song => song.id === useMusicStore().playSong?.id);
+      if (index >= 0) status.playIndex = index;
+    }
+    useSongManager().clearPrefetch();
+    const automix = useAutomixManager();
+    automix.resetNextAnalysisCache();
+    automix.resetAutomixScheduling("IDLE");
+    await this.syncAndroidPlaybackContext(useMusicStore().playSong);
+  }
   /** 播放进度更新回调 */
   private onTimeUpdate: DebouncedFunc<() => void> | null = null;
   /** 上次错误处理时间 */
   private lastErrorTime = 0;
+  private lastErrorRequestToken = -1;
+  private lastErrorIntentRevision = -1;
   /** 当前歌曲分析结果 */
   public currentAnalysis: AudioAnalysis | null = null;
   public currentAnalysisKey: string | null = null;
@@ -285,6 +312,7 @@ class PlayerController {
     this.currentAnalysisKey = null;
     this.currentAudioSource = null;
     // 生成新的请求标识
+    this.cancelMediaFailureProbe();
     this.currentRequestToken++;
     const requestToken = this.currentRequestToken;
     const intentRevision = this.playbackIntentRevision;
@@ -366,6 +394,7 @@ class PlayerController {
         // No playable candidate is not proof of a permission error. Keep this song
         // selected; a source failure must not silently choose a different recording.
         if (error instanceof Error && error.message === "AUDIO_SOURCE_EMPTY") {
+          this.terminalFailureToken = requestToken;
           console.warn("当前歌曲没有可用播放地址");
           window.$message.warning("当前歌曲暂无可用音源，请稍后重试或手动选择音源");
           statusStore.playLoading = false;
@@ -389,6 +418,7 @@ class PlayerController {
     const audioManager = useAudioManager();
     const playSongData = getPlaySongData();
     if (!playSongData || playSongData.path) return;
+    this.cancelMediaFailureProbe();
     const requestToken = ++this.currentRequestToken;
     // 如果未指定 autoPlay，则保持当前播放状态
     const seekRevision = this.seekRevision;
@@ -440,6 +470,7 @@ class PlayerController {
     const audioManager = useAudioManager();
     const playSongData = musicStore.playSong;
     if (!playSongData || playSongData.path) return;
+    this.cancelMediaFailureProbe();
     const requestToken = ++this.currentRequestToken;
     try {
       statusStore.playLoading = true;
@@ -500,6 +531,9 @@ class PlayerController {
     },
     initialRate: number = 1.0,
   ) {
+    this.terminalFailureToken = null;
+    if (autoPlay) this.pausedFailureToken = null;
+    this.cancelMediaFailureProbe();
     const requestToken = this.currentRequestToken;
     const seekRevision = this.seekRevision;
     const intentRevision = this.playbackIntentRevision;
@@ -791,7 +825,7 @@ class PlayerController {
    * 构造 Android 播放队列窗口（当前 ±N 首）。
    * URL 采用「已缓存即推、未缓存推 null」被动策略，personalFM 退化为窗口=0。
    */
-  private buildAndroidWindowTracks(_currentSong: SongType): {
+  private buildAndroidWindowTracks(currentSong: SongType): {
     windowTracks: AndroidNativeWindowTrack[];
     windowCurrentIndex: number;
     hasPreviousOutsideWindow: boolean;
@@ -804,7 +838,9 @@ class PlayerController {
 
     const personalFm = statusStore.personalFmMode;
     const sourceList: SongType[] = personalFm ? musicStore.personalFM.list : dataStore.playList;
-    const currentIndex = personalFm ? musicStore.personalFM.playIndex : statusStore.playIndex;
+    const proposedIndex = personalFm ? musicStore.personalFM.playIndex : statusStore.playIndex;
+    const currentIndex = sourceList[proposedIndex]?.id === currentSong.id
+      ? proposedIndex : sourceList.findIndex(song => song.id === currentSong.id);
     // personalFM=0；普通列表 ±100 = 201 首窗口（覆盖最大 200 首后台续播，payload ~70KB 无感知）
     const radius = personalFm ? 0 : 100;
 
@@ -873,12 +909,16 @@ class PlayerController {
     options?: { windowRefilled?: boolean; windowResetFromWrap?: boolean },
   ) {
     if (!isCapacitorAndroid) return;
+    const generation = ++this.androidContextSyncGeneration;
+    const orderRevision = this.queueOrderRevision;
+    const contextRequestToken = this.currentRequestToken;
+    const contextIntentRevision = this.playbackIntentRevision;
 
     const dataStore = useDataStore();
     const musicStore = useMusicStore();
     const settingStore = useSettingStore();
     const statusStore = useStatusStore();
-    const song = songOverride || getPlaySongData() || musicStore.playSong;
+    const song = songOverride || (musicStore.playSong?.id ? musicStore.playSong : getPlaySongData());
 
     if (!song) return;
 
@@ -899,7 +939,20 @@ class PlayerController {
     if (isStaleSong()) return;
 
     try {
-      windowResult = this.buildAndroidWindowTracks(song);
+      await mediaSessionManager.syncAndroidApiContext();
+    } catch (error) {
+      console.warn("[Android] sync playback API context failed:", requestFailureCategory(error));
+      return;
+    }
+    if (isStaleSong()) return;
+    if (options?.windowRefilled) {
+      if (orderRevision !== this.queueOrderRevision || contextRequestToken !== this.currentRequestToken
+        || contextIntentRevision !== this.playbackIntentRevision) return;
+    } else if (generation !== this.androidContextSyncGeneration) return;
+
+    try {
+      const windowAnchor = options?.windowResetFromWrap ? dataStore.playList[0] || song : song;
+      windowResult = this.buildAndroidWindowTracks(windowAnchor);
     } catch (error) {
       console.warn("[Android] failed to build window tracks:", requestFailureCategory(error));
       windowResult = {
@@ -914,7 +967,6 @@ class PlayerController {
     if (isStaleSong()) return;
 
     try {
-      await mediaSessionManager.syncAndroidApiContext();
       await Promise.all([
         AndroidNativePlayback.updateQueueContext({
           liked: typeof song.id === "number" ? dataStore.isLikeSong(song.id) : false,
@@ -973,6 +1025,7 @@ class PlayerController {
     if (statusStore.personalFmMode) musicStore.personalFM.playIndex = index;
     else statusStore.playIndex = index;
     // Invalidate source lookups/retries started before native advanced the audio.
+    this.cancelMediaFailureProbe();
     this.currentRequestToken++;
 
     if (typeof liked === "boolean" && typeof nextSong.id === "number") {
@@ -999,6 +1052,9 @@ class PlayerController {
   /** Java emit requestUrls 触发：prefetch 一首后重推窗口。幂等。 */
   public async refreshAndroidQueueWindow() {
     if (!isCapacitorAndroid) return;
+    const orderRevision = this.queueOrderRevision;
+    const requestToken = this.currentRequestToken;
+    const intentRevision = this.playbackIntentRevision;
     const dataStore = useDataStore();
     const statusStore = useStatusStore();
 
@@ -1013,7 +1069,6 @@ class PlayerController {
       playList.length > 0 &&
       statusStore.playIndex >= playList.length - 1
     ) {
-      statusStore.playIndex = 0;
       wrapped = true;
     }
 
@@ -1023,6 +1078,8 @@ class PlayerController {
     } catch (error) {
       console.warn("[Android] refreshAndroidQueueWindow prefetch failed:", requestFailureCategory(error));
     }
+    if (orderRevision !== this.queueOrderRevision || requestToken !== this.currentRequestToken
+      || intentRevision !== this.playbackIntentRevision) return;
     // 重要：windowRefilled=true 让 Java 端区分本次推送属于补窗响应，才会消费 pendingResumeAfterRefill 续播。
     // windowResetFromWrap=true（仅 wrap 路径）：Java 用 current() 而非 advanceRaw 避免跳过 track 0。
     await this.syncAndroidPlaybackContext(undefined, {
@@ -1375,6 +1432,7 @@ class PlayerController {
    * 用于 destroyAudioManager() 销毁旧单例后，将事件监听切换到新 AudioManager
    */
   public rebindAudioEvents() {
+    this.cancelMediaFailureProbe();
     this.bindAudioEvents();
   }
 
@@ -1384,9 +1442,10 @@ class PlayerController {
    * @param currentSeek 当前播放位置 (用于恢复)
    */
   private async handlePlaybackError(errCode: number | undefined, currentSeek: number = 0) {
+    const audioManager = useAudioManager();
     // Native has already exhausted/classified its retries. Do not create a second loop
     // or silently advance the queue when it reports a terminal failure.
-    if (useAudioManager().engineType === "android-native") {
+    if (audioManager.engineType === "android-native") {
       const statusStore = useStatusStore();
       statusStore.playLoading = false;
       statusStore.playStatus = false;
@@ -1394,11 +1453,17 @@ class PlayerController {
       window.$message.error("当前歌曲播放失败，请稍后重试");
       return;
     }
+    if (this.mediaFailureProbe) return;
     const requestToken = this.currentRequestToken;
+    const intentRevision = this.playbackIntentRevision;
+    if (this.terminalFailureToken === requestToken || this.pausedFailureToken === requestToken) return;
     // 错误防抖
     const now = Date.now();
-    if (now - this.lastErrorTime < 200) return;
+    if (requestToken === this.lastErrorRequestToken
+      && intentRevision === this.lastErrorIntentRevision && now - this.lastErrorTime < 200) return;
     this.lastErrorTime = now;
+    this.lastErrorRequestToken = requestToken;
+    this.lastErrorIntentRevision = intentRevision;
     const musicStore = useMusicStore();
     const statusStore = useStatusStore();
     const songManager = useSongManager();
@@ -1416,8 +1481,26 @@ class PlayerController {
       this.retryInfo.count = 0;
       return;
     }
+    if (isCapacitorAndroid && audioManager.engineType === "element") {
+      errCode ??= audioManager.getErrorCode();
+      const source = audioManager.src;
+      if ((errCode === AudioErrorCode.SRC_NOT_SUPPORTED || errCode === 9)
+        && (!musicStore.playSong.path || musicStore.playSong.type === "streaming")
+        && /^https?:\/\//i.test(source)) {
+        const probe = new AbortController();
+        this.mediaFailureProbe = probe;
+        const transient = await probeTransientHttpFailure(source, probe.signal);
+        if (this.mediaFailureProbe !== probe) return;
+        this.mediaFailureProbe = null;
+        if (probe.signal.aborted || requestToken !== this.currentRequestToken
+          || intentRevision !== this.playbackIntentRevision || useAudioManager() !== audioManager
+          || source !== audioManager.src) return;
+        if (transient) errCode = AudioErrorCode.NETWORK;
+      }
+    }
     // 格式不支持
     if (errCode === AudioErrorCode.SRC_NOT_SUPPORTED || errCode === 9) {
+      this.terminalFailureToken = requestToken;
       console.warn(`音频格式不支持 (Code: ${errCode})`);
       window.$message.error("该歌曲的音频格式无法播放，请手动选择其他音源");
       statusStore.playLoading = false;
@@ -1427,6 +1510,7 @@ class PlayerController {
     }
     // 本地文件错误
     if (musicStore.playSong.path && musicStore.playSong.type !== "streaming") {
+      this.terminalFailureToken = requestToken;
       console.error("❌ 本地文件加载失败");
       window.$message.error("本地文件无法播放");
       statusStore.playLoading = false;
@@ -1442,7 +1526,8 @@ class PlayerController {
     // 未超过重试次数 -> 尝试重新获取 URL（可能是过期）
     if (this.retryInfo.count <= this.MAX_RETRY_COUNT) {
       await sleep(Math.min(1000 * 2 ** (this.retryInfo.count - 1), 5000));
-      if (requestToken !== this.currentRequestToken || this.retryInfo.count === 0) return;
+      if (requestToken !== this.currentRequestToken || intentRevision !== this.playbackIntentRevision
+        || this.retryInfo.count === 0) return;
       if (this.retryInfo.count === 1) {
         statusStore.playLoading = true;
         window.$message.warning("播放异常，正在尝试恢复...");
@@ -1452,6 +1537,7 @@ class PlayerController {
     }
     // Exhaustion is a failure of this resource, not permission to choose another song.
     console.error("超过最大重试次数，停止当前歌曲");
+    this.terminalFailureToken = requestToken;
     this.retryInfo.count = 0;
     window.$message.error("当前歌曲恢复失败，请稍后重试或手动选择音源");
     statusStore.playLoading = false;
@@ -1460,12 +1546,20 @@ class PlayerController {
 
   /** 播放 */
   async play() {
+    const retryTerminalFailure = this.terminalFailureToken === this.currentRequestToken;
+    this.terminalFailureToken = null;
+    this.pausedFailureToken = null;
+    this.cancelMediaFailureProbe();
     const intentRevision = ++this.playbackIntentRevision;
     const statusStore = useStatusStore();
     const settingStore = useSettingStore();
     const audioManager = useAudioManager();
     // 如果已经在播放，直接返回
     if (statusStore.playStatus) return;
+    if (retryTerminalFailure) {
+      await this.playSong({ autoPlay: true, seek: statusStore.currentTime });
+      return;
+    }
     // 清除 MPV 强制暂停状态（如果是 MPV 引擎）
     audioManager.clearForcePaused();
     // 如果没有源，尝试重新初始化当前歌曲
@@ -1499,7 +1593,9 @@ class PlayerController {
 
   /** 暂停 */
   async pause(changeStatus: boolean = true) {
+    this.cancelMediaFailureProbe();
     this.playbackIntentRevision++;
+    this.pausedFailureToken = this.currentRequestToken;
     // A user pause cancels a scheduled error retry without invalidating source preparation.
     this.retryInfo.count = 0;
     const statusStore = useStatusStore();
@@ -1530,6 +1626,7 @@ class PlayerController {
     play: boolean = true,
     autoEnd: boolean = false,
   ) {
+    this.cancelMediaFailureProbe();
     const dataStore = useDataStore();
     const statusStore = useStatusStore();
     const songManager = useSongManager();
@@ -1627,6 +1724,7 @@ class PlayerController {
    * @param time 时间 (ms)
    */
   public setSeek(time: number) {
+    this.cancelMediaFailureProbe();
     this.playbackIntentRevision++;
     this.seekRevision++;
     if (this.onTimeUpdate) {
@@ -1758,6 +1856,7 @@ class PlayerController {
     const statusStore = useStatusStore();
     const musicStore = useMusicStore();
     if (!data || !data.length) return;
+    this.playModeManager.cancelPendingTransition();
     // 处理随机模式
     let processedData = [...data];
     if (statusStore.shuffleMode === "on") {
@@ -1792,6 +1891,7 @@ class PlayerController {
       await this.playSong({ autoPlay: options.play });
     }
     musicStore.playPlaylistId = pid ?? 0;
+    await this.onQueueOrderChanged();
     if (options.showTip) window.$message.success("已开始播放");
   }
 
@@ -1799,6 +1899,11 @@ class PlayerController {
    * 清空播放列表
    */
   public async cleanPlayList() {
+    this.playModeManager.cancelPendingTransition();
+    this.cancelMediaFailureProbe();
+    this.currentRequestToken++;
+    this.playbackIntentRevision++;
+    this.retryInfo.count = 0;
     const dataStore = useDataStore();
     const statusStore = useStatusStore();
     const musicStore = useMusicStore();
@@ -1818,6 +1923,7 @@ class PlayerController {
     // 清空播放列表
     await dataStore.setPlayList([]);
     await dataStore.clearOriginalPlayList();
+    await this.onQueueOrderChanged();
     playerIpc.sendTaskbarProgress("none");
   }
 
@@ -1827,6 +1933,7 @@ class PlayerController {
    * @param play 是否立即播放
    */
   public async addNextSong(song: SongType, play: boolean = false) {
+    this.playModeManager.cancelPendingTransition();
     const dataStore = useDataStore();
     const musicStore = useMusicStore();
     const statusStore = useStatusStore();
@@ -1848,6 +1955,7 @@ class PlayerController {
     }
     // 播放歌曲
     if (songIndex < 0) return;
+    await this.onQueueOrderChanged();
     if (play) {
       await this.togglePlayIndex(songIndex, true);
     } else {
@@ -1870,6 +1978,7 @@ class PlayerController {
       const { playList } = dataStore;
       // 若超出播放列表
       if (index >= playList.length) return;
+      this.cancelMediaFailureProbe();
       // 先停止当前播放
       audioManager.stop();
       // 相同歌曲且需要播放
@@ -1902,6 +2011,7 @@ class PlayerController {
     const { playList } = dataStore;
     // 若超出播放列表
     if (index >= playList.length) return;
+    this.playModeManager.cancelPendingTransition();
     // 仅剩一首
     if (playList.length === 1) {
       this.cleanPlayList();
@@ -1910,7 +2020,7 @@ class PlayerController {
     // 是否为当前播放歌曲
     const isCurrentPlay = statusStore.playIndex === index;
     // 若将移除最后一首
-    if (index === playList.length - 1) {
+    if (isCurrentPlay && index === playList.length - 1) {
       statusStore.playIndex = 0;
     }
     // 若为当前播放之后
@@ -1921,6 +2031,7 @@ class PlayerController {
     const newPlaylist = [...playList];
     newPlaylist.splice(index, 1);
     dataStore.setPlayList(newPlaylist);
+    void this.onQueueOrderChanged();
     // 若为当前播放
     if (isCurrentPlay) {
       this.playSong({ autoPlay: statusStore.playStatus });
@@ -1940,6 +2051,7 @@ class PlayerController {
     // 若索引超出播放列表
     if (fromIndex < 0 || fromIndex >= dataStore.playList.length) return;
     if (toIndex < 0 || toIndex >= dataStore.playList.length) return;
+    this.playModeManager.cancelPendingTransition();
     // 复制播放列表
     const list = [...dataStore.playList];
     const [movedSong] = list.splice(fromIndex, 1);
@@ -1961,6 +2073,7 @@ class PlayerController {
     if (statusStore.shuffleMode === "off") {
       await dataStore.setOriginalPlayList([...list]);
     }
+    await this.onQueueOrderChanged();
   }
 
   /**

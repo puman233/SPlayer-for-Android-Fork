@@ -106,6 +106,12 @@ public final class PlaybackManager {
    */
   private final java.util.concurrent.atomic.AtomicLong resolveTokenCounter =
       new java.util.concurrent.atomic.AtomicLong();
+  @Nullable private String pendingQueueResolveSource;
+
+  private void invalidateQueueResolution() {
+    resolveTokenCounter.incrementAndGet();
+    pendingQueueResolveSource = null;
+  }
 
   private final AtomicLong artworkTokenCounter = new AtomicLong();
 
@@ -405,6 +411,7 @@ public final class PlaybackManager {
     stagedMetadataSource = null;
     currentSource = url == null ? "" : url;
     currentMetadata.url = currentSource;
+    playbackQueue.alignCurrent(currentMetadata.songId, currentSource);
     if (applyStagedMetadata) {
       loadCoverBitmapAsync(currentMetadata.coverUrl);
       updateMediaSessionButtons();
@@ -435,7 +442,7 @@ public final class PlaybackManager {
     clearPendingSeek();
     lastKnownPositionMs = 0L;
     // 失效在路上的 async resolve 回调；清旧 pending 避免补窗误消费
-    resolveTokenCounter.incrementAndGet();
+    invalidateQueueResolution();
     pendingResumeAfterRefill = false;
 
     // 参考 SPlayer-ROM-Compat：先 setMediaItem + prepare，再 seekTo，最后 playWhenReady
@@ -479,7 +486,8 @@ public final class PlaybackManager {
     ensureInitialized();
     playbackRequested = false;
     resetNativeRecoveryState();
-    resolveTokenCounter.incrementAndGet();
+    invalidateQueueResolution();
+    pendingResumeAfterRefill = false;
     player.pause();
     emitPlaybackDiagnostic("pause", null);
     updateNotification();
@@ -493,7 +501,8 @@ public final class PlaybackManager {
     // 进程级清理走 cleanup() / onDestroy。
     playbackRequested = false;
     resetNativeRecoveryState();
-    resolveTokenCounter.incrementAndGet();
+    invalidateQueueResolution();
+    pendingResumeAfterRefill = false;
     player.pause();
     player.seekTo(0L);
     clearPendingSeek();
@@ -593,7 +602,7 @@ public final class PlaybackManager {
     playbackQueue.replace(null, -1, PlaybackQueue.RepeatMode.OFF, false, false, false);
     durationCalibratedForSource = "";
     // 清 token / pending，避免旧回调搅动新状态
-    resolveTokenCounter.incrementAndGet();
+    invalidateQueueResolution();
     pendingResumeAfterRefill = false;
     stopProgressUpdates();
     clearNotification();
@@ -678,6 +687,17 @@ public final class PlaybackManager {
       boolean hasNextOutsideWindow,
       boolean windowRefilled,
       boolean windowResetFromWrap) {
+    if (windowRefilled && windowResetFromWrap && !pendingResumeAfterRefill) return;
+    if (!windowRefilled && windowTracks != null && !windowTracks.isEmpty()
+        && currentMetadata.songId > 0 && !currentSource.isEmpty()) {
+      boolean containsActual = false;
+      for (PlaybackQueue.Track track : windowTracks) {
+        if (track != null && track.songId == currentMetadata.songId) {containsActual = true;break;}
+      }
+      // A delayed web snapshot must not move the native cursor back after native
+      // has already confirmed a new track outside that old sliding window.
+      if (!containsActual) return;
+    }
     liked = likedState;
     currentMetadata.liked = likedState;
     canSkipPrevious = canSkipPreviousState;
@@ -686,13 +706,39 @@ public final class PlaybackManager {
     desktopLyricButtonEnabled = desktopLyricButtonEnabledState;
     desktopLyricEnabled = desktopLyricEnabledState;
 
+    PlaybackQueue.RepeatMode queueMode = PlaybackQueue.RepeatMode.fromString(repeatMode);
+    boolean orderChanged = !playbackQueue.matchesOrder(windowTracks, queueMode,
+        hasPreviousOutsideWindow, hasNextOutsideWindow, personalFmModeState);
+    String resolvingSource = pendingQueueResolveSource;
+    PlaybackQueue.Track resolvingTarget = resolvingSource == null ? null : playbackQueue.current();
     playbackQueue.replace(
         windowTracks,
         windowCurrentIndex,
-        PlaybackQueue.RepeatMode.fromString(repeatMode),
+        queueMode,
         hasPreviousOutsideWindow,
         hasNextOutsideWindow,
         personalFmModeState);
+    PlaybackQueue.Track refillTarget = playbackQueue.current();
+    if (!orderChanged && resolvingTarget != null) {
+      playbackQueue.alignCurrent(resolvingTarget.songId, resolvingTarget.url);
+    } else {
+      playbackQueue.alignCurrent(currentMetadata.songId, currentSource);
+    }
+    if (orderChanged && (resolvingSource != null || (pendingResumeAfterRefill && !windowRefilled))) {
+      // Preserve NEXT/PREVIOUS/ENDED intent but select from the committed order.
+      // Old HTTP callbacks must not play their captured Track after replacement.
+      invalidateQueueResolution();
+      pendingResumeAfterRefill = false;
+      if (resolvingSource == null) resolvingSource = "auto";
+      boolean forward = !"previous".equals(resolvingSource);
+      PlaybackQueue.Track replacement = forward
+          ? playbackQueue.advanceRaw("auto".equals(resolvingSource)) : playbackQueue.backRaw();
+      if (replacement == null && "auto".equals(resolvingSource) && !shouldRequestUrlsForwardWrap()) {
+        playbackRequested = false;
+        if (player != null) player.pause();
+        emitPlaybackState(true);
+      } else resolveAndPlayAsync(replacement, resolvingSource, forward, forward ? 5 : 3);
+    }
 
     // 立即预解析前方未解析项，避免后台 ENDED 时才发现无 URL。
     prefetchUpcomingUrls();
@@ -715,7 +761,7 @@ public final class PlaybackManager {
       // - wrap=false（窗口右滑）：JS 推送时 windowCurrentIndex 仍指向刚结束的曲目，
       //   必须 advanceRaw(false) 推进到下一首；用 current() 会重播刚结束的歌。
       PlaybackQueue.Track resume =
-          windowResetFromWrap ? playbackQueue.current() : playbackQueue.advanceRaw(false);
+          windowResetFromWrap ? refillTarget : playbackQueue.advanceRaw(false);
       if (resume != null) {
         resolveAndPlayAsync(resume, "auto", true, 5);
       } else {
@@ -1350,6 +1396,7 @@ public final class PlaybackManager {
     }
     final long songId = next.songId;
     final PlaybackQueue.Track target = next;
+    pendingQueueResolveSource = source;
     // 自增 token：用户连点 NEXT 时旧 token 失效，回调直接丢弃，防止旧 URL 覆盖新播放
     final long myToken = resolveTokenCounter.incrementAndGet();
     urlResolver.submitResolve(
@@ -1361,6 +1408,7 @@ public final class PlaybackManager {
                     // 过期回调：用户已发起新一轮 NEXT/PREV，丢弃本次结果
                     return;
                   }
+                  pendingQueueResolveSource = null;
                   if (url != null) {
                     target.url = url;
                     playbackQueue.updateTrackUrl(songId, url);
@@ -1424,7 +1472,7 @@ public final class PlaybackManager {
       return;
     }
     // 切歌即失效旧 async 回调 + 清 pending，防止旧 URL 覆盖 / 补窗误消费
-    resolveTokenCounter.incrementAndGet();
+    invalidateQueueResolution();
     pendingResumeAfterRefill = false;
     resetNativeRecoveryState();
     TrackMetadata metadata = trackToMetadata(track);
@@ -1477,6 +1525,7 @@ public final class PlaybackManager {
     long delayMs = PlaybackRecoveryPolicy.retryDelayMs(attempt);
     TrackMetadata metadataSnapshot = currentMetadata.copy();
     boolean likedSnapshot = liked;
+    pendingQueueResolveSource = null;
     final long myToken = resolveTokenCounter.incrementAndGet();
     Log.w(
         TAG,

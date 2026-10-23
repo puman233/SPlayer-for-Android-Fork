@@ -12,8 +12,10 @@ function fixture(login = 1, local = false, initialQueue?: any[]) {
   };
   let list: any[] = initialQueue || [music.playSong];
   let original: any[] = [];
-  const jobs: Array<() => Promise<void>> = [],
-    messages: string[] = [],
+  let nextWrite: Promise<void> | undefined;
+  let originalRead: Promise<any[]> | undefined;
+  const queueCommits: any[] = [];
+  const messages: string[] = [],
     seeds: number[] = [];
   const loggedIn = login;
   let response: any = { code: 200, data: [{ id: 11, name: "recommendation" }] };
@@ -27,12 +29,15 @@ function fixture(login = 1, local = false, initialQueue?: any[]) {
     setOriginalPlayList: async (v: any[]) => {
       original = v;
     },
-    getOriginalPlayList: async () => original,
+    getOriginalPlayList: async () => originalRead ?? original,
     clearOriginalPlayList: async () => {
       original = [];
     },
     setPlayList: async (v: any[]) => {
       list = v;
+      const pending = nextWrite;
+      nextWrite = undefined;
+      await pending;
     },
   };
   const noop = () => {};
@@ -73,7 +78,6 @@ function fixture(login = 1, local = false, initialQueue?: any[]) {
       exports: module.exports,
       require: (key: string) => imports[key] || {},
       AbortController,
-      setTimeout: (job: () => Promise<void>) => jobs.push(job),
       console: { log: noop, error: noop, warn: noop },
       window: {
         $message: {
@@ -85,14 +89,18 @@ function fixture(login = 1, local = false, initialQueue?: any[]) {
       },
     },
   );
-  const manager = new module.exports.PlayModeManager();
+  const manager = new module.exports.PlayModeManager(async () => {
+    queueCommits.push({ list: list.map(song => song.id), index: status.playIndex, song: music.playSong.id });
+  });
   return {
     manager,
     status,
     messages,
     seeds,
+    music, queueCommits,
+    delayNextWrite: (promise: Promise<void>) => { nextWrite = promise; },
+    delayOriginalRead: (promise?: Promise<any[]>) => { originalRead = promise; },
     list: () => list,
-    flush: () => jobs.shift()?.(),
     respond: (v: any) => {
       response = v;
     },
@@ -115,14 +123,11 @@ test("the shared mode command cycles off, shuffle on, heartbeat and off", () => 
 test("heart mode can enter, exit and enter again through the existing public command", async () => {
   const f = fixture();
   await f.manager.toggleShuffle("heartbeat");
-  await f.flush();
   assert.equal(f.status.shuffleMode, "heartbeat");
   assert.equal(f.list().length, 2);
   await f.manager.toggleShuffle("off");
-  await f.flush();
   assert.equal(f.status.shuffleMode, "off");
   await f.manager.toggleShuffle("heartbeat");
-  await f.flush();
   assert.equal(f.status.shuffleMode, "heartbeat");
   assert.equal(f.seeds.length, 2);
 });
@@ -130,15 +135,12 @@ test("heart mode can enter, exit and enter again through the existing public com
 test("cycling shuffle to heart and off restores the original ordered queue", async () => {
   const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
   await f.manager.toggleShuffle("on");
-  await f.flush();
   assert.deepEqual(
     Array.from(f.list(), (song: any) => song.id),
     [7, 6, 5],
   );
   await f.manager.toggleShuffle("heartbeat");
-  await f.flush();
   await f.manager.toggleShuffle("off");
-  await f.flush();
   assert.deepEqual(
     Array.from(f.list(), (song: any) => song.id),
     [5, 6, 7],
@@ -150,7 +152,6 @@ test("guest, empty recommendations and network failures do not report heart mode
     if (failure === "empty") f.respond({ code: 200, data: [] });
     if (failure === "network") f.respond(new Error("offline"));
     await f.manager.toggleShuffle("heartbeat");
-    await f.flush();
     assert.equal(f.status.shuffleMode, "off");
     assert.equal(
       f.messages.some((v) => v === "心动模式已开启"),
@@ -161,7 +162,6 @@ test("guest, empty recommendations and network failures do not report heart mode
 test("a local song uses a liked online seed instead of its unrelated file identifier", async () => {
   const f = fixture(1, true);
   await f.manager.toggleShuffle("heartbeat");
-  await f.flush();
   assert.equal(f.seeds[0], 101);
 });
 
@@ -172,10 +172,8 @@ test("a failed heart transition still lets the next cycle turn shuffle off", asy
     if (failure === "empty") f.respond({ code: 200, data: [] });
     if (failure === "network") f.respond(new Error("offline"));
     await f.manager.toggleShuffle(f.manager.calculateNextShuffleMode(f.status.shuffleMode));
-    await f.flush();
     assert.equal(f.status.shuffleMode, "on");
     await f.manager.toggleShuffle(f.manager.calculateNextShuffleMode(f.status.shuffleMode));
-    await f.flush();
     assert.equal(f.status.shuffleMode, "off");
   }
 });
@@ -183,13 +181,75 @@ test("an aborted heart request cannot roll a newer explicit off mode back to shu
   const f = fixture();
   f.status.shuffleMode = "on";
   f.respond("deferred");
-  await f.manager.toggleShuffle("heartbeat");
-  const pending = f.flush();
+  const pending = f.manager.toggleShuffle("heartbeat");
   for (let i = 0; i < 20 && !f.seeds.length; i++) await Promise.resolve();
   assert.equal(f.seeds.length, 1, "the old HTTP request must actually be in flight");
   await f.manager.toggleShuffle("off");
-  await f.flush();
   f.reject(new Error("aborted"));
   await pending;
   assert.equal(f.status.shuffleMode, "off");
+});
+
+test("a committed shuffled queue publishes an aligned current track before persistence finishes", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  let release!: () => void;
+  f.delayNextWrite(new Promise<void>(resolve => { release = resolve; }));
+  const pending = f.manager.toggleShuffle("on");
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  const committed = f.queueCommits.at(-1);
+  release(); await pending;
+  assert.ok(committed, "The native queue must receive the actual mode commit");
+  assert.equal(committed.list[committed.index], committed.song);
+  assert.deepEqual(Array.from(committed.list), [7, 6, 5]);
+});
+
+test("an obsolete off read cannot replace a newer heart queue", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  await f.manager.toggleShuffle("on");
+  let release!: (value: any[]) => void;
+  f.delayOriginalRead(new Promise<any[]>(resolve => { release = resolve; }));
+  const older = f.manager.toggleShuffle("off");
+  await Promise.resolve();
+  f.delayOriginalRead(undefined);
+  await f.manager.toggleShuffle("heartbeat");
+  const latest = Array.from(f.list(), song => song.id);
+  release([{ id: 5 }, { id: 6 }, { id: 7 }]); await older;
+  assert.equal(f.status.shuffleMode, "heartbeat");
+  assert.deepEqual(Array.from(f.list(), song => song.id), latest);
+});
+
+test("late shuffle persistence cannot overwrite the index of a newer heart queue", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  let release!: () => void;
+  f.delayNextWrite(new Promise<void>(resolve => { release = resolve; }));
+  const older = f.manager.toggleShuffle("on");
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  f.music.playSong = { id: 6, name: "advanced", type: "song" };
+  await f.manager.toggleShuffle("heartbeat");
+  release(); await older;
+  assert.equal(f.status.shuffleMode, "heartbeat");
+  assert.equal(f.list()[f.status.playIndex].id, f.music.playSong.id);
+});
+
+test("leaving heart mode keeps its actually playing recommendation before the restored original order", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  await f.manager.toggleShuffle("heartbeat");
+  f.music.playSong = { id: 11, name: "recommendation", type: "song" };
+  await f.manager.toggleShuffle("off");
+  assert.equal(f.list()[f.status.playIndex].id, 11);
+  assert.deepEqual(Array.from(f.list(), song => song.id), [11, 5, 6, 7]);
+});
+
+test("direct heart to shuffle transitions retain the original off order", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  for (const mode of ["on", "heartbeat", "on", "heartbeat", "on", "off"]) await f.manager.toggleShuffle(mode);
+  assert.deepEqual(Array.from(f.list(), song => song.id), [5, 6, 7]);
+});
+
+test("rapid overlapping mode commands cannot replace the saved original order with a shuffled snapshot", async () => {
+  const f = fixture(1, false, [{ id: 5 }, { id: 6 }, { id: 7 }]);
+  await f.manager.toggleShuffle("on");
+  await Promise.all(["off", "on", "heartbeat", "off"].map(mode => f.manager.toggleShuffle(mode)));
+  assert.equal(f.status.shuffleMode, "off");
+  assert.deepEqual(Array.from(f.list(), song => song.id), [5, 6, 7]);
 });

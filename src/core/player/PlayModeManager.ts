@@ -17,6 +17,29 @@ import * as playerIpc from "./PlayerIpc";
  * 负责循环模式、随机模式的切换逻辑及状态同步
  */
 export class PlayModeManager {
+  constructor(private readonly onQueueChanged?: () => Promise<void>) {}
+  private committedMode: ShuffleModeType | null = null;
+
+  public cancelPendingTransition() {
+    const transitioning = this.currentAbortController !== null;
+    this.currentAbortController?.abort();
+    this.currentAbortController = null;
+    this.clearLoadingMessage();
+    if (transitioning && this.committedMode !== null) useStatusStore().shuffleMode = this.committedMode;
+    this.committedMode = null;
+  }
+
+  private async commitQueue(list: SongType[], signal: AbortSignal) {
+    if (signal.aborted) return;
+    const status = useStatusStore();
+    const current = useMusicStore().playSong;
+    status.playIndex = Math.max(0, list.findIndex(song => song.id === current?.id));
+    this.committedMode = status.shuffleMode;
+    // Store replacement is synchronous; publish the same aligned identity before
+    // awaiting persistence, which may finish after another mode command.
+    const persisted = useDataStore().setPlayList(list);
+    await Promise.all([persisted, this.onQueueChanged?.()]);
+  }
   /**
    * 用来管理 AbortController 实例
    */
@@ -54,6 +77,7 @@ export class PlayModeManager {
     }
 
     this.syncMediaPlayMode();
+    void this.onQueueChanged?.();
 
     const modeText: Record<RepeatModeType, string> = {
       list: "列表循环",
@@ -99,22 +123,19 @@ export class PlayModeManager {
    */
   private async applyShuffleOn(signal: AbortSignal) {
     const dataStore = useDataStore();
-    const statusStore = useStatusStore();
-    const musicStore = useMusicStore();
 
     const currentList = [...dataStore.playList];
     // 备份原始列表
-    await dataStore.setOriginalPlayList(currentList);
+    const original = this.committedMode === "off" ? null : await dataStore.getOriginalPlayList();
+    if (signal.aborted) return;
+    if (!original?.length) await dataStore.setOriginalPlayList(currentList);
 
     if (signal.aborted) return;
 
     // 打乱列表
     const shuffled = shuffleArray(currentList);
-    await dataStore.setPlayList(shuffled);
-
-    // 修正当前播放索引
-    const idx = shuffled.findIndex((s) => s.id === musicStore.playSong?.id);
-    if (idx !== -1) statusStore.playIndex = idx;
+    await this.commitQueue(shuffled, signal);
+    if (signal.aborted) return;
 
     window.$message.success("随机播放已开启", { showIcon: false });
   }
@@ -193,6 +214,7 @@ export class PlayModeManager {
       }
       if (signal.aborted) return;
       const res = await heartRateList(currentSongId, pid, undefined, signal);
+      if (signal.aborted) return;
       if (res.code !== 200) throw new Error("获取心动模式推荐失败，请稍后重试");
       const recList = formatSongsList(res.data);
       if (!recList || recList.length === 0) {
@@ -201,7 +223,7 @@ export class PlayModeManager {
       // 备份当前播放列表
       const currentList = [...dataStore.playList];
       // 从随机进入心动时保留随机之前的顺序，关闭后仍能恢复。
-      const original = previousMode === "on" ? await dataStore.getOriginalPlayList() : null;
+      const original = previousMode !== "off" ? await dataStore.getOriginalPlayList() : null;
       if (signal.aborted) return;
       if (!original?.length) await dataStore.setOriginalPlayList(currentList);
       if (signal.aborted) return;
@@ -211,12 +233,11 @@ export class PlayModeManager {
       const filteredRec = recList.filter((s) => s.id !== currentSong.id);
       const finalList = [{ ...currentSong }, ...filteredRec.map((s) => ({ ...s }))];
       // 直接替换播放列表
-      await dataStore.setPlayList(finalList);
-      // 设置播放索引为第一首
-      statusStore.playIndex = 0;
+      await this.commitQueue(finalList, signal);
+      if (signal.aborted) return;
       window.$message.success("心动模式已开启");
     } catch (e) {
-      if (!signal.aborted) statusStore.shuffleMode = previousMode;
+      if (!signal.aborted) statusStore.shuffleMode = this.committedMode ?? previousMode;
       throw e;
     } finally {
       if (this.loadingMessage === loadingMessage) this.clearLoadingMessage();
@@ -228,23 +249,27 @@ export class PlayModeManager {
    *
    * 会恢复原始列表 和/或 清理推荐歌曲
    */
-  private async applyShuffleOff() {
+  private async applyShuffleOff(signal: AbortSignal) {
     const dataStore = useDataStore();
-    const statusStore = useStatusStore();
     const musicStore = useMusicStore();
 
     // 恢复原始列表
     const original = await dataStore.getOriginalPlayList();
+    if (signal.aborted) return;
 
     if (original && original.length > 0) {
-      await dataStore.setPlayList(original);
-      const idx = original.findIndex((s) => s.id === musicStore.playSong?.id);
-      statusStore.playIndex = idx !== -1 ? idx : 0;
+      // A currently playing recommendation remains the anchor; restored songs
+      // retain their original order and the first one is the next candidate.
+      const current = musicStore.playSong;
+      const restored = current?.id && !original.some(song => song.id === current.id)
+        ? [current, ...original] : original;
+      await this.commitQueue(restored, signal);
+      if (signal.aborted) return;
       await dataStore.clearOriginalPlayList();
     } else {
-      await dataStore.setPlayList(dataStore.playList);
+      await this.commitQueue(dataStore.playList, signal);
     }
-
+    if (signal.aborted) return;
     window.$message.success("随机播放已关闭", { showIcon: false });
   }
 
@@ -254,56 +279,53 @@ export class PlayModeManager {
    */
   public async toggleShuffle(mode: ShuffleModeType) {
     const statusStore = useStatusStore();
+    const nextMode = mode;
+    const currentMode = statusStore.shuffleMode;
+    if (!this.currentAbortController) this.committedMode = currentMode;
+    this.committedMode ??= currentMode;
+
+    if (nextMode === currentMode) return;
     const signal = this.resetCurrentTask();
     this.heartbeatFailed = false;
 
-    const nextMode = mode;
-    const currentMode = statusStore.shuffleMode;
-
-    if (nextMode === currentMode) return;
-
-    const previousMode = statusStore.shuffleMode;
+    const previousMode = this.committedMode;
     statusStore.shuffleMode = nextMode;
     this.syncMediaPlayMode();
 
-    // 将耗时的数据处理扔到 UI 图标更新后再进行，避免打乱庞大列表导致点击延迟
-    setTimeout(async () => {
-      if (signal.aborted) return;
-
-      try {
-        switch (nextMode) {
-          case "on":
-            await this.applyShuffleOn(signal);
-            break;
-          case "heartbeat":
-            await this.applyHeartbeatMode(signal, previousMode);
-            break;
-          default:
-            await this.applyShuffleOff();
-            break;
-        }
-      } catch (e) {
-        if (signal.aborted || axios.isCancel(e)) return;
-
-        this.clearLoadingMessage();
-
-        console.error("切换模式时发生错误:", requestFailureCategory(e));
-
-        // 失败回滚
-        statusStore.shuffleMode = previousMode;
-
-        const errorMsg = (e as Error).message || "模式切换出错";
-        window.$message.error(errorMsg);
-      } finally {
-        if (
-          !signal.aborted &&
-          nextMode === "heartbeat" &&
-          previousMode === "on" &&
-          statusStore.shuffleMode === "on"
-        )
-          this.heartbeatFailed = true;
+    try {
+      switch (nextMode) {
+        case "on":
+          await this.applyShuffleOn(signal);
+          break;
+        case "heartbeat":
+          await this.applyHeartbeatMode(signal, previousMode);
+          break;
+        default:
+          await this.applyShuffleOff(signal);
+          break;
       }
-    }, 10);
+    } catch (e) {
+      if (signal.aborted || axios.isCancel(e)) return;
+
+      this.clearLoadingMessage();
+
+      console.error("切换模式时发生错误:", requestFailureCategory(e));
+
+      // 失败回滚
+      statusStore.shuffleMode = this.committedMode ?? previousMode;
+
+      const errorMsg = (e as Error).message || "模式切换出错";
+      window.$message.error(errorMsg);
+    } finally {
+      if (
+        !signal.aborted &&
+        nextMode === "heartbeat" &&
+        previousMode === "on" &&
+        statusStore.shuffleMode === "on"
+      )
+        this.heartbeatFailed = true;
+      if (this.currentAbortController?.signal === signal) this.currentAbortController = null;
+    }
   }
 
   /**

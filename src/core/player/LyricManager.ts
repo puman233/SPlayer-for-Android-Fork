@@ -848,12 +848,12 @@ class LyricManager {
     };
 
     // 处理 TTML 歌词
-    const adoptTTML = async (isCurrent = () => true) => {
+    const adoptTTML = async (isCurrent = () => true, signal?: AbortSignal) => {
       if (!settingStore.enableOnlineTTMLLyric && priority !== "ttml") return;
       if (typeof id !== "number") return;
       let ttmlContent: string | null = await this.getRawLyricCache(id, "ttml");
       if (!ttmlContent) {
-        ttmlContent = await songLyricTTML(id);
+        ttmlContent = await songLyricTTML(id, signal);
       }
       if (!isCurrent() || !ttmlContent || typeof ttmlContent !== "string") return;
       const sorted = cleanTTMLTranslations(ttmlContent);
@@ -870,20 +870,22 @@ class LyricManager {
     };
 
     // Optional formats must fail independently; a stalled TTML must leave time for LRC.
-    const trySource = async (adopt: (isCurrent: () => boolean) => Promise<void>) => {
+    const trySource = async (adopt: (isCurrent: () => boolean, signal: AbortSignal) => Promise<void>) => {
       let expired = false;
+      const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
-          adopt(() => !expired),
+          adopt(() => !expired, controller.signal),
           new Promise<void>((resolve) => {
-            timer = setTimeout(() => { expired = true; resolve(); }, 6000);
+            timer = setTimeout(() => { expired = true; controller.abort(); resolve(); }, 6000);
           }),
         ]);
       } catch (error) {
         console.warn("可选歌词获取失败，尝试备用歌词:", requestFailureCategory(error));
       } finally {
         if (timer !== undefined) clearTimeout(timer);
+        controller.abort();
       }
     };
     const tryTTML = () => trySource(adoptTTML);

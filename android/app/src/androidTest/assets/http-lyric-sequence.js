@@ -4,6 +4,13 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000, opti
   const data = window.fixturePinia._s.get("data");
   window.httpSequenceSaved = { list: data.playList, original: data.originalPlayList, history: data.setHistory };
   data.setHistory = async () => {};
+  // Clear the previous native window before redirecting its resolver context.
+  // Otherwise updateContext can prefetch three unrelated saved-queue songs into
+  // this scenario's server. The original window is rebuilt by restore below.
+  await window.Capacitor.nativePromise("AndroidNativePlayback", "updateQueueContext", {
+    windowTracks: [], windowCurrentIndex: -1,
+    hasPreviousOutsideWindow: false, hasNextOutsideWindow: false, repeatMode: "off",
+  });
   Object.assign(window.fixtureSetting, { useNextPrefetch: count > 1, lyricPriority: "official",
     enableOnlineTTMLLyric: false, enableQQMusicLyric: false, enableAutomix: false,
     cacheEnabled: false, useSongUnlock: false, songLevel: "standard", androidAllowMixWithOthers: options.allowMix ?? true });
@@ -46,6 +53,11 @@ window.prepareHttpLyricSequence = async (base, count = 21, duration = 4000, opti
     }
     return window.httpSequenceNative.call(this, plugin, method, options);
   };
+  // The production API sync can already be deduplicated before this fixture is
+  // installed. Explicitly configure the actual native HTTP boundary as well.
+  await window.Capacitor.nativePromise("AndroidNativePlayback", "syncApiContext", {
+    apiBaseUrl: base, cookie: "", songLevel: "standard", disableAiAudio: false, playSongDemo: false,
+  });
   data.playList = Array.from({ length: count }, (_, i) => ({ id: 991700 + i, type: "song",
     name: "HTTP sequence " + (991700 + i), duration, cover: "/images/song.jpg",
     artists: [{ id: 1, name: "Synthetic artist" }], album: { id: 1, name: "Synthetic album" } }));

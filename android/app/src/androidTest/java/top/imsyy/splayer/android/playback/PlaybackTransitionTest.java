@@ -27,16 +27,29 @@ public class PlaybackTransitionTest {
     final AtomicInteger audioRequests=new AtomicInteger(),urlRequests=new AtomicInteger(),failures=new AtomicInteger();
     final AtomicInteger interruptedResponses=new AtomicInteger();
     final AtomicInteger stalledResponses=new AtomicInteger();
+    final AtomicInteger statusProbeRequests=new AtomicInteger();
+    final org.json.JSONArray urlRequestFacts=new org.json.JSONArray();
     final Thread accept;
     final String prefix="transition-"+UUID.randomUUID();
     final boolean tones;
     final int seconds;
     volatile long chunkDelayMs=4;
     volatile long headerDelayMs=0,jitterDelayMs=0,interruptAfterBytes=0,firstReadStallMs=0;
+    volatile long statusProbeDelayMs=0;
+    volatile long firstMediaHeaderDelayMs=0;
     volatile int jitterEveryChunks=0;
     volatile boolean audioOffline=false;
     volatile int audioStatus=200;
     volatile boolean audioCorsEnabled=true,invalidAudio=false;
+    volatile boolean holdAudioBody=false;
+    volatile boolean holdSelectedAudioBody=false;
+    volatile long heldAudioSongId=0;
+    volatile int firstSongSeconds=0;
+    volatile boolean holdUrlResponses=false;
+    volatile long heldUrlSongId=0;
+    final AtomicInteger heldUrlRequests=new AtomicInteger();
+    final AtomicInteger heartRequests=new AtomicInteger();
+    volatile boolean holdHeartResponses=false;
     volatile long unavailableSongId=0;
     AudioServer() throws Exception {this(false);}
     AudioServer(boolean tones) throws Exception {
@@ -55,23 +68,44 @@ public class PlaybackTransitionTest {
         socket.setSoTimeout(3000);
         BufferedReader in=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.US_ASCII));
         String request=in.readLine(),line;long start=0;
+        boolean statusProbe=false;
+        boolean browserClient=false;
         String requestedHeaders="Content-Type, Authorization, X-Requested-With";
         if(request==null)return;
         while((line=in.readLine())!=null&&!line.isEmpty()) {
+          if(line.toLowerCase(Locale.ROOT).startsWith("user-agent:")&&line.toLowerCase(Locale.ROOT).contains("mozilla/"))browserClient=true;
+          if(line.equalsIgnoreCase("Range: bytes=0-0"))statusProbe=true;
           if(line.toLowerCase(Locale.ROOT).startsWith("access-control-request-headers:")) requestedHeaders=line.substring(line.indexOf(':')+1).trim();
           if(line.toLowerCase(Locale.ROOT).startsWith("range: bytes=")) start=Long.parseLong(line.substring(13).split("-")[0]);
         }
-        if (request.contains("/lyric") || request.contains("/song/url")) {
+        if (request.contains("/lyric") || request.contains("/song/url") || request.contains("/playmode/intelligence/list")) {
+          boolean heart=request.contains("/playmode/intelligence/list");
+          if(heart&&!request.startsWith("OPTIONS"))heartRequests.incrementAndGet();
+          while(heart&&!request.startsWith("OPTIONS")&&holdHeartResponses&&!server.isClosed())SystemClock.sleep(25);
           if(request.contains("/song/url")&&!request.startsWith("OPTIONS"))urlRequests.incrementAndGet();
           Uri uri=Uri.parse("http://localhost"+request.split(" ")[1]);
           String id=uri.getQueryParameter("id");
           if(id==null)id=uri.getQueryParameter("ids");
           id=id==null?"991700":id.replaceAll("[^0-9]", "");
+          boolean owned=id.matches("991[0-9]{3}");
+          if(request.contains("/song/url")&&!request.startsWith("OPTIONS")&&Long.parseLong(id)==heldUrlSongId)heldUrlRequests.incrementAndGet();
+          while(request.contains("/song/url")&&!request.startsWith("OPTIONS")&&Long.parseLong(id)==heldUrlSongId
+              &&holdUrlResponses&&!server.isClosed())SystemClock.sleep(25);
+          if(request.contains("/song/url")&&!request.startsWith("OPTIONS"))synchronized(urlRequestFacts){
+            urlRequestFacts.put(new org.json.JSONObject().put("songId",owned?id:"outside-fixture").put("browserClient",browserClient).put("atMs",SystemClock.elapsedRealtime()));
+          }
           org.json.JSONObject body=new org.json.JSONObject().put("code",200);
-          if(request.contains("/lyric"))body.put("lrc",new org.json.JSONObject().put("lyric","[00:00.000]HTTP lyric "+id));
+          if(heart) {
+            org.json.JSONArray recommendations=new org.json.JSONArray();
+            for(long songId:new long[]{991709,991708})recommendations.put(new org.json.JSONObject().put("songInfo",
+                new org.json.JSONObject().put("id",songId).put("name","HTTP sequence "+songId).put("dt",seconds*1000)
+                .put("ar",new org.json.JSONArray().put(new org.json.JSONObject().put("id",1).put("name","HTTP artist")))
+                .put("al",new org.json.JSONObject().put("id",1).put("name","HTTP album"))));
+            body.put("data",recommendations);
+          } else if(request.contains("/lyric"))body.put("lrc",new org.json.JSONObject().put("lyric","[00:00.000]HTTP lyric "+id));
           else body.put("data",new org.json.JSONArray().put(new org.json.JSONObject().put("id",Long.parseLong(id))
-              .put("url",Long.parseLong(id)==unavailableSongId?org.json.JSONObject.NULL:url("song"+id)).put("freeTrialInfo",org.json.JSONObject.NULL)
-              .put("type","wav").put("level","standard").put("time",seconds*1000)));
+              .put("url",!owned||Long.parseLong(id)==unavailableSongId?org.json.JSONObject.NULL:url("song"+id)).put("freeTrialInfo",org.json.JSONObject.NULL)
+              .put("type","wav").put("level","standard").put("time",(id.equals("991700")&&firstSongSeconds>0?firstSongSeconds:seconds)*1000)));
           byte[] json=body.toString().getBytes(StandardCharsets.UTF_8);
           OutputStream output=socket.getOutputStream();
           output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: https://localhost\r\nAccess-Control-Allow-Credentials: true\r\nAccess-Control-Allow-Methods: GET, OPTIONS\r\nAccess-Control-Allow-Headers: "+requestedHeaders+"\r\nAccess-Control-Allow-Private-Network: true\r\nContent-Length: "+json.length+"\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
@@ -83,22 +117,26 @@ public class PlaybackTransitionTest {
           socket.getOutputStream().write(("HTTP/1.1 204 No Content\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));return;
         }
         int audioRequest=audioRequests.incrementAndGet();
+        if(audioRequest==1&&!statusProbe&&firstMediaHeaderDelayMs>0)SystemClock.sleep(firstMediaHeaderDelayMs);
+        if(statusProbe){statusProbeRequests.incrementAndGet();if(statusProbeDelayMs>0)SystemClock.sleep(statusProbeDelayMs);}
         if(headerDelayMs>0)SystemClock.sleep(headerDelayMs);
-        if (audioOffline || audioStatus!=200) {
+        int responseStatus=audioOffline?503:audioStatus;
+        if (responseStatus!=200) {
           failures.incrementAndGet();
-          int status=audioOffline?503:audioStatus;
-          socket.getOutputStream().write(("HTTP/1.1 "+status+" Test Failure\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+          socket.getOutputStream().write(("HTTP/1.1 "+responseStatus+" Test Failure\r\n"+audioCors+"Content-Length: 0\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
           return;
         }
         if(invalidAudio){
           socket.getOutputStream().write(("HTTP/1.1 200 OK\r\n"+audioCors+"Content-Type: audio/wav\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-wave").getBytes(StandardCharsets.US_ASCII));return;
         }
         if(tones&&request.contains("/slow.wav")){slowRequests.incrementAndGet();SystemClock.sleep(1800);}
-        byte[] wave=tones?wave():null;
+        byte[] wave=tones?wave(request.contains("/song991700.wav")&&firstSongSeconds>0?firstSongSeconds:seconds):null;
         int total=tones?wave.length:3*1024*1024;
         OutputStream out=socket.getOutputStream();
         String header=start>0?"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes "+start+"-"+(total-1)+"/"+total+"\r\n":"HTTP/1.1 200 OK\r\n";
         out.write((header+audioCors+"Accept-Ranges: bytes\r\nContent-Length: "+(total-start)+"\r\nContent-Type: audio/wav\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+        while((holdAudioBody||(holdSelectedAudioBody&&request.contains("/song"+heldAudioSongId+".wav")))
+            &&!server.isClosed())SystemClock.sleep(25);
         byte[] chunk=new byte[8192];Arrays.fill(chunk,(byte)(request.contains("/next.wav")?71:93));
         int chunkIndex=0;
         for(long position=start;position<total;position+=chunk.length) {
@@ -121,8 +159,9 @@ public class PlaybackTransitionTest {
       }catch(org.json.JSONException invalidFixture){throw new AssertionError(invalidFixture);
       }finally{sockets.remove(socket);}
     }
-    byte[] wave() {
-      int samples=seconds*16000,bytes=samples*2;
+    byte[] wave() {return wave(seconds);}
+    byte[] wave(int durationSeconds) {
+      int samples=durationSeconds*16000,bytes=samples*2;
       java.nio.ByteBuffer b=java.nio.ByteBuffer.allocate(44+bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
       b.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(36+bytes).put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII));
       b.putInt(16).putShort((short)1).putShort((short)1).putInt(16000).putInt(32000).putShort((short)2).putShort((short)16);
@@ -146,11 +185,15 @@ public class PlaybackTransitionTest {
       Set<Long> seen=new HashSet<>();
       org.json.JSONArray samples=new org.json.JSONArray();
       try {
+        // The actual response body is released only after STOPPED, so slow
+        // multi-display navigation cannot consume early tracks before sampling.
+        server.holdAudioBody=true;
         f.js("prepareHttpLyricSequence("+org.json.JSONObject.quote("http://127.0.0.1:"+server.server.getLocalPort())+").catch(e=>window.httpSequenceError=e.name+': '+e.message)");
         f.await("window.httpSequenceReady||!!window.httpSequenceError");
         assertEquals("null",f.js("window.httpSequenceError||null"));
         f.await("fixturePinia._s.get('music').songLyric.lrcData[0]?.words[0]?.word==='HTTP lyric 991700'");
         f.moveToBackground();
+        server.holdAudioBody=false;
         long deadline=SystemClock.elapsedRealtime()+150000;
         while(seen.size()<21&&SystemClock.elapsedRealtime()<deadline) {
           f.inst.runOnMainSync(()->{
@@ -188,6 +231,7 @@ public class PlaybackTransitionTest {
         System.out.println("HTTP_LYRIC_SEQUENCE "+samples);
       } finally {
         f.activity.startActivity(new android.content.Intent(f.activity,top.imsyy.splayer.android.MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+        f.restoreNativeApiContext();
         f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");
         f.await("window.httpSequenceRestored===true");
         f.inst.runOnMainSync(manager::hideFloatingLyric);
@@ -230,6 +274,7 @@ public class PlaybackTransitionTest {
           assertEquals(991700,state.optLong("songId"));
         });
       } finally {
+        f.restoreNativeApiContext();
         f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");f.await("window.httpSequenceRestored===true");
         f.inst.runOnMainSync(manager::hideFloatingLyric);
       }
@@ -250,6 +295,7 @@ public class PlaybackTransitionTest {
         f.inst.runOnMainSync(()->assertFalse("An unavailable next song must not restart the first",manager.buildState().optBoolean("playing")));
         assertEquals("The failed target must remain selected with loading settled","true",f.js("fixturePinia._s.get('music').playSong.id===991701&&fixtureStatus.playIndex===1&&!fixtureStatus.playStatus&&!fixtureStatus.playLoading"));
       } finally {
+        f.restoreNativeApiContext();
         f.js("restoreHttpLyricSequence().then(()=>window.httpSequenceRestored=true)");f.await("window.httpSequenceRestored===true");
         f.inst.runOnMainSync(manager::hideFloatingLyric);
       }

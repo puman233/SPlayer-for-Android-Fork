@@ -55,8 +55,13 @@ interface CachedTag {
 }
 
 const tagCache = new Map<string, CachedTag>();
-/** 标签缓存键：serverId + ":" + path */
-const tagCacheKey = (config: StreamingServerConfig, path: string) => `${config.id}:${path}`;
+/** 旧配置缺少身份作用域时不复用缓存，键中不包含凭据。 */
+const cacheNamespace = (config: StreamingServerConfig): string | null =>
+  config.cacheScope ? `${encodeURIComponent(config.id)}:${config.cacheScope}:` : null;
+const tagCacheKey = (config: StreamingServerConfig, path: string): string | null => {
+  const namespace = cacheNamespace(config);
+  return namespace ? `${namespace}${encodeURIComponent(path)}` : null;
+};
 
 // ============ 公共辅助 ============
 
@@ -275,7 +280,7 @@ const fetchTagsForSong = async (
   entry: WebDavEntry,
 ): Promise<CachedTag | null> => {
   const cacheKey = tagCacheKey(config, entry.path);
-  const cached = tagCache.get(cacheKey);
+  const cached = cacheKey ? tagCache.get(cacheKey) : undefined;
   if (cached && cached.size === entry.size && cached.lastModified === entry.lastModified) {
     return cached;
   }
@@ -328,7 +333,7 @@ const fetchTagsForSong = async (
       size: entry.size,
       lastModified: entry.lastModified,
     };
-    tagCache.set(cacheKey, result);
+    if (cacheKey) tagCache.set(cacheKey, result);
     return result;
   } catch (e) {
     console.warn("[WebDAV] parse tag error:", entry.path, requestFailureCategory(e));
@@ -341,7 +346,7 @@ const fetchTagsForSong = async (
       size: entry.size,
       lastModified: entry.lastModified,
     };
-    tagCache.set(cacheKey, fallback);
+    if (cacheKey) tagCache.set(cacheKey, fallback);
     return fallback;
   }
 };
@@ -353,7 +358,7 @@ const stripExt = (name: string): string => {
 
 // ============ 库索引（递归扫描） ============
 
-/** 库索引缓存：serverId → { songs, scannedAt } */
+/** 库索引缓存按服务器和身份作用域隔离。 */
 interface LibraryIndex {
   songs: SongType[];
   scannedAt: number;
@@ -465,18 +470,21 @@ const inferQuality = (entry: WebDavEntry, tag: CachedTag | null): QualityType =>
 
 /** 取或建索引 */
 const getOrBuildIndex = async (config: StreamingServerConfig): Promise<SongType[]> => {
-  const existing = libraryIndex.get(config.id);
+  const namespace = cacheNamespace(config);
+  const existing = namespace ? libraryIndex.get(namespace) : undefined;
   if (existing && Date.now() - existing.scannedAt < INDEX_TTL) {
     return existing.songs;
   }
   const songs = await scanLibrary(config);
-  libraryIndex.set(config.id, { songs, scannedAt: Date.now() });
+  if (namespace) libraryIndex.set(namespace, { songs, scannedAt: Date.now() });
   return songs;
 };
 
 /** 失效索引（用户手动刷新或更换库根时） */
 export const invalidateLibrary = (serverId: string): void => {
-  libraryIndex.delete(serverId);
+  const prefix = `${encodeURIComponent(serverId)}:`;
+  for (const key of libraryIndex.keys()) if (key.startsWith(prefix)) libraryIndex.delete(key);
+  for (const key of tagCache.keys()) if (key.startsWith(prefix)) tagCache.delete(key);
 };
 
 // ============ 公共 API ============

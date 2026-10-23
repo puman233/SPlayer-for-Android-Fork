@@ -96,14 +96,17 @@ export const songLyric = (id: number) => {
  * @param id 音乐 id
  * @returns TTML 格式歌词
  */
-export const songLyricTTML = async (id: number) => {
+export const songLyricTTML = async (id: number, signal?: AbortSignal) => {
+  if (signal?.aborted) return null;
   if (isElectron) {
-    return request({ url: "/lyric/ttml", params: { id, noCookie: true } });
+    return request({ url: "/lyric/ttml", params: { id, noCookie: true }, signal });
   } else {
     const settingStore = useSettingStore();
     const server = settingStore.amllDbServer || defaultAMLLDbServer;
     const url = server.replace("%s", String(id));
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => controller.abort(), 6000);
     try {
       const response = await fetch(url, { signal: controller.signal });
@@ -116,6 +119,7 @@ export const songLyricTTML = async (id: number) => {
       return null;
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
     }
   }
 };

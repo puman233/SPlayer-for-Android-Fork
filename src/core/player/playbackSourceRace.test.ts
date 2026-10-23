@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind } from "typescript";
 import { DJ_MODE_KEYWORDS } from "../../utils/meta";
 import { QualityType } from "../../types/main";
+import { probeTransientHttpFailure } from "./httpMediaFailure";
 
 const deferred = () => {
   let resolve!: (value: any) => void;
@@ -16,29 +17,37 @@ const song = (id: number) => ({ id, name: `song${id}`, duration: 60000, type: "r
 
 // Exercise the full controller through its public commands. Deferred source and
 // audio adapters represent network/media execution; no controller methods are replaced.
-function fixture(native = false) {
+function fixture(native = false, androidElement = false) {
   let now = 10000;
   const listeningEvents: string[] = [];
   const loadedSources: string[] = [];
   const loadedOptions: any[] = [];
   const metadataUpdates: any[] = [];
-  const data: any = { playList: [] };
+  const data: any = { playList: [], isLikeSong: () => false, async setPlayList(list: any[]) { data.playList = list; },
+    async setOriginalPlayList() {}, async clearOriginalPlayList() {} };
   const pending: ReturnType<typeof deferred>[] = [];
   const notices: string[] = [];
   let loadCompletion: Promise<any> | undefined;
   let resumeCompletion: Promise<any> | undefined;
   let metadataCompletion: Promise<any> | undefined;
   let contextCompletion: Promise<any> | undefined;
+  let prefetchCompletion: Promise<any> | undefined;
+  let mediaFailureCompletion: Promise<Response> | undefined;
+  const mediaFailureCalls: { url: string; signal: AbortSignal }[] = [];
+  const queueUpdates: any[] = [];
   const retryDelays: ReturnType<typeof deferred>[] = [];
   const settings = { enableAutomix: false, enableReplayGain: false, showSpectrums: true, disableDjMode: false, lastfm: { enabled: false } };
   const status: any = { currentTime: 1000, duration: 60000, playStatus: true, playLoading: false,
     playRate: 1, playVolume: 1, abLoop: {}, getSongOffset: () => 0,
     $patch(update: any) { if (typeof update === "function") update(status); else Object.assign(status, update); } };
   const music: any = { playSong: song(1), lyricSongId: 1, songLyric: { lrcData: [], yrcData: [] } };
+  status.resetPlayStatus = () => { status.playStatus = false; status.playLoading = false; };
+  music.resetMusicData = () => { music.playSong = {}; };
   const callbacks = new Map<string, (event?: any) => void>();
   const audio = {
     src: "audio1", paused: false, currentTime: 1, duration: 60, engineType: native ? "android-native" : "element",
     capabilities: { supportsRate: false },
+    getErrorCode: () => 4,
     addEventListener: (name: string, callback: (event?: any) => void) => callbacks.set(name, callback),
     stop() { audio.src = ""; audio.paused = true; },
     pause() { audio.paused = true; callbacks.get("pause")?.(); },
@@ -59,19 +68,27 @@ function fixture(native = false) {
     "@/utils/calc": { calculateLyricIndex: () => -1 },
     "@/utils/requestDiagnostics": { requestFailureCategory: () => "unknown" },
     "@/stores": { useSettingStore: () => settings, useStatusStore: () => status, useMusicStore: () => music, useDataStore: () => data },
-    "@/utils/env": { isCapacitorAndroid: native, isElectron: false, isMac: false },
+    "@/utils/env": { isCapacitorAndroid: native || androidElement, isElectron: false, isMac: false },
+    "./httpMediaFailure": { probeTransientHttpFailure: (url: string, signal: AbortSignal) =>
+      probeTransientHttpFailure(url, signal, async (_input, init) => {
+        mediaFailureCalls.push({ url, signal: init!.signal! });
+        return mediaFailureCompletion ?? new Response(null, { status: 404 });
+      }) },
     "./AudioManager": { useAudioManager: () => audio },
-    "./SongManager": { useSongManager: () => ({ clearPrefetch: noop, prefetchCover: noop, getAudioSource: () => { const d = deferred(); pending.push(d); return d.promise; } }) },
+    "@/plugins/androidNativePlayback": { AndroidNativePlayback: { syncRemoteState: async () => {}, cleanup: async () => {},
+      updateQueueContext: async (value: any) => { queueUpdates.push(value); }, updateNotificationPrefs: async () => {}, setAllowMixWithOthers: async () => {} } },
+    "./SongManager": { useSongManager: () => ({ clearPrefetch: noop, peekPrefetch: () => undefined,
+      prefetchNextSong: async () => prefetchCompletion, prefetchCover: noop, getAudioSource: () => { const d = deferred(); pending.push(d); return d.promise; } }) },
     "./LyricManager": { useLyricManager: () => ({ handleLyric: (s: any) => { music.lyricSongId = s.id; } }) },
     "@/core/automix/AutomixManager": { useAutomixManager: () => ({ resetNextAnalysisCache: noop, resetAutomixScheduling: noop }) },
     "@/utils/format": { getPlaySongData: () => data.playList[status.playIndex] || music.playSong, getPlayerInfoObj: () => ({ name: "fixture", artist: "fixture" }) },
     "@/utils/color": { getCoverColor: noop },
     "@/utils/helper": { handleSongQuality: () => undefined, sleep: () => { const d = deferred(); retryDelays.push(d); return d.promise; } },
-    "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
+    "@/core/audio-player/BaseAudioPlayer": { AudioErrorCode: { ABORTED: 1, NETWORK: 2, DOM_ABORT: 20, SRC_NOT_SUPPORTED: 4 } },
     "@/utils/time": { calculateProgress: (time: number, duration: number) => time / duration },
     "@/utils/lastfmScrobbler": { default: { resume: () => listeningEvents.push("resume"), pause: () => listeningEvents.push("pause") } },
     "./MediaSessionManager": { mediaSessionManager: { updatePlaybackStatus: noop, updateMetadata: (song: any, source: string) => { metadataUpdates.push({ songId: song?.id, source }); return metadataCompletion; }, syncAndroidApiContext: () => contextCompletion, buildAndroidMetadata: () => ({ songId: music.playSong.id, title: music.playSong.name, artist: "fixture", album: "fixture", coverUrl: "", durationMs: 60000 }), updateState: noop } },
-    "./PlayModeManager": { PlayModeManager: class {} },
+    "./PlayModeManager": { PlayModeManager: class { cancelPendingTransition() {} } },
     "./PlayerIpc": new Proxy({}, { get: () => noop }),
     "lodash-es": { throttle: (fn: any) => Object.assign(fn, { cancel: noop }) },
   };
@@ -79,7 +96,7 @@ function fixture(native = false) {
   runInNewContext(transpileModule(readFileSync(new URL("./PlayerController.ts", import.meta.url), "utf8"), {
     compilerOptions: { module: ModuleKind.CommonJS },
   }).outputText, {
-    module, exports: module.exports, Error,
+    module, exports: module.exports, Error, AbortController,
     Date: class extends Date { static now() { return now; } },
     require: (name: string) => imports[name] || {},
     console: { log: noop, warn: noop, error: noop },
@@ -87,10 +104,12 @@ function fixture(native = false) {
     setTimeout: () => 0, clearTimeout: noop,
   });
   return { controller: module.exports.usePlayerController(), status, music, audio, data, settings, pending, notices,
-    listeningEvents, loadedSources, loadedOptions, metadataUpdates, emit: (name: string) => callbacks.get(name)?.(),
+    listeningEvents, loadedSources, loadedOptions, metadataUpdates, queueUpdates, emit: (name: string) => callbacks.get(name)?.(),
     retryDelays, emitError: (errorCode = 2) => callbacks.get("error")?.({ detail: { errorCode } }),
+    mediaFailureCalls, delayMediaFailure: (promise: Promise<Response>) => { mediaFailureCompletion = promise; },
     advance: (ms: number) => { now += ms; },
     delayContext: (promise?: Promise<any>) => { contextCompletion = promise; },
+    delayPrefetch: (promise?: Promise<any>) => { prefetchCompletion = promise; },
     delayMetadata: (promise?: Promise<any>) => { metadataCompletion = promise; },
     delayLoad: (promise?: Promise<any>) => { loadCompletion = promise; },
     delayResume: (promise: Promise<any>) => { resumeCompletion = promise; } };
@@ -174,6 +193,10 @@ for (const radio of [false, true]) {
     assert.equal(f.status.playIndex, 0);
     assert.equal(f.status.playStatus, false);
     assert.equal(f.status.playLoading, false);
+    f.advance(1000);
+    f.emitError();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(f.retryDelays.length, 3, "A late media error cannot reopen an exhausted request");
 });
 }
 
@@ -506,4 +529,267 @@ test("non-native natural completion also stops at repeat-off list end", async ()
   assert.equal(f.status.playIndex, 0);
   assert.equal(f.status.playLoading, false);
   assert.equal(f.status.playStatus, false);
+});
+
+test("confirmed HTTP503 on Android HTML media reacquires the same selected song", async () => {
+  const f = fixture(false, true);
+  f.audio.src = "https://media.example/initial.wav";
+  f.delayMediaFailure(Promise.resolve(new Response(null, { status: 503 })));
+  f.emitError(4);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.retryDelays.length, 1);
+  assert.equal(f.music.playSong.id, 1);
+  f.retryDelays[0].resolve(undefined);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  f.pending[0].resolve({ url: "https://media.example/recovered.wav" });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(f.loadedSources, ["https://media.example/recovered.wav"]);
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.audio.paused, false);
+});
+
+test("pausing a pending HTTP classification stops IO and discards a late503", async () => {
+  const f = fixture(false, true), response = deferred();
+  f.audio.src = "https://media.example/initial.wav";
+  f.delayMediaFailure(response.promise);
+  f.emitError(4);
+  assert.equal(f.mediaFailureCalls.length, 1);
+  await f.controller.pause();
+  assert.equal(f.mediaFailureCalls[0].signal.aborted, true);
+  response.resolve(new Response(null, { status: 503 }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.retryDelays.length, 0);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.audio.paused, true);
+  assert.equal(f.status.playStatus, false);
+});
+
+test("selecting another song rejects an old HTTP classification and cancels its request", async () => {
+  const f = fixture(false, true), response = deferred();
+  f.audio.src = "https://media.example/obsolete.wav";
+  f.delayMediaFailure(response.promise);
+  f.emitError(4);
+  const selected = f.controller.playSong({ song: song(2) });
+  assert.equal(f.mediaFailureCalls[0].signal.aborted, true);
+  f.pending[0].resolve({ url: "https://media.example/selected.wav" });
+  await selected;
+  response.resolve(new Response(null, { status: 503 }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(f.loadedSources, ["https://media.example/selected.wav"]);
+  assert.equal(f.music.playSong.id, 2);
+  assert.equal(f.retryDelays.length, 0);
+});
+
+test("duplicate media failures share one active HTTP request and one recovery", async () => {
+  const f = fixture(false, true), response = deferred();
+  f.audio.src = "https://media.example/initial.wav";
+  f.delayMediaFailure(response.promise);
+  f.emitError(4);
+  f.advance(300);
+  f.emitError(4);
+  assert.equal(f.mediaFailureCalls.length, 1);
+  response.resolve(new Response(null, { status: 503 }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.retryDelays.length, 1);
+  await f.controller.pause();
+  f.retryDelays[0].resolve(undefined);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.pending.length, 0);
+});
+
+test("seeking during HTTP classification cancels IO without restarting the selected song", async () => {
+  const f = fixture(false, true), response = deferred();
+  f.audio.src = "https://media.example/initial.wav";
+  f.delayMediaFailure(response.promise);
+  f.emitError(4);
+  f.controller.setSeek(9000);
+  assert.equal(f.mediaFailureCalls[0].signal.aborted, true);
+  response.resolve(new Response(null, { status: 503 }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.retryDelays.length, 0);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.audio.currentTime, 9);
+});
+
+test("clearing the playlist cancels pending HTTP classification and cannot resurrect its song", async () => {
+  const f = fixture(false, true), response = deferred();
+  f.audio.src = "https://media.example/obsolete.wav";
+  f.data.playList = [song(1)];
+  f.delayMediaFailure(response.promise);
+  f.emitError(4);
+  await f.controller.cleanPlayList();
+  const aborted = f.mediaFailureCalls[0].signal.aborted;
+  response.resolve(new Response(null, { status: 503 }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(aborted, true);
+  assert.equal(f.retryDelays.length, 0);
+  assert.equal(f.pending.length, 0);
+  assert.equal(f.data.playList.length, 0);
+});
+
+test("clearing the playlist invalidates source preparation that finishes later", async () => {
+  const f = fixture();
+  const loading = f.controller.playSong({ song: song(2) });
+  await f.controller.cleanPlayList();
+  f.pending[0].resolve({ url: "https://media.example/obsolete.wav" });
+  await loading;
+  assert.equal(f.loadedSources.length, 0);
+  assert.equal(f.data.playList.length, 0);
+  assert.equal(f.status.playStatus, false);
+});
+
+test("a quickly selected song's permanent error is not suppressed by the previous song's debounce", async () => {
+  const f = fixture(false, true);
+  f.audio.src = "https://media.example/old.wav";
+  f.delayMediaFailure(Promise.resolve(new Response(null, { status: 503 })));
+  f.emitError(4);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const selected = f.controller.playSong({ song: song(2) });
+  f.pending[0].resolve({ url: "https://media.example/missing.wav" });
+  await selected;
+  f.delayMediaFailure(Promise.resolve(new Response(null, { status: 404 })));
+  f.emitError(4);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.music.playSong.id, 2);
+  assert.equal(f.status.playStatus, false);
+  assert.equal(f.audio.paused, true);
+  assert.equal(f.status.playLoading, false);
+});
+
+test("explicit play after a terminal media failure reacquires the same song", async () => {
+  const f = fixture();
+  f.emitError(4);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(f.status.playStatus, false);
+  const retry = f.controller.play();
+  assert.equal(f.pending.length, 1, "An explicit retry must replace the failed resource");
+  f.pending[0].resolve({ url: "https://media.example/manual-retry.wav" });
+  await retry;
+  assert.equal(f.music.playSong.id, 1);
+  assert.equal(f.audio.src, "https://media.example/manual-retry.wav");
+  assert.equal(f.audio.paused, false);
+});
+
+test("late network and unsupported-media errors after pause cannot reopen recovery", async () => {
+  const f = fixture(false, true);
+  f.audio.src = "https://media.example/paused.wav";
+  f.delayMediaFailure(Promise.resolve(new Response(null, { status: 503 })));
+  await f.controller.pause();
+  for (const code of [2, 4, 2]) {
+    f.advance(500);
+    f.emitError(code);
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+  assert.equal(f.retryDelays.length, 0);
+  assert.equal(f.mediaFailureCalls.length, 0);
+  assert.equal(f.status.playStatus, false);
+});
+
+test("a delayed API context cannot publish an obsolete queue after a newer reorder", async () => {
+  const f = fixture(true), context = deferred();
+  f.data.playList = [song(1), song(2), song(3)];
+  f.status.playIndex = 0;
+  f.delayContext(context.promise);
+  const older = f.controller.syncAndroidPlaybackContext(f.music.playSong);
+  f.data.playList = [song(3), song(1), song(2)];
+  f.status.playIndex = 1;
+  f.delayContext(undefined);
+  await f.controller.syncAndroidPlaybackContext(f.music.playSong);
+  context.resolve(undefined);
+  await older;
+  assert.ok(f.queueUpdates.length > 0);
+  const latest = f.queueUpdates.at(-1);
+  assert.deepEqual(Array.from(latest.windowTracks, (track: any) => track.songId), [3, 1, 2]);
+  assert.equal(latest.windowCurrentIndex, 1);
+});
+
+test("queue publication anchors the current audio by identity while an index still belongs to the old order", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(3), song(2), song(1)];
+  f.status.playIndex = 0;
+  f.controller.currentAudioSource = { url: "https://media.example/song1.wav" };
+  await f.controller.syncAndroidPlaybackContext(f.music.playSong);
+  const latest = f.queueUpdates.at(-1);
+  assert.ok(latest);
+  assert.equal(latest.windowTracks[latest.windowCurrentIndex].songId, 1);
+  assert.equal(latest.windowTracks.find((track: any) => track.songId === 3).url, null);
+});
+
+test("replacing a playlist around the same playing song publishes the new native order", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), song(2), song(3)]; f.status.playIndex = 0;
+  await f.controller.updatePlayList([song(1), song(3), song(2)], song(1), 0, { play: true, showTip: false });
+  assert.ok(f.queueUpdates.length > 0);
+  assert.deepEqual(Array.from(f.queueUpdates.at(-1).windowTracks, (track: any) => track.songId), [1, 3, 2]);
+  assert.equal(f.loadedSources.length, 0, "The playing song must not be reloaded to publish its queue");
+});
+
+test("deleting an unrelated last row preserves the actual current index", async () => {
+  const f = fixture();
+  f.data.playList = [song(1), song(2), song(3)]; f.music.playSong = song(2); f.status.playIndex = 1;
+  f.controller.removeSongIndex(2);
+  assert.equal(f.status.playIndex, 1);
+  assert.equal(f.data.playList[f.status.playIndex].id, f.music.playSong.id);
+});
+
+test("moving a queue row publishes the same new next candidate to native", async () => {
+  const f = fixture(true);
+  f.data.playList = [song(1), song(2), song(3)]; f.status.playIndex = 0;
+  await f.controller.moveSong(2, 1);
+  assert.ok(f.queueUpdates.length > 0);
+  assert.deepEqual(Array.from(f.queueUpdates.at(-1).windowTracks, (track: any) => track.songId), [1, 3, 2]);
+});
+
+test("a refill waiting on old prefetch cannot continue after the queue order changes", async () => {
+  const f = fixture(true), prefetch = deferred();
+  f.data.playList = [song(1), song(2), song(3)]; f.music.playSong = song(3);
+  f.status.playIndex = 2; f.status.repeatMode = "list";
+  f.delayPrefetch(prefetch.promise);
+  const older = f.controller.refreshAndroidQueueWindow();
+  await f.controller.moveSong(0, 1);
+  const committed = f.queueUpdates.length;
+  prefetch.resolve(undefined); await older;
+  assert.equal(f.queueUpdates.length, committed, "An old refill must not apply its old wrap intent to the new order");
+  assert.equal(f.data.playList[f.status.playIndex].id, 3);
+});
+
+test("large-list wrap refill targets the first window without relabeling the still-current last audio", async () => {
+  const f = fixture(true);
+  f.data.playList = Array.from({ length: 202 }, (_, i) => song(i + 1));
+  f.music.playSong = song(202); f.status.playIndex = 201; f.status.repeatMode = "list";
+  await f.controller.refreshAndroidQueueWindow();
+  const latest = f.queueUpdates.at(-1);
+  assert.ok(latest.windowRefilled && latest.windowResetFromWrap);
+  assert.equal(latest.windowTracks[latest.windowCurrentIndex].songId, 1);
+  assert.equal(f.status.playIndex, 201, "Only confirmed native trackChanged may publish the first song as current");
+  assert.equal(f.music.playSong.id, 202);
+});
+
+test("pausing during refill cancels its pending continuation even when prefetch later succeeds", async () => {
+  const f = fixture(true), prefetch = deferred();
+  f.data.playList = [song(1), song(2), song(3)]; f.music.playSong = song(3);
+  f.status.playIndex = 2; f.status.repeatMode = "list";
+  f.delayPrefetch(prefetch.promise);
+  const refill = f.controller.refreshAndroidQueueWindow();
+  await f.controller.pause();
+  prefetch.resolve({ id: 1, url: "https://media.example/song1.wav" });
+  await refill;
+  assert.equal(f.queueUpdates.length, 0, "A paused refill must not publish a resume continuation");
+  assert.equal(f.audio.paused, true);
+  assert.equal(f.status.playStatus, false);
+});
+
+test("a notification refresh cannot discard a still-valid wrap continuation waiting for API context", async () => {
+  const f = fixture(true), context = deferred();
+  f.data.playList = Array.from({ length: 202 }, (_, i) => song(i + 1));
+  f.music.playSong = song(202); f.status.playIndex = 201; f.status.repeatMode = "list";
+  f.delayContext(context.promise);
+  const refill = f.controller.refreshAndroidQueueWindow();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  f.delayContext(undefined);
+  await f.controller.syncAndroidPlaybackContext();
+  context.resolve(undefined); await refill;
+  const wrap = f.queueUpdates.find(update => update.windowRefilled && update.windowResetFromWrap);
+  assert.ok(wrap, "Latest preference refresh must not consume or discard the pending end-of-window intent");
+  assert.equal(wrap.windowTracks[wrap.windowCurrentIndex].songId, 1);
 });

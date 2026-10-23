@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 import top.imsyy.splayer.android.security.ApplicationConsoleClient;
+import top.imsyy.splayer.android.security.InternalProxyNavigationPlugin;
 import top.imsyy.splayer.android.cache.AndroidCachePlugin;
 import top.imsyy.splayer.android.cache.AudioPrefetchTtlIndex;
 import top.imsyy.splayer.android.download.AndroidDownloadPlugin;
@@ -36,6 +37,7 @@ public class MainActivity extends BridgeActivity {
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
+    registerPlugin(InternalProxyNavigationPlugin.class);
     registerPlugin(AndroidNativePlaybackPlugin.class);
     registerPlugin(AndroidLocalLyricPlugin.class);
     registerPlugin(AndroidDownloadPlugin.class);

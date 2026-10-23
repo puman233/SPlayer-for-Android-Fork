@@ -42,8 +42,12 @@ public class WeakNetworkPlaybackTest {
     final long started = SystemClock.elapsedRealtime();
     int maxAttempts;
     long maxMainRoundTripMs;
+    long continuousPlayingSinceMs = -1;
     boolean passed;
     final Player.Listener listener = new Player.Listener() {
+      @Override public void onIsPlayingChanged(boolean playing) {
+        continuousPlayingSinceMs = playing ? SystemClock.elapsedRealtime() : -1;
+      }
       @Override public void onPlayerError(PlaybackException error) {
         errorCount.incrementAndGet();
         try {
@@ -110,6 +114,8 @@ public class WeakNetworkPlaybackTest {
           result[0] = new JSONObject().put("atMs", SystemClock.elapsedRealtime() - started)
               .put("songId", state.optLong("songId")).put("positionMs", state.optLong("positionMs"))
               .put("playing", state.optBoolean("playing")).put("buffering", state.optBoolean("buffering"))
+              .put("continuousPlayingMs", continuousPlayingSinceMs < 0 ? 0
+                  : SystemClock.elapsedRealtime() - continuousPlayingSinceMs)
               .put("attempt", attempt).put("pending", field(manager, "pendingRecoveryRunnable") != null)
               .put("requested", field(manager, "playbackRequested"));
         } catch (Exception failure) { throw new AssertionError(failure); }
@@ -282,16 +288,24 @@ public class WeakNetworkPlaybackTest {
       long deadline = SystemClock.elapsedRealtime() + 16000;
       JSONObject stable;
       long resetPositionMs = -1;
+      long resetContinuousPlayingMs = -1;
       do {
         stable = scenario.sample();
-        if (stable.getInt("attempt") == 0 && resetPositionMs < 0) resetPositionMs = stable.getLong("positionMs");
+        if (stable.getInt("attempt") == 0 && resetPositionMs < 0) {
+          resetPositionMs = stable.getLong("positionMs");
+          resetContinuousPlayingMs = stable.getLong("continuousPlayingMs");
+        }
         // The main-looper timer and Media3 audio position need not cross 10s in
         // the same sample. Wait for both, retaining the actual progress assertion.
         if (stable.getInt("attempt") == 0 && stable.getLong("positionMs") >= 10000) break;
         SystemClock.sleep(200);
       } while (SystemClock.elapsedRealtime() < deadline);
       scenario.metrics.put("budgetResetPositionMs", resetPositionMs);
-      assertTrue("Recovery must not reset before stable playback (100ms observation tolerance)", resetPositionMs >= 9900);
+      scenario.metrics.put("budgetResetContinuousPlayingMs", resetContinuousPlayingMs);
+      // The production policy measures uninterrupted isPlaying wall time. The
+      // actual audio clock can lag it on an emulator; validate both independently.
+      assertTrue("Recovery must retain its budget for ten uninterrupted playing seconds",
+          resetContinuousPlayingMs >= PlaybackRecoveryPolicy.STABLE_PLAYBACK_RESET_MS);
       assertEquals("Ten seconds of actual steady playback must reset recovery", 0, stable.getInt("attempt"));
       assertTrue(stable.getBoolean("playing"));
       assertTrue(stable.getLong("positionMs") >= 10000);

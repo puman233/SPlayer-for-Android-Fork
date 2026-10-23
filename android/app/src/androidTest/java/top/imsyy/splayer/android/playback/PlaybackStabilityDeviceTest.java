@@ -133,7 +133,7 @@ public class PlaybackStabilityDeviceTest {
   }
   @Test public void backgroundAndActivityRecreationRetainRealNativePlayback() throws Exception {
     play(99007001,true); awaitPlaying(); long before=nativeState().getLong("positionMs");
-    inst.runOnMainSync(()->activity.moveTaskToBack(true)); SystemClock.sleep(800);
+    DeviceWebFixture.moveToBackground(inst,activity); SystemClock.sleep(800);
     assertTrue(nativeState().getBoolean("playing")); assertTrue(nativeState().getLong("positionMs")>before);
     inst.runOnMainSync(()->activity.startActivity(new Intent(inst.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)));
     await("document.visibilityState==='visible'");

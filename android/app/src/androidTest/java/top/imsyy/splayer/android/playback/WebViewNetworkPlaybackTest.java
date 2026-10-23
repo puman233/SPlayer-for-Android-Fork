@@ -6,6 +6,7 @@ import android.os.SystemClock;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.runner.lifecycle.Stage;
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
 import java.io.File;
 import java.io.PrintWriter;
 import java.net.Socket;
@@ -49,9 +50,12 @@ public class WebViewNetworkPlaybackTest {
         } catch (Exception error) { throw new AssertionError(error); }
       });
     }
-    void start() throws Exception {
+    void begin() throws Exception {
       fixture.js("prepareWebNetwork(" + JSONObject.quote("http://127.0.0.1:" + server.server.getLocalPort())
           + ").catch(e=>window.webNetError={phase:window.webNetPhase,type:e.name})");
+    }
+    void start() throws Exception {
+      begin();
       for (int attempt = 0; attempt < 600 && !"true".equals(fixture.js("window.webNetPrepared||!!window.webNetError")); attempt++) SystemClock.sleep(100);
       assertEquals("Real element setup: " + fixture.js("window.webNetError"), "true", fixture.js("window.webNetPrepared===true"));
     }
@@ -111,6 +115,8 @@ public class WebViewNetworkPlaybackTest {
         metrics.put("scenario", name).put("playbackAssertionsPassed", passed).put("samples", samples)
             .put("maxWebRetries", maxWebRetries).put("maxNativeRetries", maxNativeRetries)
             .put("nativePlayed", nativePlayed).put("audioRequests", server.audioRequests.get())
+            .put("statusProbeRequests",server.statusProbeRequests.get())
+            .put("urlRequestFacts",server.urlRequestFacts)
             .put("urlRequests", server.urlRequests.get()).put("tcpResets", server.interruptedResponses.get())
             .put("trace", json("({events:window.webNetEvents||[],sources:window.webNetSources||[]})"));
         File directory = new File(fixture.activity.getExternalFilesDir(null), "detail-regression");
@@ -159,17 +165,21 @@ public class WebViewNetworkPlaybackTest {
     sustainable("baseline", false);
     sustainable("latency-jitter", true);
   }
-  @Test public void initial503SettlesWithoutWrappingSelectionOrNativeRetry() throws Exception {
+  @Test public void initial503RecoversWithoutWrappingSelectionOrNativeRetry() throws Exception {
     try (Scenario scenario = new Scenario("initial-503")) {
       scenario.server.audioOffline = true;
       scenario.start();
-      assertTerminalFailure(scenario);
+      scenario.awaitWebRecovery();
+      scenario.server.audioOffline = false;
+      scenario.awaitPlaying(20000);
+      assertTrue("Recovery must fetch a fresh source",scenario.server.urlRequests.get()>=2);
+      assertTrue("Web recovery remains bounded",scenario.maxWebRetries<=3);
       scenario.passed = true;
     }
   }
   @Test public void permanentAndUnobservableFailuresNeverRetryAs503() throws Exception {
-    for(String profile:new String[]{"missing-404","invalid-format","cors-denied"})try (Scenario scenario = new Scenario(profile)) {
-      scenario.server.audioStatus = profile.equals("missing-404")?404:200;
+    for(String profile:new String[]{"missing-404","denied-403","invalid-format","cors-denied"})try (Scenario scenario = new Scenario(profile)) {
+      scenario.server.audioStatus = profile.equals("missing-404")?404:profile.equals("denied-403")?403:200;
       scenario.server.invalidAudio = profile.equals("invalid-format");
       scenario.server.audioCorsEnabled = !profile.equals("cors-denied");
       scenario.metrics.put("responseStatus",scenario.server.audioStatus).put("corsEnabled",scenario.server.audioCorsEnabled);
@@ -177,6 +187,127 @@ public class WebViewNetworkPlaybackTest {
       assertTerminalFailure(scenario);
       scenario.passed = true;
     }
+  }
+  @Test public void initial503ProbeTimesOutWithoutAssumingARecoverableStatus() throws Exception {
+    try(Scenario scenario=new Scenario("probe-timeout")) {
+      scenario.server.audioOffline=true;
+      scenario.server.statusProbeDelayMs=5000;
+      scenario.start();
+      assertTerminalFailure(scenario);
+      assertEquals(1,scenario.server.statusProbeRequests.get());
+      assertEquals(1,scenario.server.urlRequests.get());
+      scenario.passed=true;
+    }
+  }
+  @Test public void pausingDuringInitialStatusProbeCancelsTheRequestAndRecovery() throws Exception {
+    try(Scenario scenario=new Scenario("pause-status-probe")) {
+      scenario.server.audioOffline=true;
+      scenario.server.statusProbeDelayMs=1500;
+      // Observe and forward the real HTTP boundary, then issue the public pause
+      // on the browser event loop. Native polling can exceed the two-second probe
+      // deadline on a loaded tablet and miss the pending state entirely.
+      scenario.fixture.js("observeWebProbeAndPause()");
+      scenario.start();
+      scenario.fixture.await("window.webNetProbePauseComplete===true");
+      assertEquals(1,scenario.server.statusProbeRequests.get());
+      assertEquals("A real HTTP request must be pending before pause","true",
+          scenario.fixture.js("window.webNetProbePendingAtPause===true&&window.webNetObservedProbeSignal.aborted"));
+      scenario.metrics.put("probePendingAtPause",true).put("probeAbortVerified",true);
+      scenario.fixture.await("!window.__SPLAYER_PLAYER_CONTROLLER__.mediaFailureProbe");
+      scenario.server.audioOffline=false;
+      SystemClock.sleep(5500);
+      JSONObject state=scenario.sample();
+      assertTrue(state.getBoolean("paused"));
+      assertFalse(state.getBoolean("playing"));
+      assertEquals(0,state.getInt("retryCount"));
+      assertEquals(1,scenario.server.urlRequests.get());
+      assertEquals(1,state.getInt("sourceCalls"));
+      scenario.passed=true;
+    }
+  }
+  @Test public void persistentInitial503ExhaustsOneBoundedWebBudget() throws Exception {
+    try(Scenario scenario=new Scenario("exhaust-initial-503")) {
+      scenario.server.audioOffline=true;
+      scenario.start();
+      assertExhausted(scenario);
+      assertEquals("Each failed media attempt has one bounded status request",8,scenario.server.audioRequests.get());
+      assertEquals(4,scenario.server.statusProbeRequests.get());
+      scenario.metrics.put("exhaustedAudioRequests",scenario.server.audioRequests.get()).put("exhaustedUrlRequests",scenario.server.urlRequests.get());
+      scenario.server.audioOffline=false;
+      scenario.fixture.js("window.__SPLAYER_PLAYER_CONTROLLER__.play()");
+      JSONObject replay=scenario.awaitPlaying(20000);
+      assertEquals("Only the explicit user replay may start a new request",5,replay.getInt("sourceCalls"));
+      scenario.metrics.put("manualReplayVerified",true);
+      scenario.passed=true;
+    }
+  }
+  @Test public void midstreamFailureAndPersistent503ShareOneWebRecoveryBudget() throws Exception {
+    try(Scenario scenario=new Scenario("exhaust-midstream")) {
+      scenario.start();
+      scenario.awaitPlaying(20000);
+      SystemClock.sleep(1200);
+      scenario.failActiveStream();
+      scenario.awaitWebRecovery();
+      assertExhausted(scenario);
+      assertEquals("true",scenario.fixture.js("window.webNetEvents.some(event=>event.mediaCode===2)"));
+      assertTrue("At most one status probe per remaining source attempt",scenario.server.statusProbeRequests.get()<=3);
+      scenario.passed=true;
+    }
+  }
+  @Test public void confirmed503CanRecoverWhileTheActualActivityStaysStopped() throws Exception {
+    try(Scenario scenario=new Scenario("recover-background-503")) {
+      scenario.server.audioOffline=true;
+      scenario.server.firstMediaHeaderDelayMs=10000;
+      scenario.begin();
+      scenario.fixture.await("window.webNetElement instanceof HTMLAudioElement&&window.webNetElement.src.includes('127.0.0.1:')");
+      Stage stage=scenario.fixture.moveToBackground();
+      assertEquals("true",scenario.fixture.js("document.hidden"));
+      assertEquals("No HTTP error may occur before actual background entry",0,scenario.server.failures.get());
+      scenario.metrics.put("backgroundLifecycle",stage.name());
+      long deadline=SystemClock.elapsedRealtime()+20000;
+      while(scenario.server.failures.get()<2&&SystemClock.elapsedRealtime()<deadline) {
+        SystemClock.sleep(50);
+        scenario.fixture.inst.runOnMainSync(()->assertEquals(Stage.STOPPED,
+          ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(scenario.fixture.activity)));
+      }
+      assertEquals("Both initial media and real status probe must receive503",2,scenario.server.failures.get());
+      assertEquals(1,scenario.server.statusProbeRequests.get());
+      scenario.server.audioOffline=false;
+      for(int index=0;index<3;index++) {
+        SystemClock.sleep(5000);
+        scenario.fixture.inst.runOnMainSync(()->assertEquals(Stage.STOPPED,
+          ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(scenario.fixture.activity)));
+      }
+      scenario.fixture.activity.startActivity(new Intent(scenario.fixture.activity,top.imsyy.splayer.android.MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+      JSONObject after=scenario.sample();
+      assertEquals(2,after.getInt("sourceCalls"));
+      assertFalse(after.getBoolean("paused"));
+      assertTrue("Actual HTML audio must resume without foreground polling",after.getLong("positionMs")>=5000);
+      scenario.passed=true;
+    }
+  }
+  private void assertExhausted(Scenario scenario) throws Exception {
+    long deadline=SystemClock.elapsedRealtime()+40000;
+    JSONObject state;
+    do {
+      state=scenario.sample();
+      if(state.getInt("sourceCalls")==4&&state.getInt("retryCount")==0
+          &&state.getBoolean("paused")&&!state.getBoolean("playing")&&!state.getBoolean("loading")&&!state.getBoolean("mediaFailurePending"))break;
+      SystemClock.sleep(100);
+    }while(SystemClock.elapsedRealtime()<deadline);
+    assertEquals("Only the initial source plus three retries are allowed",4,state.getInt("sourceCalls"));
+    assertEquals(4,scenario.server.urlRequests.get());
+    assertEquals(0,state.getInt("retryCount"));
+    assertTrue(state.getBoolean("paused"));
+    assertFalse(state.getBoolean("playing"));
+    assertFalse(state.getBoolean("loading"));
+    assertTrue(scenario.maxWebRetries>0&&scenario.maxWebRetries<=3);
+    int requests=scenario.server.audioRequests.get();
+    SystemClock.sleep(8000);
+    state=scenario.sample();
+    assertEquals(4,state.getInt("sourceCalls"));
+    assertEquals(requests,scenario.server.audioRequests.get());
+    assertTrue(state.getBoolean("paused"));
   }
   private void assertTerminalFailure(Scenario scenario) throws Exception {
       long deadline = SystemClock.elapsedRealtime() + 30000;
@@ -215,16 +346,24 @@ public class WebViewNetworkPlaybackTest {
   }
   @Test public void pausingRealPendingWebRecoveryPreventsRestartWhenNetworkReturns() throws Exception {
     try (Scenario scenario = new Scenario("pause-recovery")) {
+      // Issue pause from the real media-error turn, after the production error
+      // listener schedules recovery. A slow native round trip can otherwise
+      // arrive after the one-second recovery has already started its HTTP call.
+      scenario.fixture.js("window.webNetPauseOnMediaError=true");
       scenario.start(); scenario.awaitPlaying(20000);
       SystemClock.sleep(1200);
-      scenario.failActiveStream(); scenario.awaitWebRecovery();
+      scenario.failActiveStream();
       long pauseAt = SystemClock.elapsedRealtime();
-      scenario.fixture.js("window.__SPLAYER_PLAYER_CONTROLLER__.pause(true)");
+      scenario.fixture.await("window.webNetRecoveryPauseComplete===true");
+      assertEquals("The real network error must schedule recovery before public pause","true",
+          scenario.fixture.js("window.webNetRecoveryAtPause>0&&window.webNetErrorCodeAtPause===2"));
       int urls = scenario.server.urlRequests.get();
+      assertEquals("Pause must precede another source request",1,urls);
       // The production pause honors the saved fade duration. Network return is
       // tested after the real DOM transport finishes that pause, not one task earlier.
       scenario.fixture.await("window.webNetElement.paused&&!window.fixtureStatus.playStatus");
       scenario.metrics.put("pauseCompletionMs", SystemClock.elapsedRealtime() - pauseAt);
+      scenario.metrics.put("realNetworkErrorBeforePause",true);
       scenario.server.audioOffline = false;
       long end = SystemClock.elapsedRealtime() + 8000;
       while (SystemClock.elapsedRealtime() < end) {
@@ -232,6 +371,7 @@ public class WebViewNetworkPlaybackTest {
         assertTrue("Network return must not restart paused HTML media", state.getBoolean("paused"));
         assertFalse(state.getBoolean("playing"));
         assertEquals(0, state.getInt("retryCount"));
+        assertEquals("Paused recovery must not start source preparation",1,state.getInt("sourceCalls"));
         SystemClock.sleep(200);
       }
       assertEquals("Cancelled web recovery must not fetch another source", urls, scenario.server.urlRequests.get());

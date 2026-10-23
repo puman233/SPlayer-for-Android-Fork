@@ -27,6 +27,7 @@ const payload = (translation = "translation one", roman = "roman one", timing = 
 // Real manager, scheduler, LRC/YRC parsers and post-processors. Only HTTP,
 // persistence, settings and platform facilities are replaced at their seams.
 function fixture() {
+  const ttmlSignals: AbortSignal[] = [];
   let response = payload();
   let ttmlResponse: string | null | Promise<string | null> =
     '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"><body><div><p itunes:key="L1" begin="00:00:01.000" end="00:00:03.000"><span begin="00:00:01.000" end="00:00:02.000">hello </span><span begin="00:00:02.000" end="00:00:03.000">world</span></p></div></body></tt>';
@@ -63,7 +64,10 @@ function fixture() {
     "@/api/song": {
       songLyric: () =>
         delayed ? new Promise((resolve, reject) => pending.push({ resolve, reject })) : Promise.resolve(response),
-      songLyricTTML: async () => ttmlResponse,
+      songLyricTTML: async (_id: number, signal?: AbortSignal) => {
+        if (signal) ttmlSignals.push(signal);
+        return ttmlResponse;
+      },
     },
     "@/utils/env": { isCapacitorAndroid: true, isElectron: false },
     "@/core/resource/CacheManager": { useCacheManager: () => ({ isAvailable: () => false }) },
@@ -86,6 +90,7 @@ function fixture() {
         exports: module.exports,
         console: { log() {}, warn() {}, error() {} },
         window: {},
+        AbortController,
         setTimeout: (fn: () => void, ms: number) => { const id = ++timerId; timers.set(id, { at: clock + ms, fn }); return id; },
         clearTimeout: (id: number) => timers.delete(id),
         require: (name: string) => {
@@ -108,6 +113,7 @@ function fixture() {
     status,
     settings,
     pending,
+    ttmlSignals,
     run,
     commits: () => commits,
     advance: (ms: number) => { clock += ms; for (const [id, t] of timers) if (t.at <= clock) { timers.delete(id); t.fn(); } },
@@ -486,6 +492,8 @@ test("TTML priority times out into LRC and ignores the late TTML result", async 
   await new Promise<void>((resolve) => setImmediate(resolve));
   f.advance(6000);
   await request;
+  assert.equal(f.ttmlSignals.length, 1, "The source deadline must own the real HTTP cancellation signal");
+  assert.equal(f.ttmlSignals[0].aborted, true, "Fallback must cancel the pending TTML IO immediately");
   assert.equal(f.music.songLyric.lrcData[0]?.words[0].word, "hello");
   finish("<tt/>");
   await new Promise<void>((resolve) => setImmediate(resolve));

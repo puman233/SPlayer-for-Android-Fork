@@ -142,6 +142,36 @@ public final class PlaybackQueue {
     return windowTracks.get(windowCurrentIndex);
   }
 
+  /** Compare selection semantics, excluding URL refreshes and an in-flight cursor. */
+  public synchronized boolean matchesOrder(
+      @Nullable List<Track> tracks, RepeatMode mode, boolean prevOutside,
+      boolean nextOutside, boolean personalFm) {
+    if (repeatMode != mode || hasPreviousOutsideWindow != prevOutside
+        || hasNextOutsideWindow != nextOutside || personalFmMode != personalFm) return false;
+    int count = tracks == null ? 0 : tracks.size();
+    if (count != windowTracks.size()) return false;
+    for (int i = 0; i < count; i++) {
+      Track a = windowTracks.get(i), b = tracks.get(i);
+      if (b == null || a.songId != b.songId || a.playListIndex != b.playListIndex
+          || a.skipSong != b.skipSong) return false;
+      if (a.songId <= 0 && !java.util.Objects.equals(a.url, b.url)) return false;
+    }
+    return true;
+  }
+
+  /** Anchor the cursor to the confirmed native media identity after a web reorder. */
+  public synchronized boolean alignCurrent(long songId, @Nullable String source) {
+    for (int i = 0; i < windowTracks.size(); i++) {
+      Track track = windowTracks.get(i);
+      if ((songId > 0 && track.songId == songId)
+          || (songId <= 0 && source != null && !source.isEmpty() && source.equals(track.url))) {
+        windowCurrentIndex = i;
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** 当前 index 距窗口右边缘的非 skipSong 剩余首数，<= edgeThreshold 时调用方应 emit requestUrls。 */
   public synchronized int playableTracksAhead() {
     if (windowTracks.isEmpty() || windowCurrentIndex < 0) return 0;

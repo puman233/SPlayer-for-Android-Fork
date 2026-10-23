@@ -318,6 +318,12 @@ public class FloatingLyricLongPlaybackTest {
   }
   @Test public void fiveMinutesBackgroundAdvancesThreeTracksAndTheirLyrics() throws Exception {
     try(DeviceWebFixture f=new DeviceWebFixture()) {
+      try(var stream=f.inst.getContext().getAssets().open("local-native-lyric.js")){
+        f.js(new String(stream.readAllBytes(),StandardCharsets.UTF_8));
+      }
+      f.js("prepareLocalNativeLyric().catch(e=>window.localLyricEngineError=e.name)");
+      f.await("window.localLyricNativeReady||!!window.localLyricEngineError");
+      assertEquals("Actual native engine must be selected","true",f.js("window.localLyricNativeReady===true"));
       ArrayList<File> files=new ArrayList<>();
       PlaybackManager manager=PlaybackManager.getInstance(f.activity);
       JSONArray songs=new JSONArray();
@@ -354,7 +360,8 @@ public class FloatingLyricLongPlaybackTest {
         }
         f.await("longMusic.songLyric.lrcData.length>=90");
         f.await("fixtureStatus.playStatus===true&&fixtureStatus.currentTime>0");
-        f.inst.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+        f.moveToBackground();
+        assertEquals("Local lyric page must actually be hidden","true",f.js("document.hidden"));
         File dir=new File(f.activity.getExternalFilesDir(null),"detail-regression");
         assertTrue(dir.exists()||dir.mkdirs());
         long previousPosition=-1,previousSong=-1;
@@ -368,6 +375,8 @@ public class FloatingLyricLongPlaybackTest {
             long[] position={0},song={0}; String[] lyric={""},nativeState={""};
             f.inst.runOnMainSync(()->{
               try {
+                assertEquals("Local lyric observation must remain backgrounded",Stage.STOPPED,
+                  ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(f.activity));
                 FloatingLyricService overlay=(FloatingLyricService)field(manager,"floatingLyricService");
                 assertNotNull("后台窗口不得丢失",overlay);
                 position[0]=overlay.baseMs;
@@ -400,6 +409,9 @@ public class FloatingLyricLongPlaybackTest {
         f.activity.startActivity(new android.content.Intent(f.activity,top.imsyy.splayer.android.MainActivity.class)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
         f.js("longData.setHistory=longHistory;longData.playList=longSaved.list;longMusic.playSong=longSaved.song;fixtureStatus.playIndex=longSaved.index;fixtureStatus.repeatMode=longSaved.repeat;fixtureStatus.showDesktopLyric=longSaved.overlay;fixtureStatus.playStatus=false;fixtureSetting.useNextPrefetch=longSaved.prefetch;");
+        f.js("restoreLocalNativeLyric().catch(e=>window.localLyricRestoreError=e.name)");
+        for(int i=0;i<600&&!"true".equals(f.js("window.localLyricNativeRestored||!!window.localLyricRestoreError"));i++)SystemClock.sleep(100);
+        assertEquals("Original local-test engine and transport must be restored","true",f.js("window.localLyricNativeRestored===true&&!window.localLyricRestoreError"));
         for(File audio:files) assertTrue(audio.delete());
       }
     }

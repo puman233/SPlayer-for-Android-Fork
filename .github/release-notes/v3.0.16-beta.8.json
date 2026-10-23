@@ -44,7 +44,7 @@
     {
       "id": "risks",
       "category": "known_issues",
-      "summary": "剩余依赖公告适用性及通知图标字体再分发证据仍待确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
+      "summary": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
     }
   ],
   "coverage": [
@@ -155,12 +155,12 @@
       "evidence": "平板批量测试仍有一项间歇前置异常，独立及组合复验通过但原因尚未关闭；部分真实在线音源可能不可用。"
     },
     {
-      "source": "changelog:2cbd8e966da5140f",
+      "source": "changelog:3b1e593aa425c212",
       "classification": "user-visible",
       "release_ids": [
         "risks"
       ],
-      "evidence": "剩余依赖公告适用性与通知图标字体再分发证据仍需确认；候选记录不表示已公开发布。"
+      "evidence": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
     },
     {
       "source": "commit:6e655ae490e0d820ac42a5e708a6c5087ff35aff",
@@ -244,10 +244,16 @@
       "exclusion_reason": "测试/发布元数据变更，无独立新增产品行为；保留既有断言与发布门禁。具体提交：chore(release): prepare 3.0.16-beta.8 candidate"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:09e0fd3ac1ce329da28d8533010878581e679843",
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "仅补齐本版精选中文说明及来源覆盖矩阵，规范版本标题，不改变运行代码或发布门禁。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "记录维护者明确发布决定、调整公开风险措辞；不构成运行时功能变化。"
     }
   ]
 }

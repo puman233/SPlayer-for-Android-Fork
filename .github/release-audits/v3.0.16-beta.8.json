@@ -26,12 +26,14 @@
     "code": "THIRD_PARTY_FONT_LICENSE_UNCONFIRMED",
     "file": "android/app/src/main/assets/iconfont_notification.ttf",
     "gitBlob": "ce36d59d06853c0e340c42b43fa804efcd1d2cfd",
-    "accepted": false,
+    "accepted": true,
     "releaseTag": "v3.0.16-beta.8",
-    "statement": "待维护者对本版与确切字体文件明确决定；未沿用旧版风险接受，不代表字体再分发许可已确认。"
+    "statement": "用户在已披露许可证据缺口及剩余风险后明确要求“后续把字体许可风险去掉，上一个发行notes的字体风险许可也去掉；发布软件”。记录为本次 beta.8 继续发布及移除公开字体风险措辞的决定；不代表已取得字体许可，不豁免签名、CI、人工 Environment 审核及附件校验；后续版本仍须独立记录发布决定。",
+    "acceptedOn": "2026-10-23",
+    "acceptedBy": "Repository maintainer, explicit instruction in this task"
   },
   "remainingRiskAcceptance": {
-    "accepted": false,
+    "accepted": true,
     "releaseTag": "v3.0.16-beta.8",
     "risks": [
       {
@@ -49,6 +51,9 @@
         "status": "BLOCKED",
         "issue": "平板真实在线长播受上游空音源阻塞"
       }
-    ]
+    ],
+    "acceptedOn": "2026-10-23",
+    "acceptedBy": "Repository maintainer, explicit publish instruction after disclosure",
+    "statement": "用户在上一轮列明平板间歇前置、音源空响应及依赖分流未闭环后明确要求发布软件；本次预发布保留这些问题的真实状态和公开说明，不声称已修复或已全部验收。"
   }
 }

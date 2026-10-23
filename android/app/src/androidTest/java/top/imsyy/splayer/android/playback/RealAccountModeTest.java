@@ -29,6 +29,7 @@ public class RealAccountModeTest {
   private WebView web;
   private MainActivity activity;
   private final JSONArray observations=new JSONArray();
+  private final JSONArray naturalCases=new JSONArray();
   private JSONObject json(String expression) throws Exception {
     return new JSONObject((String)new JSONTokener(js("JSON.stringify("+expression+")")).nextValue());
   }
@@ -38,7 +39,7 @@ public class RealAccountModeTest {
       if("true".equals(js(expression)))return;
       SystemClock.sleep(100);
     }
-    fail("Real-account condition did not complete: "+expression);
+    fail("Real-account condition did not complete: "+expression+"; preparation="+js("window.realAccountPreparationStage||null"));
   }
   private static Object field(Object object,String name) throws Exception {
     var f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);
@@ -121,6 +122,25 @@ public class RealAccountModeTest {
     assertTrue("Account-safe WebView observation must complete",done.await(10,TimeUnit.SECONDS));
     return result[0];
   }
+  private void background() throws Exception {
+    if(!"true".equals(InstrumentationRegistry.getArguments().getString("cover_background"))) {
+      DeviceWebFixture.moveToBackground(inst,activity);return;
+    }
+    // Keep another actual app surface in front on MuMu displays whose launcher
+    // can bring the music task back after idle. Never relax the STOPPED check.
+    Intent cover=new Intent(inst.getContext(),BackgroundCoverActivity.class)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+    var options=android.app.ActivityOptions.makeBasic();
+    inst.runOnMainSync(()->options.setLaunchDisplayId(activity.getDisplay().getDisplayId()));
+    inst.getContext().startActivity(cover,options.toBundle());
+    Stage[] stage={null};long until=SystemClock.elapsedRealtime()+5000;
+    do {
+      inst.runOnMainSync(()->stage[0]=ActivityLifecycleMonitorRegistry.getInstance().getLifecycleStageOf(activity));
+      if(stage[0]==Stage.STOPPED)return;
+      SystemClock.sleep(100);
+    }while(SystemClock.elapsedRealtime()<until);
+    assertEquals("Opaque foreground app must stop the player Activity",Stage.STOPPED,stage[0]);
+  }
   @Test public void currentRealAccountModeSequence() throws Exception {
     activity=(MainActivity)inst.startActivitySync(new Intent(inst.getTargetContext(),MainActivity.class)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -132,6 +152,8 @@ public class RealAccountModeTest {
     assertEquals("true",js("(()=>{const p=document.querySelector('#app').__vue_app__.config.globalProperties.$pinia;const d=p._s.get('data');const uid=d.userData.userId;const type=d.loginType;const cookie=localStorage.getItem('cookie-MUSIC_U');window.realAccountWitness=()=>({loggedIn:!!d.userLoginStatus&&d.userData.userId>0,authenticated:type!=='uid'&&!!cookie,sameAccount:d.userData.userId===uid&&d.loginType===type,credentialsUnchanged:localStorage.getItem('cookie-MUSIC_U')===cookie});window.realAccountPinia=p;return true})()"));
     String facts=js("JSON.stringify(realAccountWitness())");
     System.out.println("REAL_ACCOUNT_SAFE_PROBE "+facts);
+    boolean matrix="true".equals(InstrumentationRegistry.getArguments().getString("natural_matrix"));
+    js("window.realNaturalMatrix="+matrix);
     assertEquals("The test must use the existing authenticated account", "true",
         js("realAccountWitness().loggedIn&&realAccountWitness().authenticated&&realAccountWitness().sameAccount&&realAccountWitness().credentialsUnchanged"));
     if("true".equals(InstrumentationRegistry.getArguments().getString("proxy_guard"))) {
@@ -166,6 +188,10 @@ public class RealAccountModeTest {
       assertEquals("Real account playlist preparation", "null",js("window.realAccountModeError||null"));
       JSONObject state=snapshot();
       awaitIdentity(manager,state.getLong("songId"),state.getLong("songId"),null,false,30000);
+      if("true".equals(InstrumentationRegistry.getArguments().getString("prepare_only"))) {
+        passed=true;return;
+      }
+      if(!matrix) {
       for(int cycle=0;cycle<2;cycle++)for(String value:new String[]{"on","heartbeat","on","heartbeat","off"})mode(manager,value);
       js("window.realRapidDone=false;Promise.all(['on','heartbeat','off','on','heartbeat','off'].map(value=>window.__SPLAYER_PLAYER_CONTROLLER__.toggleShuffle(value))).then(()=>realRapidDone=true)");
       await("window.realRapidDone===true",45000);assertEquals("off",snapshot().getString("mode"));
@@ -178,29 +204,74 @@ public class RealAccountModeTest {
       }
       inst.runOnMainSync(()->manager.handleNotificationAction(PlaybackConstants.ACTION_NEXT));
       awaitIdentity(manager,next,first,null,false,30000);
-      for(int cycle=0;cycle<2;cycle++) {
-        mode(manager,"on");state=mode(manager,"heartbeat");
+      }
+      String[][] paths=matrix ? new String[][]{{"off","heartbeat"},{"heartbeat","off"},{"off","on"},{"on","off"},{"heartbeat","on"}}
+          :new String[][]{{"on","heartbeat"},{"on","heartbeat"}};
+      int start=Integer.parseInt(InstrumentationRegistry.getArguments().getString("case_start","0"));
+      assertTrue("At least one configured natural-next path must run",start>=0&&start<paths.length);
+      boolean restart="true".equals(InstrumentationRegistry.getArguments().getString("restart_each_case"));
+      for(int caseIndex=start;caseIndex<paths.length;caseIndex++) {
+        String[] path=paths[caseIndex];
+        if(restart) {
+          js("window.realRestartDone=false;window.realRestartError=null;realAccountRestartCase().then(()=>realRestartDone=true).catch(e=>realRestartError=e.name)");
+          await("window.realRestartDone||!!window.realRestartError",60000);
+          assertEquals("null",js("window.realRestartError||null"));
+        }
+        for(String value:path)state=mode(manager,value);
+        JSONObject preflight=null;
+        if(restart) {
+          JSONArray rejected=new JSONArray();
+          for(int attempt=0;;attempt++) {
+          js("window.realSourceCheck=null;window.realSourceError=null;realAccountCheckNextSource().then(value=>realSourceCheck=value).catch(e=>realSourceError=e.name)");
+          await("!!window.realSourceCheck||!!window.realSourceError",45000);
+          assertEquals("null",js("window.realSourceError||null"));
+          preflight=json("realSourceCheck");
+          if(preflight.getBoolean("available"))break;
+          rejected.put(preflight);
+          assertTrue("Real next sources unavailable under current trial policy: "+rejected,attempt<4);
+          mode(manager,"off");
+          for(String value:path)state=mode(manager,value);
+          }
+          preflight.put("rejectedCandidates",rejected);
+        }
         long before=state.getLong("songId"),expected=state.getJSONArray("list").getLong(state.getInt("index")+1);
         JSONObject actual=awaitIdentity(manager,before,before,null,false,30000);
-        js("window.realExpectedLyric=null;window.realExpectedError=null;fetch('http://127.0.0.1:1145/api/netease/lyric/new?id="+expected+"&noCookie=true').then(r=>r.json()).then(r=>realExpectedLyric=(r.lrc?.lyric||'')+(r.yrc?.lyric||'')).catch(e=>realExpectedError=e.name)");
+        js("window.realExpectedLyric=null;window.realExpectedError=null;realAccountRequest({url:'/lyric/new',params:{id:"+expected+",noCookie:true}}).then(r=>realExpectedLyric=(r.lrc?.lyric||'')+(r.yrc?.lyric||'')).catch(e=>realExpectedError=e.name)");
         await("window.realExpectedLyric!==null||!!window.realExpectedError",25000);
         assertEquals("null",js("window.realExpectedError||null"));
         String official=(String)new JSONTokener(js("realExpectedLyric")).nextValue();
         assertTrue("Expected real track must have independently available lyrics",official.length()>20);
-        DeviceWebFixture.moveToBackground(inst,activity);
+        background();
         long remaining=Math.max(0,actual.getLong("durationMs")-actual.getLong("positionMs"));
-        awaitIdentity(manager,expected,before,official,true,Math.min(300000,(long)(remaining/actual.optDouble("rate",1))+45000));
+        JSONObject nextActual=awaitIdentity(manager,expected,before,official,true,Math.min(600000,(long)(remaining/actual.optDouble("rate",1))+45000));
+        if(preflight!=null&&preflight.optLong("durationMs")>0)
+          assertTrue("Actual audio duration must match the independent real song URL response",
+              Math.abs(nextActual.getLong("durationMs")-preflight.getLong("durationMs"))<2000);
         activity.startActivity(new Intent(activity,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
-        await("realAccountSnapshot().songId==="+expected+"&&!realAccountSnapshot().lyricLoading",30000);snapshot();
+        await("realAccountSnapshot().songId==="+expected+"&&!realAccountSnapshot().lyricLoading",30000);
+        JSONObject visible=snapshot();
+        assertEquals("Natural next must keep the selected playback mode",path[path.length-1],visible.getString("mode"));
+        JSONArray lines=visible.getJSONArray("lyrics");
+        assertTrue("Foreground lyrics must be present after natural next",lines.length()>0);
+        String head=lines.getString(0).replaceAll("\\s+","");
+        assertTrue("Foreground lyrics must belong to the independently fetched next song",!head.isEmpty()&&official.replaceAll("\\s+","").contains(head));
+        JSONObject result=new JSONObject().put("path",new JSONArray(path)).put("before",before).put("expected",expected)
+            .put("nativeAfter",nextActual).put("visibleAfter",visible).put("rate",actual.optDouble("rate",1));
+        if(preflight!=null)result.put("sourcePreflight",preflight);
+        naturalCases.put(result);
+        System.out.println("NATURAL_MODE_CASE "+result);
         js("window.realOverlayDone=false;(async()=>{await window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(false);await window.__SPLAYER_PLAYER_CONTROLLER__.setDesktopLyricShow(true);realOverlayDone=true})()");
         await("window.realOverlayDone===true",15000);
       }
-      assertEquals("true",js("realAccountHeartResponses.filter(r=>r.code===200&&r.ids.length).length>=4"));
+      assertEquals("Every configured natural-next path must complete",paths.length-start,naturalCases.length());
+      if(start==0)assertEquals("true",js("realAccountHeartResponses.filter(r=>r.code===200&&r.ids.length).length>="+(matrix?3:4)));
       passed=true;
     } finally {
       activity.startActivity(new Intent(activity,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
       File dir=new File(activity.getExternalFilesDir(null),"detail-regression");assertTrue(dir.exists()||dir.mkdirs());
-      JSONObject report=new JSONObject().put("passed",passed).put("nativeSamples",observations)
+      JSONObject report=new JSONObject().put("passed",passed).put("naturalCases",naturalCases).put("nativeSamples",observations)
+          .put("preparationOnly","true".equals(InstrumentationRegistry.getArguments().getString("prepare_only")))
+          .put("preparationStage",new JSONTokener(js("window.realAccountPreparationStage||null")).nextValue())
           .put("modeTrace",new JSONTokener((String)new JSONTokener(js("JSON.stringify(window.realAccountModeTrace||[])")).nextValue()).nextValue())
           .put("realHeartResponses",new JSONTokener((String)new JSONTokener(js("JSON.stringify(window.realAccountHeartResponses||[])")).nextValue()).nextValue());
       js("window.realAccountPlaybackRestored=false;restoreRealAccountPlayback().catch(e=>window.realRestoreError=e.name)");

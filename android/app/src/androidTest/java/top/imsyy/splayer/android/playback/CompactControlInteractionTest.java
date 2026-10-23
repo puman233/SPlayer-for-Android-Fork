@@ -75,15 +75,22 @@ public class CompactControlInteractionTest {
       f.js("p7Init().then(prepareTTML).catch(e=>window.ttmlError=e.name)");
       try {
         f.await("window.ttmlReady===true");
-        f.js("window.savedTTMLFetch=window.fetch;window.fetch=(url,...args)=>String(url).startsWith('https://next-stage.invalid/')?new Promise(resolve=>{window.finishSlowTTML=()=>resolve(new Response(window.ttmlFixtureXml,{status:200}));window.slowTTMLRequested=true}):savedTTMLFetch(url,...args);Object.assign(fixtureSetting,{lyricPriority:'auto',enableOnlineTTMLLyric:true,showWordLyrics:true,amllDbServer:'https://next-stage.invalid/%s'});window.Capacitor.nativePromise('AndroidCache','remove',{type:'lyrics',key:ttmlKeys[0]}).then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.setupSongUI(p7Stores.music.playSong,0))");
+        // Prepare and capture the visible LRC scene before starting a request with
+        // a real six-second deadline. Native screenshots must not consume its budget.
+        f.js("window.__SPLAYER_PLAYER_CONTROLLER__.setupSongUI(p7Stores.music.playSong,0)");
+        f.await("!fixtureStatus.lyricLoading&&p7Stores.music.songLyric.lrcData[0]?.words[0].word==='Fallback line'");
+        fixtureOpenLyrics(f);
+        f.await("(()=>{const e=document.querySelector('.player-lyric'),r=e?.getBoundingClientRect();return e?.textContent.includes('Fallback line')&&r.width>0&&r.height>0&&r.left>=-1&&r.right<=innerWidth+1})()");
+        f.capture("auto-lyric-before-ttml");
+        f.js("window.savedTTMLFetch=window.fetch;window.fetch=(url,options,...args)=>String(url).startsWith('https://next-stage.invalid/')?new Promise((resolve,reject)=>{window.ttmlRequestStartedAt=Date.now();const aborted=()=>{window.ttmlAbortedAfterMs=Date.now()-ttmlRequestStartedAt;reject(new DOMException('Aborted','AbortError'))};options?.signal?.addEventListener('abort',aborted,{once:true});window.finishSlowTTML=()=>{window.ttmlReleasedAfterMs=Date.now()-ttmlRequestStartedAt;if(options?.signal?.aborted)return false;options?.signal?.removeEventListener('abort',aborted);resolve(new Response(window.ttmlFixtureXml,{status:200}));return true};window.slowTTMLRequested=true}):savedTTMLFetch(url,options,...args);Object.assign(fixtureSetting,{lyricPriority:'auto',enableOnlineTTMLLyric:true,showWordLyrics:true,amllDbServer:'https://next-stage.invalid/%s'});window.Capacitor.nativePromise('AndroidCache','remove',{type:'lyrics',key:ttmlKeys[0]}).then(()=>window.__SPLAYER_PLAYER_CONTROLLER__.setupSongUI(p7Stores.music.playSong,0))");
         f.await("window.slowTTMLRequested===true");
         f.await("!fixtureStatus.lyricLoading&&p7Stores.music.songLyric.lrcData[0]?.words[0].word==='Fallback line'");
         assertEquals("未完成TTML不能阻止LRC先显示","false",f.js("fixtureStatus.usingTTMLLyric"));
-        if("true".equals(f.js("!!document.querySelector('.pagination .dot')")))
-          tap(f,"[...document.querySelectorAll('.pagination .dot')].at(-1)");
         f.await("(()=>{const e=document.querySelector('.player-lyric'),r=e?.getBoundingClientRect();return e?.textContent.includes('Fallback line')&&r.width>0&&r.height>0&&r.left>=-1&&r.right<=innerWidth+1})()");
-        f.capture("auto-lyric-before-ttml");
-        f.js("finishSlowTTML()");
+        String released=f.js("finishSlowTTML()");
+        String timing=f.js("JSON.stringify({abortedAfterMs:window.ttmlAbortedAfterMs,releasedAfterMs:window.ttmlReleasedAfterMs})");
+        assertEquals("TTML fixture must respond before the real source deadline: "+timing,"true",released);
+        System.out.println("AUTO_TTML_RESPONSE_TIMING "+timing);
         f.await("fixtureStatus.usingTTMLLyric&&p7Stores.music.songLyric.yrcData[0]?.words.length===2&&document.querySelectorAll('.player-lyric .yrc-word').length>=2");
         f.await("document.querySelector('.player-lyric')?.innerText.includes('hello')&&!document.querySelector('.player-lyric')?.innerText.includes('Fallback line')");
         f.js("window.ttmlFrameReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.ttmlFrameReady=true))");

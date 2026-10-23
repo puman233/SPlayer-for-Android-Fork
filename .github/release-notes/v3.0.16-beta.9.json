@@ -262,10 +262,16 @@
       "exclusion_reason": "仅修复原生快速切歌回归的前置状态与旧请求同步屏障，保留原延迟/身份/自然结束断言。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:177d1f8c21d80e7c7f29c09b46e3ed9136fda9b2",
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "为修复后的重新发布准备新候选版本与元数据，保留已推送的旧Tag。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "修复自动歌词回归夹具将慢截图计入真实TTML请求时限的问题；保留源取消和逐词渲染断言，不改生产超时。"
     }
   ]
 }

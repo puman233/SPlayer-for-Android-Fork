@@ -55,5 +55,62 @@
     "acceptedOn": "2026-10-23",
     "acceptedBy": "Repository maintainer, explicit publish instruction after disclosure",
     "statement": "用户明确要求“修复ui test错误的原因，然后再次发布”；保留已披露风险的真实状态，本次仅授权修复后的新测试版发布，不代表取得字体许可，不豁免当前提交CI、三设备UI验收、签名、完整资产与Environment人工审核。"
+  },
+  "commit": "b3f43a8cf1193a6be262dc841fd8074a1e2a24d9",
+  "draftId": 421757714,
+  "artifact": {
+    "id": 12498027154,
+    "name": "release-verified-v3.0.16-beta.9-39945114351-1",
+    "digest": "sha256:ba6993342628a75b4e2dec43d42c3bc3ce38fe44b3365508804b9d5186f8e859",
+    "runId": 39945114351,
+    "attempt": 1
+  },
+  "apks": {
+    "app-arm64-v8a-release.apk": {
+      "size": 60154082,
+      "sha256": "eba8fca6a65df455e33bcc22ae004b377e16667a57fc37598a75bfefdc30fe56"
+    },
+    "app-armeabi-v7a-release.apk": {
+      "size": 59358424,
+      "sha256": "917d06df36028155c6fa044a1194f761bcfda0cf4a1a2530f2f5aa7873c4202a"
+    },
+    "app-x86-release.apk": {
+      "size": 62460640,
+      "sha256": "029845b173acc8d588fb42985ce5923282b880b0fe052d8ab529ef587abf2e87"
+    },
+    "app-x86_64-release.apk": {
+      "size": 65707729,
+      "sha256": "55272a8daaaed51617cf6b4af927ecb8c8a43197355f2e0c1533338cdfdf0faa"
+    }
+  },
+  "files": {
+    "app-arm64-v8a-release.apk": {
+      "size": 60154082,
+      "sha256": "eba8fca6a65df455e33bcc22ae004b377e16667a57fc37598a75bfefdc30fe56"
+    },
+    "app-armeabi-v7a-release.apk": {
+      "size": 59358424,
+      "sha256": "917d06df36028155c6fa044a1194f761bcfda0cf4a1a2530f2f5aa7873c4202a"
+    },
+    "app-x86-release.apk": {
+      "size": 62460640,
+      "sha256": "029845b173acc8d588fb42985ce5923282b880b0fe052d8ab529ef587abf2e87"
+    },
+    "app-x86_64-release.apk": {
+      "size": 65707729,
+      "sha256": "55272a8daaaed51617cf6b4af927ecb8c8a43197355f2e0c1533338cdfdf0faa"
+    },
+    "SHA256SUMS": {
+      "size": 588,
+      "sha256": "0054da579c70b58734adab95b7be74ff454debff7bd1d0b05921359369b7ce61"
+    },
+    "SPlayer-v3.0.16-beta.9-corresponding-source.zip": {
+      "size": 17111297,
+      "sha256": "08521f4273646542f1473694750476a046aba115f5a6d0858ab222c746743837"
+    },
+    "SPlayer-v3.0.16-beta.9-third-party-notices.zip": {
+      "size": 216848,
+      "sha256": "968ad44ef6fd407f2ec58b29b8feaa8fd2dc31424c4afffc4f70ec346b52cad9"
+    }
   }
 }

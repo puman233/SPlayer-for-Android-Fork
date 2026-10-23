@@ -84,6 +84,8 @@ def validate_origin(data, artifact, run, jobs, approvals):
     require(run["run_attempt"] == frozen["attempt"], "源运行已经重跑，需要重新审核 Artifact")
     steps = [s for j in jobs["jobs"] if j["name"] == "release" for s in j["steps"]]
     required = {"检查签名、版本并收集最终 APK", "验证四架构发布契约并记录摘要", "Run actions/upload-artifact@v4"}
+    if "files" in data:
+        required.add("准备固定源码与许可材料并校验全部资产")
     require(required <= {s["name"] for s in steps if s["conclusion"] == "success"}, "源运行未完成签名/契约/Artifact 上传验证")
     require(any(a["state"] == "approved" and a["user"]["type"] == "User" and
                 any(e["name"] == "android-release" for e in a["environments"]) for a in approvals), "源运行缺少人工 Environment 审批")
@@ -93,6 +95,9 @@ def extract_artifact(path, destination, data):
     require("sha256:" + sha(path) == data["artifact"]["digest"], "下载 Artifact ZIP 摘要不一致")
     require(set(data["apks"]) == APK_NAMES, "冻结 APK 范围不是四个标准架构")
     expected = APK_NAMES | {"SHA256SUMS"}
+    if "files" in data:
+        expected |= set(companion_names(data["tag"]))
+        require(isinstance(data["files"], dict) and set(data["files"]) == expected, "冻结附件范围不是完整七文件")
     with zipfile.ZipFile(path) as archive:
         items = archive.infolist()
         require(len(items) == len(expected) and {i.filename for i in items} == expected, "Artifact ZIP 文件范围异常")
@@ -100,8 +105,10 @@ def extract_artifact(path, destination, data):
         for item in items:
             (destination / item.filename).write_bytes(archive.read(item))
     verify_apk_bytes(destination, data)
+    verify_frozen_files(destination, data)
     rows = (destination / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
-    expected_rows = {v["sha256"] + "  " + name for name, v in data["apks"].items()}
+    entries = data["files"] if "files" in data else data["apks"]
+    expected_rows = {v["sha256"] + "  " + name for name, v in entries.items() if name != "SHA256SUMS"}
     require(len(rows) == len(expected_rows) and set(rows) == expected_rows, "源运行 SHA256SUMS 不匹配")
 
 
@@ -111,6 +118,19 @@ def verify_apk_bytes(destination, data):
     for name, frozen in data["apks"].items():
         path = destination / name
         require(path.stat().st_size == frozen["size"] and sha(path) == frozen["sha256"], "APK 与原验收字节不一致：" + name)
+
+
+def verify_frozen_files(destination, data):
+    if "files" not in data:
+        return  # Historical five-file artifacts retain their original recovery contract.
+    expected = APK_NAMES | set(companion_names(data["tag"])) | {"SHA256SUMS"}
+    require(isinstance(data["files"], dict) and set(data["files"]) == expected, "冻结附件范围不是完整七文件")
+    require({p.name for p in destination.iterdir()} == expected, "冻结附件缺失或存在额外文件")
+    for name, frozen in data["files"].items():
+        path = destination / name
+        require(path.is_file() and not path.is_symlink()
+                and path.stat().st_size == frozen["size"] and sha(path) == frozen["sha256"],
+                "附件与原验收字节不一致：" + name)
 
 
 def certificate(path):
@@ -214,14 +234,21 @@ def prepare(data):
     for name in data["apks"]:
         require(certificate(destination / name) == data["certificateSha256"], "APK 正式签名不匹配")
     # Reuse the existing four-ABI/manifest/version/non-debuggable contract.
+    frozen_checksums = (destination / "SHA256SUMS").read_bytes()
     subprocess.run([sys.executable, "-B", str(TOOLS / "scripts/release-contract.py"), "local"], check=True)
+    if "files" in data:
+        # That contract emits four APK hashes; retain the approved six-payload file.
+        (destination / "SHA256SUMS").write_bytes(frozen_checksums)
+        verify_frozen_files(destination, data)
     stable_dir = temp / "stable-reference"
     stable_dir.mkdir(exist_ok=True)
     call("gh", "release", "download", data["stableTag"], "--pattern", "app-arm64-v8a-release.apk", "--dir", stable_dir)
     require(certificate(stable_dir / "app-arm64-v8a-release.apk") == data["certificateSha256"], "与历史稳定版签名不一致")
-    make_companions(destination, data)
-    names = sorted(set(data["apks"]) | set(companion_names(data["tag"])))
-    (destination / "SHA256SUMS").write_text("".join(sha(destination / n) + "  " + n + "\n" for n in names), encoding="utf-8")
+    if "files" not in data:
+        make_companions(destination, data)
+        names = sorted(set(data["apks"]) | set(companion_names(data["tag"])))
+        (destination / "SHA256SUMS").write_text("".join(sha(destination / n) + "  " + n + "\n" for n in names), encoding="utf-8")
+    verify_frozen_files(destination, data)
     (temp / "approved-payload.json").write_text(json.dumps(payload(destination, data), indent=2), encoding="utf-8")
     print("原四架构 APK 字节、版本、签名、历史签名、Artifact 来源与配套材料验证通过；没有重建 APK。")
 
@@ -230,6 +257,7 @@ def verify(data, published=True):
     files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "approved-payload.json").read_text(encoding="utf-8"))
     require(payload(Path("release"), data) == files, "验证后本地附件变化")
     verify_apk_bytes(Path("release"), data)
+    verify_frozen_files(Path("release"), data)
     current = api(f"releases/{data['draftId']}")
     validate_draft(current, data, notes())
     require(current["draft"] is not published, "Release 发布状态不符合预期")
@@ -246,6 +274,7 @@ def publish(data):
     files = json.loads((Path(os.environ["RUNNER_TEMP"]) / "approved-payload.json").read_text(encoding="utf-8"))
     require(payload(destination, data) == files, "待上传附件与验证记录不同")
     verify_apk_bytes(destination, data)
+    verify_frozen_files(destination, data)
     current = api(f"releases/{data['draftId']}")
     validate_draft(current, data, notes())
     if not current["draft"]:

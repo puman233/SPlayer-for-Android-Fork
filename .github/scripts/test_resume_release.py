@@ -86,6 +86,96 @@ class ResumeTests(unittest.TestCase):
         module.extract_artifact(self.artifact_zip(), self.dest, self.data)
         self.assertTrue(all((self.dest / n).read_bytes() == b"apk" for n in self.data["apks"]))
 
+    def complete_artifact_zip(self, corrupt_sum=False):
+        files = {name: b"apk" for name in self.data["apks"]}
+        for name in module.companion_names(self.data["tag"]):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as archive:
+                archive.writestr("original.txt", b"approved source or notices")
+            files[name] = buffer.getvalue()
+        sums = "".join(hashlib.sha256(value).hexdigest() + "  " + name + "\n"
+                       for name, value in sorted(files.items()))
+        files["SHA256SUMS"] = b"wrong" if corrupt_sum else sums.encode()
+        self.data["files"] = {name: {"size": len(value), "sha256": hashlib.sha256(value).hexdigest()}
+                              for name, value in files.items()}
+        path = self.root / "complete.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, value in files.items():
+                archive.writestr(name, value)
+        self.data["artifact"]["digest"] = self.artifact["digest"] = "sha256:" + module.sha(path)
+        return path
+
+    def test_complete_seven_file_artifact_is_preserved_byte_for_byte(self):
+        path = self.complete_artifact_zip()
+        module.extract_artifact(path, self.dest, self.data)
+        with zipfile.ZipFile(path) as archive:
+            self.assertEqual({p.name: p.read_bytes() for p in self.dest.iterdir()},
+                             {name: archive.read(name) for name in archive.namelist()})
+
+    def test_complete_artifact_requires_exact_frozen_names_and_checksums(self):
+        path = self.complete_artifact_zip()
+        name = module.companion_names(self.data["tag"])[0]
+        self.data["files"]["../outside.zip"] = self.data["files"].pop(name)
+        with self.assertRaises(ValueError):
+            module.extract_artifact(path, self.dest, self.data)
+        self.assertEqual(list(self.dest.iterdir()), [])
+        with self.assertRaisesRegex(ValueError, "SHA256SUMS"):
+            module.extract_artifact(self.complete_artifact_zip(corrupt_sum=True), self.dest, self.data)
+
+    def test_complete_artifact_rejects_changed_companion_after_extraction(self):
+        module.extract_artifact(self.complete_artifact_zip(), self.dest, self.data)
+        (self.dest / module.companion_names(self.data["tag"])[0]).write_bytes(b"changed")
+        with self.assertRaises(ValueError):
+            module.verify_frozen_files(self.dest, self.data)
+
+    def test_complete_origin_requires_successful_companion_preparation(self):
+        self.complete_artifact_zip()
+        with self.assertRaises(ValueError):
+            self.origin()
+        step = {"name": "准备固定源码与许可材料并校验全部资产", "conclusion": "success"}
+        self.jobs["jobs"][0]["steps"].append(step)
+        self.origin()
+        step["conclusion"] = "failure"
+        with self.assertRaises(ValueError):
+            self.origin()
+
+    def test_prepare_keeps_all_seven_files_after_manifest_contract_without_regeneration(self):
+        path = self.complete_artifact_zip()
+        self.data.update(stableTag="v1.1.0", certificateSha256="f" * 64)
+        self.jobs["jobs"][0]["steps"].append(
+            {"name": "准备固定源码与许可材料并校验全部资产", "conclusion": "success"})
+        draft = {"id": 12, "tag_name": self.data["tag"], "target_commitish": self.data["commit"],
+                 "prerelease": True, "draft": True, "body": "approved", "assets": []}
+        stable = draft | {"id": 10, "tag_name": "v1.1.0", "prerelease": False, "draft": False,
+                          "body": "stable", "updated_at": "unchanged"}
+        def api(endpoint):
+            return {"actions/workflows/android-ci.yml/runs?head_sha=" + "b" * 40 + "&per_page=100":
+                    {"workflow_runs": [{"head_sha": "b" * 40, "head_branch": "dev", "event": "push", "conclusion": "success"}]},
+                    "actions/artifacts/1": self.artifact, "actions/runs/2": self.run,
+                    "actions/runs/2/jobs?per_page=100": self.jobs, "actions/runs/2/approvals": self.approvals,
+                    "releases/12": draft, "releases/tags/v1.1.0": stable}[endpoint]
+        def command(args, **kwargs):
+            if args[0] == "gh":
+                kwargs["stdout"].write(path.read_bytes())
+            else:
+                # The existing four-APK contract writes its own four-line checksum file.
+                (self.dest / "SHA256SUMS").write_text("".join(
+                    value["sha256"] + "  " + name + "\n" for name, value in sorted(self.data["apks"].items())))
+        previous = Path.cwd()
+        os.chdir(self.root)
+        try:
+            with patch.dict(os.environ, {"RELEASE_TOOLS_COMMIT": "b" * 40}), \
+                    patch.object(module, "api", side_effect=api), patch.object(module, "call", return_value=""), \
+                    patch.object(module, "notes", return_value="approved"), \
+                    patch.object(module, "certificate", return_value="f" * 64), \
+                    patch.object(module.subprocess, "run", side_effect=command), \
+                    patch.object(module, "make_companions") as companions:
+                module.prepare(self.data)
+                companions.assert_not_called()
+                self.assertEqual(module.payload(self.dest, self.data), self.data["files"])
+        finally:
+            os.chdir(previous)
+
     def test_rejects_archive_path_traversal_or_extra_files(self):
         for name in ["../other.apk", "extra.txt"]:
             with self.subTest(name=name), self.assertRaises(ValueError):

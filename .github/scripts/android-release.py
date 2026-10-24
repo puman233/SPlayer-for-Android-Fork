@@ -245,6 +245,13 @@ def validate_release_notes(body, previous, current):
         r"签名验证|签名校验|签名证书|证书指纹|发布门禁|测试范围|测试矩阵|Codex|本(?:次|轮)发布不|已验收|"
         r"\b\d+\s+(?:screenshots?|test\s+devices?)\b|"
         r"\b(?:internal\s+(?:commit|verification|process)|this\s+release\s+(?:does\s+not|doesn't)\s+(?:change|modify))\b",
+        # Reject work-in-progress reports, while allowing actual tablet fixes and user limitations.
+        r"(?:手机|平板|小屏|双端|设备|批量).{0,16}回归|回归(?:测试|结果|通过|失败)|复验|前置异常|"
+        r"(?:剩余|依赖).{0,16}公告.{0,24}(?:确认|适用|排查)|(?:原因|根因).{0,8}(?:待确认|尚未关闭|未关闭)",
+        r"开发中.{0,12}占位|软件正在开发|(?:模拟器|测试环境).{0,12}(?:曾出现|测试日志|观察到)|"
+        r"许可证据|再分发授权证据|风险接受",
+        r"(?:三设备|双端).{0,20}(?:通过|失败)|\b\d+\s*/\s*\d+\s*(?:项)?(?:通过|失败)|"
+        r"\bregression\s+(?:tests?|results?|passed|failed)\b",
     )
     if any(re.search(pattern, body, re.IGNORECASE) for pattern in forbidden):
         raise ValueError("Release Notes 包含内部发布信息、本地路径或非正式下载说明")

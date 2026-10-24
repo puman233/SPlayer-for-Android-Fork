@@ -101,6 +101,33 @@ class ReleaseNotesTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 module.validate_release_notes(bad, "v1.2.0", self.current)
 
+    def test_work_logs_and_development_placeholders_are_not_public_updates(self):
+        for summary in (
+            "平板批量回归仍有一项间歇前置异常，独立及组合复验通过但原因未关闭。",
+            "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。",
+            "手机和平板不再显示开发中占位。",
+            "模拟器曾出现启动崩溃及连续操作异常，原因仍待确认。",
+            "手机、平板与小屏回归全部通过。",
+            "三设备50/50项通过。",
+            "回归结果：regression tests passed。",
+        ):
+            with self.subTest(summary=summary):
+                self.data["changes"][0]["summary"] = summary
+                with self.assertRaisesRegex(ValueError, "内部|过程|占位"):
+                    self.generate()
+
+    def test_real_tablet_fixes_known_limitations_and_loading_states_remain_allowed(self):
+        for summary in (
+            "修复平板横屏播放时歌词与封面重叠的问题。",
+            "部分音源可能只提供短音频。",
+            "关闭在线服务后，可在首页访问本地曲库、管理目录并查看最近播放。",
+            "修复封面加载期间空白占位反复闪烁的问题。",
+            "修复模拟器启动时崩溃的问题。",
+        ):
+            with self.subTest(summary=summary):
+                self.data["changes"][0]["summary"] = summary
+                self.assertIn(summary, self.generate())
+
     def test_duplicate_change_and_invalid_or_empty_heading_fail(self):
         notes = self.generate()
         for bad in (notes.replace("## 🚀 新增功能", "# 🚀 新增功能"),
@@ -146,6 +173,20 @@ class SourceAuditTests(unittest.TestCase):
         self.assertEqual(len(matrix), len(sources))
         self.assertEqual(len(sources), 32)
         self.assertTrue(any(change["id"] == "discover" for change in data["changes"]))
+
+
+class CuratedHistoryTests(unittest.TestCase):
+    def test_all_curated_notes_generate_from_real_tag_sources_without_work_logs(self):
+        root = Path(__file__).resolve().parent.parent / "release-notes"
+        for path in sorted(root.glob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            previous = data.get("previous_tag", "v3.0.15")
+            with self.subTest(tag=path.stem), patch.dict(os.environ, {
+                "RELEASE_TAG": path.stem, "GH_REPO": "puman233/SPlayer-for-Android-Fork",
+            }), patch.object(module.notes_audit, "previous_tag", return_value=previous):
+                notes = module.release_notes()
+                for leaked in ("平板批量回归", "剩余依赖公告", "开发中占位", "原因仍待确认"):
+                    self.assertNotIn(leaked, notes)
 
 
 if __name__ == "__main__":

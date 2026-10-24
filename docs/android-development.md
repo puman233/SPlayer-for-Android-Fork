@@ -28,6 +28,12 @@
 
 ## 正式发布契约
 
+Release Notes 只描述本版本对用户可见的功能、行为修复和已知使用限制。条目应说明具体功能及用户结果，例如“关闭在线服务后，可在首页访问本地曲库、管理目录并查看最近播放”，避免“手机和平板不再显示开发中占位”等开发状态措辞。
+
+测试回归、复验结果、设备通过数量、前置异常、待确认的依赖公告适用性、许可证据调查和风险接受属于工作记录，保留在对应审计及第三方声明中，不写进公开更新条目。已知问题应描述用户实际会遇到的限制，不混写排查进度，也不能因整理文字而声称问题已解决。
+
+发布说明从 `.github/release-notes/<tag>.json` 的精选 `changes` 生成，`coverage` 保存完整来源映射与内部排除理由；不得将审计证据或整段 CHANGELOG 直接拼入公开正文。历史版本也使用当前规则验证，保留真实功能说明和唯一的版本比较链接。正文修订不得替换已发布 APK、移动 Tag 或改写附件；修改前后核对发布身份及附件摘要，生成器相关代码仍按既有 CI 门禁验证。
+
 正式签名缺失、调试证书、预期指纹不一致、源码/Tag/APK 版本不一致、四种 ABI 缺失、未经授权或当前提交 CI 未成功均阻断发布。本地验证产物的 SHA256SUMS 作为 30 天 Artifact 保存；发布后校验四附件大小和 API 摘要。保持既有草稿恢复、重复 Tag 跳过、旧附件备份和明确 Release ID/repair SHA 校验；取消/重试不删除历史 Release，不移动 Tag。官网只在整个 Release job 成功后同步。
 
 本地检查：`python3 -B -m unittest discover -s .github/scripts -p 'test_*.py'`；actionlint 检查 Actions YAML；`pnpm lint`、`pnpm typecheck`、`python3 -B .github/scripts/development-checks.py tests`、`pnpm build:android` 后在 android 执行 `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`。设备测试必须断言实际行为，不把模拟器启动当验收；相关截图与报告仅临时保存。

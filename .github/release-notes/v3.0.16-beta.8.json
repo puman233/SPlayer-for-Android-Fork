@@ -24,7 +24,7 @@
     {
       "id": "security",
       "category": "fixes",
-      "summary": "增加应用内特殊代理路径的导航拦截，按框架官方方案缓解已知安全问题。"
+      "summary": "增加应用内导航保护，缓解部分已知安全风险。"
     },
     {
       "id": "service",
@@ -39,12 +39,7 @@
     {
       "id": "device",
       "category": "known_issues",
-      "summary": "平板批量回归仍有一项间歇前置异常，独立及组合复验通过但原因未关闭；部分上游音源可能不可用。"
-    },
-    {
-      "id": "risks",
-      "category": "known_issues",
-      "summary": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
+      "summary": "部分歌曲可能因上游音源不可用而无法播放。"
     }
   ],
   "coverage": [
@@ -156,11 +151,10 @@
     },
     {
       "source": "changelog:3b1e593aa425c212",
-      "classification": "user-visible",
-      "release_ids": [
-        "risks"
-      ],
-      "evidence": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。"
+      "classification": "internal",
+      "release_ids": [],
+      "evidence": "剩余依赖公告适用性仍需确认；导航拦截属于缓解，后续仍需升级框架修复版本。",
+      "exclusion_reason": "依赖公告适用性待确认属于内部审查进度，原始证据继续保留；用户可见的导航安全缓解已映射至security条目，未声称框架风险已全部修复。"
     },
     {
       "source": "commit:6e655ae490e0d820ac42a5e708a6c5087ff35aff",

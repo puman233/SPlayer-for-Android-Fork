@@ -19,7 +19,7 @@
     {
       "id": "lyric",
       "category": "fixes",
-      "summary": "修复歌词长时间停留在加载中、TTML 就绪后等待其他请求，以及手动拖动迟滞和播放位置回归异常。"
+      "summary": "修复歌词长时间停留在加载中、TTML 就绪后仍需等待，以及拖动播放进度迟滞或跳回原位置的问题。"
     },
     {
       "id": "overlay",
@@ -59,12 +59,7 @@
     {
       "id": "upstream",
       "category": "known_issues",
-      "summary": "部分上游音源仍可能返回短音频；模拟器曾出现启动崩溃及连续操作异常，原因仍待确认。"
-    },
-    {
-      "id": "font",
-      "category": "known_issues",
-      "summary": "通知图标字体部分字形的再分发授权证据仍不充分，维护者仅接受此次 Beta 的相关风险。"
+      "summary": "部分音源可能只提供短音频。"
     },
     {
       "id": "beta-note",
@@ -163,11 +158,10 @@
     },
     {
       "source": "changelog:21067ec4cd6f3f2d",
-      "classification": "user-visible",
-      "release_ids": [
-        "font"
-      ],
-      "evidence": "通知图标字体部分字形的再分发授权证据仍不充分，维护者仅接受此次 Beta 的相关风险。"
+      "classification": "internal",
+      "release_ids": [],
+      "evidence": "通知图标字体部分字形的再分发授权证据仍不充分，维护者仅接受此次 Beta 的相关风险。",
+      "exclusion_reason": "字体授权证据及维护者风险接受保留在本版审计与第三方声明中，不作为应用功能变化；未将风险标记为已解决。"
     },
     {
       "source": "changelog:74b79056a968e0fc",
@@ -192,7 +186,6 @@
         "transition",
         "android",
         "upstream",
-        "font",
         "beta-note"
       ],
       "evidence": "本阶段源码、原生播放器、回归测试与对应版本记录；历史风险仅披露而未标记修复。"

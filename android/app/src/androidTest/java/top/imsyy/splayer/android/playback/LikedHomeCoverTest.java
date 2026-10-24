@@ -52,8 +52,8 @@ public class LikedHomeCoverTest {
     try {
       await("!!document.querySelector('.home-online')");
       await("!!likedCoverProbe.p._s.get('data').userLikeData.playlists[0]?.cover");
-      // Inspect both the selected playlist source and the decoded image. Android caches may use blob URLs.
-      await("(()=>{const cards=[...document.querySelectorAll('.home-online .song-data-card')];const card=cards.find(c=>c.textContent.includes('我喜欢的音乐'));if(!card)return false;const seen=new Set(),stack=[document.querySelector('#app')._vnode];let c;while(stack.length){const v=stack.pop();if(!v||typeof v!=='object'||seen.has(v))continue;seen.add(v);if(v.props?.title==='我喜欢的音乐'&&v.component){c=v;break}if(v.component?.subTree)stack.push(v.component.subTree);if(Array.isArray(v.children))stack.push(...v.children);if(v.suspense?.activeBranch)stack.push(v.suspense.activeBranch)}const pl=likedCoverProbe.p._s.get('data').userLikeData.playlists[0];const expected=pl.coverSize?.m||pl.cover;const images=[...card.querySelectorAll('img')];return c?.props.cover===expected&&images.some(i=>i.complete&&i.naturalWidth>1&&i.naturalHeight>1&&!i.src.includes('/images/')&&(i.classList.contains('loaded')||!card.classList.contains('home-rec-card')))})()");
+      // The selected album image must differ from the server heart composite and decode successfully.
+      await("(()=>{const cards=[...document.querySelectorAll('.home-online .song-data-card')];const card=cards.find(c=>c.textContent.includes('我喜欢的音乐'));if(!card)return false;const seen=new Set(),stack=[document.querySelector('#app')._vnode];let c;while(stack.length){const v=stack.pop();if(!v||typeof v!=='object'||seen.has(v))continue;seen.add(v);if(v.props?.title==='我喜欢的音乐'&&v.component){c=v;break}if(v.component?.subTree)stack.push(v.component.subTree);if(Array.isArray(v.children))stack.push(...v.children);if(v.suspense?.activeBranch)stack.push(v.suspense.activeBranch)}const pl=likedCoverProbe.p._s.get('data').userLikeData.playlists[0];const expected=c?.props.cover;const images=[...card.querySelectorAll('img')];return !!expected&&expected!==pl.cover&&expected!==pl.coverSize?.m&&images.some(i=>i.complete&&i.naturalWidth>1&&i.naturalHeight>1&&!i.src.includes('/images/')&&(i.classList.contains('loaded')||!card.classList.contains('home-rec-card')))})()");
       assertEquals("The account stayed unchanged", "true", js("likedCoverProbe.token===likedCoverProbe.p._s.get('data').getAccountToken()"));
       // Decoding can complete before Chromium submits its next frame and the image fade finishes.
       js("likedCoverProbe.painted=false;requestAnimationFrame(()=>requestAnimationFrame(()=>likedCoverProbe.painted=true))");
@@ -77,6 +77,10 @@ public class LikedHomeCoverTest {
       try (FileOutputStream output = new FileOutputStream(new File(inst.getTargetContext().getExternalFilesDir(null), "liked-home-cover.png"))) {
         assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, output));
       } finally { screenshot.recycle(); }
+      js("(()=>{const q=likedCoverProbe;q.playback=()=>JSON.stringify({song:q.p._s.get('music').playSong.id,queue:q.p._s.get('data').playList.map(s=>s.id),mode:q.p._s.get('status').shuffleMode});q.beforeClick=q.playback();[...document.querySelectorAll('.home-online .song-data-card')].find(c=>c.textContent.includes('我喜欢的音乐')).click()})()");
+      await("likedCoverProbe.a.config.globalProperties.$router.currentRoute.value.name==='like-songs'");
+      assertEquals("Clicking the artwork keeps the account", "true", js("likedCoverProbe.token===likedCoverProbe.p._s.get('data').getAccountToken()"));
+      assertEquals("Artwork navigation preserves the song, queue and playback mode", "true", js("likedCoverProbe.beforeClick===likedCoverProbe.playback()"));
     } finally {
       js("(()=>{const q=likedCoverProbe;q.a.config.globalProperties.$router.push(q.route);q.p._s.get('status').showFullPlayer=q.full;delete window.likedCoverProbe;})()");
     }

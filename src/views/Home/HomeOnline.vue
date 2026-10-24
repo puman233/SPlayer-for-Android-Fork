@@ -83,11 +83,13 @@ import { newAlbumsAll, personalized, radarPlaylist, topArtists } from "@/api/rec
 import { allMv } from "@/api/video";
 import { radioRecommend } from "@/api/radio";
 import { getCacheData } from "@/utils/cache";
-import { formatArtistsList, formatCoverList } from "@/utils/format";
+import { formatArtistsList, formatCoverList, formatSongsList } from "@/utils/format";
 import { sleep } from "@/utils/helper";
 import { isLogin } from "@/utils/auth";
 import SvgIcon from "@/components/Global/SvgIcon.vue";
 import HomeRecommendationCard from "@/components/Card/HomeRecommendationCard.vue";
+import { useLikedHomeCover } from "@/composables/useLikedHomeCover";
+import { playlistAllSongs } from "@/api/playlist";
 import { useMediaQuery } from "@vueuse/core";
 
 interface RecItemTypeBase {
@@ -119,10 +121,22 @@ const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const compactHome = useMediaQuery("(max-width: 599px)");
-// 登录同步已返回喜欢歌单封面，歌曲详情仅在进入列表后加载。
-const likedPlaylistCover = computed(() => {
-  const playlist = dataStore.userLikeData.playlists[0];
-  return playlist?.coverSize?.m || playlist?.cover;
+const likedPlaylistId = computed(() =>
+  isLogin() ? Number(dataStore.userLikeData.playlists[0]?.id || dataStore.likeSongsList.detail.id) : 0,
+);
+const likedPlaylistCover = useLikedHomeCover({
+  account: () => dataStore.getAccountToken(),
+  playlistId: () => likedPlaylistId.value,
+  cachedCover: () => {
+    if (Number(dataStore.likeSongsList.detail.id) !== likedPlaylistId.value) return;
+    const song = dataStore.likeSongsList.data[0];
+    return song?.coverSize?.m || song?.cover;
+  },
+  load: async (id) => {
+    const result = await playlistAllSongs(id, 1);
+    const song = formatSongsList(result.songs)[0];
+    return song?.coverSize?.m || song?.cover;
+  },
 });
 const recommendationScope = computed(() =>
   !isLogin()

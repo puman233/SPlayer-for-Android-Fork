@@ -7,6 +7,7 @@ import { parse, compileScript } from "@vue/compiler-sfc";
 import { renderToString } from "@vue/server-renderer";
 import * as vue from "vue";
 import { sampleSize } from "lodash-es";
+import { useLikedHomeCover } from "../../composables/useLikedHomeCover.ts";
 
 // Render the actual home and both card templates. Only network, animation and UI primitives are stubbed.
 async function renderHome(compact: boolean, playlists: any[], songs: any[] = []) {
@@ -14,7 +15,8 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
     userData: { userId: 1 },
     loginType: "qr",
     userLikeData: { playlists },
-    likeSongsList: { data: songs },
+    likeSongsList: { detail: { id: 101 }, data: songs },
+    getAccountToken: () => "account:1",
   });
   const image = vue.defineComponent({
     props: ["src"],
@@ -25,6 +27,7 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
   });
   const imports: Record<string, any> = {
     vue,
+    "@/composables/useLikedHomeCover": { useLikedHomeCover },
     "lodash-es": { sampleSize },
     "naive-ui": { NText: slot },
     "@/stores": {
@@ -35,6 +38,12 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
     },
     "@/utils/auth": { isLogin: () => 1 },
     "@/utils/helper": { coverLoaded() {} },
+    "@/api/playlist": {
+      playlistAllSongs: async () => ({
+        songs: [{ id: 1, cover: "https://example.test/plain-album.jpg" }],
+      }),
+    },
+    "@/utils/format": { formatSongsList: (items: any[]) => items },
     "@vueuse/core": {
       useMediaQuery: () => vue.ref(compact),
       useResizeObserver() {},
@@ -67,7 +76,15 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
     );
     return module.exports.default;
   };
-  const app = vue.createSSRApp(load("./HomeOnline.vue"));
+  const home = load("./HomeOnline.vue");
+  const setup = home.setup;
+  home.setup = async (...args: any[]) => {
+    const render = setup(...args);
+    await vue.nextTick();
+    await vue.nextTick();
+    return render;
+  };
+  const app = vue.createSSRApp(home);
   for (const name of ["n-flex", "n-card", "n-text", "n-h3", "ArtistList", "CoverList", "SvgIcon"])
     app.component(name, slot);
   for (const name of ["n-image", "s-image"]) app.component(name, image);
@@ -79,9 +96,10 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
 for (const compact of [true, false]) {
   test(`logged-in home displays liked playlist artwork before opening its songs (${compact ? "phone" : "tablet"})`, async () => {
     const html = await renderHome(compact, [{ id: 101, cover: "https://example.test/liked.jpg" }]);
-    assert.ok(html.includes('src="https://example.test/liked.jpg"'), html);
+    assert.ok(html.includes('src="https://example.test/plain-album.jpg"'), html);
+    assert.ok(!html.includes('src="https://example.test/liked.jpg"'));
   });
-  test(`liked artwork uses the sized playlist image ahead of cached songs (${compact ? "phone" : "tablet"})`, async () => {
+  test(`liked artwork uses cached album art instead of the server heart composite (${compact ? "phone" : "tablet"})`, async () => {
     const html = await renderHome(
       compact,
       [
@@ -93,8 +111,8 @@ for (const compact of [true, false]) {
       ],
       [{ id: 1, cover: "https://example.test/song.jpg" }],
     );
-    assert.ok(html.includes('src="https://example.test/medium.jpg"'));
-    assert.ok(!html.includes('src="https://example.test/song.jpg"'));
+    assert.ok(!html.includes('src="https://example.test/medium.jpg"'));
+    assert.ok(html.includes('src="https://example.test/song.jpg"'));
   });
   test(`song artwork remains available without a playlist image (${compact ? "phone" : "tablet"})`, async () => {
     const html = await renderHome(compact, [], [{ id: 1, cover: "https://example.test/song.jpg" }]);

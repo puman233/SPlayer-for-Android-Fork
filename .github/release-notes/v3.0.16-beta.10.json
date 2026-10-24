@@ -1,0 +1,116 @@
+{
+  "previous_tag": "v3.0.16-beta.9",
+  "changes": [
+    {
+      "id": "cover-refresh",
+      "category": "highlights",
+      "summary": "首页卡片等新封面加载完成后再切换，刷新或加载失败时保留原图；喜欢音乐封面会自然轮换。"
+    },
+    {
+      "id": "liked-cover",
+      "category": "fixes",
+      "summary": "修复登录后我喜欢的音乐卡片封面空白的问题，直接显示歌曲专辑封面，并去除中央爱心遮罩。"
+    },
+    {
+      "id": "offline-home",
+      "category": "features",
+      "summary": "关闭在线服务后，首页提供完整本地曲库、目录管理和最近播放入口，手机和平板不再显示开发中占位。"
+    },
+    {
+      "id": "overlay",
+      "category": "android",
+      "summary": "改善旋转、重新打开应用或显示器重建后的桌面歌词恢复，保留当前歌词、进度和窗口设置。"
+    }
+  ],
+  "coverage": [
+    {
+      "source": "changelog:943acd1c787e617f",
+      "classification": "user-visible",
+      "release_ids": [
+        "cover-refresh"
+      ],
+      "evidence": "首页卡片刷新时保留已显示封面，等新图片加载并解码成功后再替换，加载失败不再闪回空白占位；喜欢音乐封面使用真实歌单专辑图片自然轮换，卡片隐藏时暂停轮换。"
+    },
+    {
+      "source": "changelog:7ffea9d581094728",
+      "classification": "user-visible",
+      "release_ids": [
+        "liked-cover"
+      ],
+      "evidence": "修复登录后首页“我喜欢的音乐”卡片封面空白的问题；手机和平板使用歌曲原始专辑封面，去除服务端合成的爱心遮罩，无需先进入歌曲列表。"
+    },
+    {
+      "source": "changelog:70168fd2928a93e6",
+      "classification": "user-visible",
+      "release_ids": [
+        "offline-home"
+      ],
+      "evidence": "关闭在线服务后，首页提供本地曲库、目录管理和最近播放入口，不再显示开发中占位文字；手机和平板均可使用。"
+    },
+    {
+      "source": "changelog:9d89403fface5eda",
+      "classification": "user-visible",
+      "release_ids": [
+        "overlay"
+      ],
+      "evidence": "修复旋转、重新打开应用或显示器重建后悬浮歌词窗口仍绑定失效显示器的问题，保留当前歌词、进度及窗口设置并恢复显示。"
+    },
+    {
+      "source": "commit:1d994ea137e1b804281102e9ef8bc5cb7216c937",
+      "classification": "user-visible",
+      "release_ids": [
+        "cover-refresh"
+      ],
+      "evidence": "StableCoverImage.vue等实际load和decode完成后替换图片；真实专辑池可见时轮换。"
+    },
+    {
+      "source": "commit:5d48b70d2378b0cf63ee4bbb1d1aa0610bc04688",
+      "classification": "user-visible",
+      "release_ids": [
+        "liked-cover"
+      ],
+      "evidence": "useLikedHomeCover.ts改用歌曲专辑图片，去除服务端合成的白色爱心。"
+    },
+    {
+      "source": "commit:e594abbdb85bb03d6484733ef913a9320fa71495",
+      "classification": "user-visible",
+      "release_ids": [
+        "liked-cover"
+      ],
+      "evidence": "HomeOnline.vue为手机和平板提供登录后的喜欢音乐封面。"
+    },
+    {
+      "source": "commit:a29dd2f613b9e20b69ba9e1b61db1f96301b6810",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "测试运行器提前检查已有悬浮权限，避免准备与恢复等待；不修改应用功能。"
+    },
+    {
+      "source": "commit:7081ca1e5260a2340936b5751ee3ee9ec315dbff",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "新增真实歌单心动/随机自然下一首验收，不修改播放器业务行为。"
+    },
+    {
+      "source": "commit:ee161568dcd170cd0081ab301ab8669d3a8dab24",
+      "classification": "user-visible",
+      "release_ids": [
+        "offline-home",
+        "overlay"
+      ],
+      "evidence": "HomeLocal.vue恢复本地曲库；FloatingLyricService.java重建失效显示器窗口。"
+    },
+    {
+      "source": "commit:e35c9c48aa56b7762b505189cff2c58500913d27",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "既有测试版冻结产物恢复工具完整性修正，不作为本次应用新功能。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "同步用户指定的beta.10版本、30033构建号、更新日志与发布说明来源映射。"
+    }
+  ]
+}

@@ -177,6 +177,8 @@ public class RealAccountModeTest {
       return;
     }
     if("true".equals(InstrumentationRegistry.getArguments().getString("probe")))return;
+    assertTrue("Desktop lyric test requires overlay permission before changing playback: "
+        +inst.getTargetContext().getPackageName(),android.provider.Settings.canDrawOverlays(activity));
     PlaybackManager manager=PlaybackManager.getInstance(activity);
     boolean passed=false;
     try {

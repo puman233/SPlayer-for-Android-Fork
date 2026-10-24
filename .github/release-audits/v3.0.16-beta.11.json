@@ -34,5 +34,62 @@
     "authorizationScope": "all-versions-using-identical-font",
     "authorizationRecord": "docs/notification-font-authorization.md",
     "licenseEvidenceStatus": "MAINTAINER_CONFIRMED"
+  },
+  "commit": "76484a1f8d7087cb9a8c59059130c794312e4772",
+  "draftId": 422834428,
+  "artifact": {
+    "id": 12566501200,
+    "name": "release-verified-v3.0.16-beta.11-40109753594-1",
+    "digest": "sha256:8668e8589f74800804e27c138ee8c6097f5b3d2ddc2f2bab0e46ad9c2169f5ed",
+    "runId": 40109753594,
+    "attempt": 1
+  },
+  "apks": {
+    "app-arm64-v8a-release.apk": {
+      "size": 60174490,
+      "sha256": "d1517ab258651dab289e770e6bb2013b34151a27971963ee3b517e418ba5cf06"
+    },
+    "app-armeabi-v7a-release.apk": {
+      "size": 59378832,
+      "sha256": "bf722bc2286728877d2e88f2c3bd88b1103c1fae916e0e80ae41b7ad2046f101"
+    },
+    "app-x86-release.apk": {
+      "size": 62481048,
+      "sha256": "0acd29b72e8576e1d2fab41a56812527907e6073e402c5157dcd9869ab5f0702"
+    },
+    "app-x86_64-release.apk": {
+      "size": 65728137,
+      "sha256": "c6827a100943f285854878f1d467984e856d8414e10fab4c58e8a16001d6295d"
+    }
+  },
+  "files": {
+    "app-arm64-v8a-release.apk": {
+      "size": 60174490,
+      "sha256": "d1517ab258651dab289e770e6bb2013b34151a27971963ee3b517e418ba5cf06"
+    },
+    "app-armeabi-v7a-release.apk": {
+      "size": 59378832,
+      "sha256": "bf722bc2286728877d2e88f2c3bd88b1103c1fae916e0e80ae41b7ad2046f101"
+    },
+    "app-x86-release.apk": {
+      "size": 62481048,
+      "sha256": "0acd29b72e8576e1d2fab41a56812527907e6073e402c5157dcd9869ab5f0702"
+    },
+    "app-x86_64-release.apk": {
+      "size": 65728137,
+      "sha256": "c6827a100943f285854878f1d467984e856d8414e10fab4c58e8a16001d6295d"
+    },
+    "SHA256SUMS": {
+      "size": 590,
+      "sha256": "e02d21e3714b396da52660075a4aba7aa4b18be2ade901e7048b4bf591193fe2"
+    },
+    "SPlayer-v3.0.16-beta.11-corresponding-source.zip": {
+      "size": 17111297,
+      "sha256": "08521f4273646542f1473694750476a046aba115f5a6d0858ab222c746743837"
+    },
+    "SPlayer-v3.0.16-beta.11-third-party-notices.zip": {
+      "size": 217019,
+      "sha256": "2bc70367bf89e911db6ac9b7b346e912a6bd01e0d48c20c9b49dffc83b13b748"
+    }
   }
 }

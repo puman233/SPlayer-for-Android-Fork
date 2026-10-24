@@ -2,6 +2,7 @@ import copy
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -176,9 +177,28 @@ class SourceAuditTests(unittest.TestCase):
 
 
 class CuratedHistoryTests(unittest.TestCase):
+    def test_all_curated_summaries_are_valid_before_a_release_tag_exists(self):
+        root = Path(__file__).resolve().parent.parent / "release-notes"
+        with patch.dict(os.environ, {"GH_REPO": "puman233/SPlayer-for-Android-Fork"}):
+            for path in sorted(root.glob("*.json")):
+                data = json.loads(path.read_text(encoding="utf-8"))
+                previous = data.get("previous_tag", "v3.0.15")
+                footer = f"**完整更新日志：** [{previous}...{path.stem}]({module.compare_url(previous, path.stem)})\n"
+                for change in data["changes"]:
+                    with self.subTest(tag=path.stem, change=change["id"]):
+                        # Public content validation does not require creating/moving a real tag.
+                        body = module.NOTE_SECTIONS[change["category"]] + "\n\n- " + change["summary"] + "\n\n" + footer
+                        module.validate_release_notes(body, previous, path.stem)
+
     def test_all_curated_notes_generate_from_real_tag_sources_without_work_logs(self):
         root = Path(__file__).resolve().parent.parent / "release-notes"
         for path in sorted(root.glob("*.json")):
+            tagged = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/tags/" + path.stem], check=False)
+            if tagged.returncode == 1:
+                # Release preparation is committed and checked before its tag is created.
+                # Untagged summaries are still checked above; the release job audits their sources.
+                continue
+            self.assertEqual(tagged.returncode, 0, "Unable to inspect historical tag")
             data = json.loads(path.read_text(encoding="utf-8"))
             previous = data.get("previous_tag", "v3.0.15")
             with self.subTest(tag=path.stem), patch.dict(os.environ, {

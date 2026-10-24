@@ -32,10 +32,15 @@
     <!-- 路由 -->
     <RouterView v-slot="{ Component }">
       <Transition :name="`router-${settingStore.routeAnimation}`" mode="out-in">
-        <KeepAlive v-if="settingStore.useKeepAlive">
-          <component :is="Component" :key="refreshKey" class="router-view" />
+        <KeepAlive v-if="settingStore.useKeepAlive" :key="refreshKey">
+          <component :is="Component" :key="route.name" class="router-view" />
         </KeepAlive>
-        <component v-else :is="Component" :key="refreshKey" class="router-view" />
+        <component
+          v-else
+          :is="Component"
+          :key="`${String(route.name)}:${refreshKey}`"
+          class="router-view"
+        />
       </Transition>
     </RouterView>
   </div>

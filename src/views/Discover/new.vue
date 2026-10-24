@@ -27,7 +27,10 @@
       </n-flex>
     </n-flex>
     <!-- 列表 -->
-    <Transition name="fade" mode="out-in">
+    <n-alert v-if="error" type="error" :title="error">
+      <n-button @click="getAllNewData">重试</n-button>
+    </n-alert>
+    <Transition v-else name="fade" mode="out-in">
       <CoverList
         v-if="newTypeChoose === 0"
         :data="newAlbumData"
@@ -53,6 +56,7 @@ import { newAlbumsAll, newSongs } from "@/api/rec";
 import type { CoverType, SongType } from "@/types/main";
 import { formatCoverList, formatSongsList } from "@/utils/format";
 import { useSettingStore } from "@/stores";
+import { useCategoryRequest } from "@/composables/useCategoryRequest";
 
 const router = useRouter();
 const settingStore = useSettingStore();
@@ -74,33 +78,46 @@ type AreaKey = (typeof newAreaNames)[number]["key"];
 
 // 音乐数据
 const hasMore = ref<boolean>(true);
-const loading = ref<boolean>(true);
+const { loading, error, run } = useCategoryRequest();
 const newOffset = ref<number>(0);
 const newSongData = ref<SongType[]>([]);
 const newAlbumData = ref<CoverType[]>([]);
 
 // 获取最新音乐数据
-const getAllNewData = async () => {
-  // 获取数据
-  loading.value = true;
-  // 新碟上架
-  if (newTypeChoose.value === 0) {
-    const area: AreaKey = newAreaNames[newAreaChoose.value]?.key || "ALL";
-    const result = await newAlbumsAll(area, 50, newOffset.value);
-    // 是否还有
-    hasMore.value = result.total > newOffset.value + 50;
-    // 处理数据
-    const albumData = formatCoverList(result.albums);
-    newAlbumData.value = newAlbumData.value.concat(albumData);
-  }
-  // 新歌速递
-  else if (newTypeChoose.value === 1) {
-    const area = newAreaNames[newAreaChoose.value]?.num || 0;
-    const result = await newSongs(area);
-    // 处理数据
-    newSongData.value = formatSongsList(result.data);
-  }
-  loading.value = false;
+const getAllNewData = () => {
+  const type = newTypeChoose.value;
+  const offset = newOffset.value;
+  const areaChoice = newAreaChoose.value;
+  return run(
+    async () => {
+      // 新碟上架
+      if (type === 0) {
+        const area: AreaKey = newAreaNames[areaChoice]?.key || "ALL";
+        const result = await newAlbumsAll(area, 50, offset);
+        if (!Array.isArray(result.albums)) throw new Error("Invalid album response");
+        return result;
+      }
+      const area = newAreaNames[areaChoice]?.num || 0;
+      const result = await newSongs(area);
+      if (!Array.isArray(result.data)) throw new Error("Invalid song response");
+      return result;
+    },
+    (result) => {
+      if (type === 0) {
+        // 是否还有
+        hasMore.value = result.total > offset + 50;
+        // 处理数据
+        const albumData = formatCoverList(result.albums);
+        newAlbumData.value = newAlbumData.value.concat(albumData);
+        newOffset.value = offset + 50;
+      }
+      // 新歌速递
+      else {
+        // 处理数据
+        newSongData.value = formatSongsList(result.data);
+      }
+    },
+  );
 };
 
 // 参数变化
@@ -113,7 +130,7 @@ const newQueryChange = (type: number, area: number) => {
 
 // 加载更多
 const loadMore = () => {
-  newOffset.value += 50;
+  if (loading.value || !hasMore.value) return;
   getAllNewData();
 };
 

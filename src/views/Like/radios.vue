@@ -1,16 +1,7 @@
 <template>
-  <div class="like-type">
-    <CoverList
-      :data="dataStore.userLikeData.djs"
-      type="radio"
-      :hiddenCover="settingStore.hiddenCovers.like"
-    />
-  </div>
+  <CategoryList category="djs" />
 </template>
 
 <script setup lang="ts">
-import { useDataStore, useSettingStore } from "@/stores";
-
-const dataStore = useDataStore();
-const settingStore = useSettingStore();
+import CategoryList from "./CategoryList.vue";
 </script>

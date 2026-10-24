@@ -70,6 +70,65 @@ function fixture() {
   return { store, auth: load("@/utils/auth"), load, databases, storage, cookies, requests, music, status, notices, timers, reads };
 }
 
+for (const [method, api, key, field] of [
+  ["updateUserLikeAlbums", "userAlbum", "albums", "data"],
+  ["updateUserLikeArtists", "userArtist", "artists", "data"],
+  ["updateUserLikeMvs", "userMv", "mvs", "data"],
+  ["updateUserLikeDjs", "userDj", "djs", "djRadios"],
+]) {
+  test(`${key}: 正确收藏接口和响应映射，空数据与失败不串用歌单`, async () => {
+    const f = fixture();
+    await f.store.setUserLikeData("playlists", [{ id: 99 }]);
+    const pending = f.auth[method]();
+    assert.equal(f.requests[0].name, api);
+    f.requests[0].request.resolve({ [field]: [{ id: 11 }] });
+    await pending;
+    assert.equal(f.store.userLikeData[key][0].id, 11);
+    assert.equal(f.store.userLikeData.playlists[0].id, 99);
+    const failed = f.auth[method]();
+    f.requests[1].request.reject(new Error("network failure"));
+    await assert.rejects(failed);
+    assert.equal(f.store.userLikeData[key][0].id, 11, "失败保留已有数据，不写入空结果");
+    const empty = f.auth[method]();
+    f.requests[2].request.resolve({ [field]: [] });
+    await empty;
+    assert.equal(f.store.userLikeData[key].length, 0);
+    const malformed = f.auth[method]();
+    f.requests[3].request.resolve({ playlist: [{ id: 99 }] });
+    await assert.rejects(malformed);
+  });
+}
+
+test("同分类新请求优先，后续分页失败不提交部分收藏", async () => {
+  const f = fixture();
+  const old = f.auth.updateUserLikeAlbums();
+  const latest = f.auth.updateUserLikeAlbums();
+  f.requests[1].request.resolve({ data: [{ id: 22 }] });
+  await latest;
+  f.requests[0].request.resolve({ data: [{ id: 11 }] });
+  await old;
+  assert.equal(f.store.userLikeData.albums[0].id, 22);
+  const paginated = f.auth.updateUserLikeAlbums();
+  f.requests[2].request.resolve({ data: Array.from({ length: 50 }, (_, id) => ({ id })) });
+  await flush();
+  f.requests[3].request.reject(new Error("page two failed"));
+  await assert.rejects(paginated);
+  assert.equal(f.store.userLikeData.albums[0].id, 22);
+});
+
+test("收藏操作成功但列表同步失败时提示重试，不回滚已确认操作", async () => {
+  const f = fixture();
+  await f.store.setUserLikeData("albums", [{ id: 22 }]);
+  const operation = f.auth.toLikeAlbum(11, true);
+  assert.equal(f.requests[0].name, "likeAlbum");
+  f.requests[0].request.resolve({ code: 200 }); await flush();
+  assert.equal(f.requests[1].name, "userAlbum");
+  f.requests[1].request.reject(new Error("sync unavailable"));
+  await operation;
+  assert.ok(f.notices.some((message) => message.includes("同步失败")));
+  assert.equal(f.store.userLikeData.albums[0].id, 22);
+});
+
 test("logout clears private memory but preserves local music, downloads and saved accounts", async () => {
   const f = fixture();
   f.store.cloudPlayList = [{ id: 7 }]; f.store.likeSongsList.data = [{ id: 8 }];

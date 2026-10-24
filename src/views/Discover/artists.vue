@@ -28,7 +28,11 @@
         </n-tag>
       </n-flex>
     </div>
+    <n-alert v-if="error" type="error" :title="error">
+      <n-button @click="getArtistListData">重试</n-button>
+    </n-alert>
     <ArtistList
+      v-else
       :data="artistsData"
       :loading="loading"
       :loadMore="hasMore"
@@ -43,6 +47,7 @@ import type { ArtistType } from "@/types/main";
 import { artistTypeList } from "@/api/artist";
 import { formatArtistsList } from "@/utils/format";
 import { useSettingStore } from "@/stores";
+import { useCategoryRequest } from "@/composables/useCategoryRequest";
 
 const router = useRouter();
 const settingStore = useSettingStore();
@@ -79,35 +84,39 @@ const artistTypeNamesChoose = ref<number>(
 
 // 歌手数据
 const hasMore = ref<boolean>(true);
-const loading = ref<boolean>(true);
+const { loading, error, run } = useCategoryRequest();
 const artistsOffset = ref<number>(0);
 const artistsData = ref<ArtistType[]>([]);
 
 // 获取歌手数据
-const getArtistListData = async () => {
-  // 获取数据
-  loading.value = true;
-  const result = await artistTypeList(
-    // 类型
-    artistType[artistTypeNamesChoose.value] || -1,
-    // 地区
-    artistArea[artistTypeNamesChoose.value] || -1,
-    // 首字母索引
-    artistInitialChoose.value,
-    artistsOffset.value,
-    50,
+const getArtistListData = () =>
+  run(
+    async () => {
+      const result = await artistTypeList(
+        // 类型
+        artistType[artistTypeNamesChoose.value] ?? -1,
+        // 地区
+        artistArea[artistTypeNamesChoose.value] ?? -1,
+        // 首字母索引
+        artistInitialChoose.value,
+        artistsOffset.value,
+        50,
+      );
+      if (!Array.isArray(result.artists)) throw new Error("Invalid artist response");
+      return result;
+    },
+    (result) => {
+      // 是否还有
+      hasMore.value = result?.more;
+      // 处理数据
+      const arData = formatArtistsList(result.artists);
+      artistsData.value = artistsData.value?.concat(arData);
+      artistsOffset.value += 50;
+    },
   );
-  // 是否还有
-  hasMore.value = result?.more;
-  // 处理数据
-  const arData = formatArtistsList(result.artists);
-  artistsData.value = artistsData.value?.concat(arData);
-  loading.value = false;
-};
 
 // 参数变化
 const artistQueryChange = (initial: number | string, type: number) => {
-  artistsOffset.value = 0;
   router.push({
     name: "discover-artists",
     query: { initial, type },
@@ -116,7 +125,7 @@ const artistQueryChange = (initial: number | string, type: number) => {
 
 // 加载更多
 const loadMore = () => {
-  artistsOffset.value += 50;
+  if (loading.value || !hasMore.value) return;
   getArtistListData();
 };
 
@@ -129,6 +138,7 @@ onBeforeRouteUpdate((to) => {
   // 获取歌单
   loading.value = true;
   artistsData.value = [];
+  artistsOffset.value = 0;
   getArtistListData();
 });
 

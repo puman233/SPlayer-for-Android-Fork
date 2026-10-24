@@ -463,7 +463,13 @@ const toLikeSomething = (
       if (code === 200) {
         window.$message.success((like ? "" : "取消") + actionName + thingName + "成功");
         // 更新
-        await update();
+        try {
+          await update();
+        } catch {
+          if (dataStore.isAccountCurrent(token)) {
+            window.$message.warning("操作已完成，但收藏列表同步失败，请刷新重试");
+          }
+        }
       } else {
         window.$message.success((like ? "" : "取消") + actionName + thingName + "失败，请重试");
         return;
@@ -496,6 +502,7 @@ export const toLikeArtist = toLikeSomething(
 export const toSubRadio = toLikeSomething("订阅", "播客", () => radioSub, updateUserLikeDjs);
 
 // 循环获取用户喜欢数据
+const userLikeRequestRevisions = new Map<string, number>();
 const setUserLikeDataLoop = async <T>(
   apiFunction: (limit: number, offset: number) => Promise<any>,
   formatFunction: (data: any[]) => T[],
@@ -506,26 +513,31 @@ const setUserLikeDataLoop = async <T>(
   const token = dataStore.getAccountToken();
   if (!isLogin() || !userId) return;
 
+  const revision = (userLikeRequestRevisions.get(key) || 0) + 1;
+  userLikeRequestRevisions.set(key, revision);
+  const isCurrent = () => dataStore.isAccountCurrent(token) && userLikeRequestRevisions.get(key) === revision;
+
   let offset = 0;
   const allData: T[] = [];
   const limit = 50; // 限制每页50条
 
   while (true) {
     try {
-      if (!dataStore.isAccountCurrent(token)) return;
+      if (!isCurrent()) return;
       const result = await apiFunction(limit, offset);
-      if (!dataStore.isAccountCurrent(token)) return;
+      if (!isCurrent()) return;
       // 根据不同 API 提取数据字段
       let data: any[] = [];
       if (key === "djs") {
-        data = result.djRadios || [];
+        data = result.djRadios;
       } else if (key === "playlists") {
-        data = result.playlist || [];
+        data = result.playlist;
       } else {
-        data = result.data || [];
+        data = result.data;
       }
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!Array.isArray(data)) throw new Error(`Invalid ${key} response`);
+      if (data.length === 0) {
         break; // 没有更多数据
       }
 
@@ -539,11 +551,12 @@ const setUserLikeDataLoop = async <T>(
       }
 
       offset += limit;
-    } catch {
-      console.error(`Error fetching ${key} data at offset ${offset}:`);
-      break;
+    } catch (error) {
+      if (!isCurrent()) return;
+      throw error;
     }
   }
+  if (!isCurrent()) return;
   // 保存数据
   if (key === "artists") {
     await dataStore.setUserLikeData(key, allData as ArtistType[], token);

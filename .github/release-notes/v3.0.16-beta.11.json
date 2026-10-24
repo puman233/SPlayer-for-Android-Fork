@@ -1,0 +1,68 @@
+{
+  "previous_tag": "v3.0.16-beta.10",
+  "changes": [
+    {
+      "id": "discover-categories",
+      "category": "fixes",
+      "summary": "修复发现音乐的排行榜、歌手和最新音乐切换后仍显示歌单广场的问题，恢复各分类列表与详情入口。"
+    },
+    {
+      "id": "favorite-categories",
+      "category": "fixes",
+      "summary": "修复我的收藏中专辑、歌手、视频和播客切换后仍显示收藏歌单的问题，保留各分类的数据与导航。"
+    },
+    {
+      "id": "category-loading",
+      "category": "fixes",
+      "summary": "分类加载失败时显示重试入口；防止旧筛选请求覆盖新结果，以及收藏同步失败覆盖已有数据。"
+    }
+  ],
+  "coverage": [
+    {
+      "source": "changelog:5d92361a4a22ed08",
+      "classification": "user-visible",
+      "release_ids": [
+        "discover-categories"
+      ],
+      "evidence": "修复发现音乐的排行榜、歌手和最新音乐切换后仍显示歌单广场的问题，恢复各分类列表与详情入口。"
+    },
+    {
+      "source": "changelog:d82b27cfa222910b",
+      "classification": "user-visible",
+      "release_ids": [
+        "favorite-categories"
+      ],
+      "evidence": "修复我的收藏中专辑、歌手、视频和播客切换后仍显示收藏歌单的问题，保留各分类的数据与导航。"
+    },
+    {
+      "source": "changelog:98d9b988db6f1fe0",
+      "classification": "user-visible",
+      "release_ids": [
+        "category-loading"
+      ],
+      "evidence": "分类加载失败时显示重试入口；防止旧筛选请求覆盖新结果，以及收藏同步失败覆盖已有数据。"
+    },
+    {
+      "source": "commit:20a66a868118b8a9452ce85e3718ec1fcba7cabf",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "发布说明的内容约束和草稿校验，不修改应用功能：fix(release-notes): reject work logs and curate historical updates"
+    },
+    {
+      "source": "commit:a1479bdd058d3de3011c915cd16e941abee4ed7d",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "发布说明的内容约束和草稿校验，不修改应用功能：test(release-notes): validate drafts before tags exist"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "user-visible",
+      "release_ids": [
+        "discover-categories",
+        "favorite-categories",
+        "category-loading"
+      ],
+      "evidence": "Discover/Like 布局按 route.name 隔离缓存；CategoryList 按原收藏业务类型加载；useCategoryRequest 和收藏同步校验保护过期结果、异常与重试。版本、测试和发布材料属于同一修复交付。"
+    }
+  ]
+}

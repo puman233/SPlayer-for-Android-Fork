@@ -1,53 +1,58 @@
 <template>
   <div class="discover-toplists">
-    <n-divider> 官方榜 </n-divider>
-    <Transition name="fade" mode="out-in">
-      <div v-if="topListData.official?.length > 0" class="official-list">
-        <n-grid cols="1 600:2 1000:3" x-gap="20" y-gap="20">
-          <n-gi v-for="(item, index) in topListData.official" :key="index">
-            <SongListCard
-              :cover="item.coverSize?.m || item.cover"
-              :title="item.name"
-              :height="160"
-              :description="item.updateTip"
-              size="normal"
-              :hiddenCover="settingStore.hiddenCovers.toplist"
-              @click="router.push({ name: 'playlist', query: { id: item.id } })"
-            >
-              <template #info>
-                <div
-                  v-for="(song, songIndex) in item.tracks"
-                  :key="songIndex"
-                  class="song-item text-hidden"
-                >
-                  <n-text class="name">{{ songIndex + 1 }}. {{ song.first }}</n-text>
-                  <n-text class="desc" depth="3">{{ song.second }}</n-text>
+    <n-alert v-if="error" type="error" :title="error">
+      <n-button @click="getTopPlaylistData">重试</n-button>
+    </n-alert>
+    <template v-else>
+      <n-divider> 官方榜 </n-divider>
+      <Transition name="fade" mode="out-in">
+        <div v-if="topListData.official?.length > 0" class="official-list">
+          <n-grid cols="1 600:2 1000:3" x-gap="20" y-gap="20">
+            <n-gi v-for="(item, index) in topListData.official" :key="index">
+              <SongListCard
+                :cover="item.coverSize?.m || item.cover"
+                :title="item.name"
+                :height="160"
+                :description="item.updateTip"
+                size="normal"
+                :hiddenCover="settingStore.hiddenCovers.toplist"
+                @click="router.push({ name: 'playlist', query: { id: item.id } })"
+              >
+                <template #info>
+                  <div
+                    v-for="(song, songIndex) in item.tracks"
+                    :key="songIndex"
+                    class="song-item text-hidden"
+                  >
+                    <n-text class="name">{{ songIndex + 1 }}. {{ song.first }}</n-text>
+                    <n-text class="desc" depth="3">{{ song.second }}</n-text>
+                  </div>
+                </template>
+              </SongListCard>
+            </n-gi>
+          </n-grid>
+        </div>
+        <div v-else-if="loading" class="official-list">
+          <n-grid cols="1 600:2 1000:3" x-gap="20" y-gap="20">
+            <n-gi v-for="item in 4" :key="item">
+              <n-card class="loading" :class="{ 'no-cover': settingStore.hiddenCovers.toplist }">
+                <n-skeleton v-if="!settingStore.hiddenCovers.toplist" class="cover" />
+                <div class="desc">
+                  <n-skeleton text round :repeat="3" />
                 </div>
-              </template>
-            </SongListCard>
-          </n-gi>
-        </n-grid>
-      </div>
-      <div v-else class="official-list">
-        <n-grid cols="1 600:2 1000:3" x-gap="20" y-gap="20">
-          <n-gi v-for="item in 4" :key="item">
-            <n-card class="loading" :class="{ 'no-cover': settingStore.hiddenCovers.toplist }">
-              <n-skeleton v-if="!settingStore.hiddenCovers.toplist" class="cover" />
-              <div class="desc">
-                <n-skeleton text round :repeat="3" />
-              </div>
-            </n-card>
-          </n-gi>
-        </n-grid>
-      </div>
-    </Transition>
-    <n-divider style="margin-bottom: 0"> 精选榜 </n-divider>
-    <CoverList
-      :data="topListData.selected"
-      :loading="true"
-      type="playlist"
-      :hiddenCover="settingStore.hiddenCovers.toplist"
-    />
+              </n-card>
+            </n-gi>
+          </n-grid>
+        </div>
+      </Transition>
+      <n-divider style="margin-bottom: 0"> 精选榜 </n-divider>
+      <CoverList
+        :data="topListData.selected"
+        :loading="loading"
+        type="playlist"
+        :hiddenCover="settingStore.hiddenCovers.toplist"
+      />
+    </template>
   </div>
 </template>
 
@@ -56,9 +61,11 @@ import { topPlaylist } from "@/api/playlist";
 import type { CoverType } from "@/types/main";
 import { formatCoverList } from "@/utils/format";
 import { useSettingStore } from "@/stores";
+import { useCategoryRequest } from "@/composables/useCategoryRequest";
 
 const router = useRouter();
 const settingStore = useSettingStore();
+const { loading, error, run } = useCategoryRequest();
 
 // 排行榜数据
 const topListData = ref<{
@@ -70,13 +77,24 @@ const topListData = ref<{
 });
 
 // 获取排行榜数据
-const getTopPlaylistData = async () => {
-  const result = await topPlaylist();
-  // 区分榜单
-  const official = formatCoverList(result.list?.filter((v: any) => v.ToplistType !== undefined));
-  const selected = formatCoverList(result.list?.filter((v: any) => v.ToplistType === undefined));
-  topListData.value = { official, selected };
-};
+const getTopPlaylistData = () =>
+  run(
+    async () => {
+      const result = await topPlaylist();
+      if (!Array.isArray(result.list)) throw new Error("Invalid toplist response");
+      return result;
+    },
+    (result) => {
+      // 区分榜单
+      const official = formatCoverList(
+        result.list?.filter((v: any) => v.ToplistType !== undefined),
+      );
+      const selected = formatCoverList(
+        result.list?.filter((v: any) => v.ToplistType === undefined),
+      );
+      topListData.value = { official, selected };
+    },
+  );
 
 onMounted(getTopPlaylistData);
 </script>

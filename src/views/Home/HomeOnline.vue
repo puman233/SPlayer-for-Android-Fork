@@ -23,6 +23,7 @@
           <HomeRecommendationCard
             v-if="compactHome"
             :data="dataStore.likeSongsList.data"
+            :cover="likedPlaylistCover"
             title="我喜欢的音乐"
             :hidden-cover="settingStore.hiddenCovers.home"
             @click="router.push({ name: 'like-songs' })"
@@ -30,6 +31,7 @@
           <SongListCard
             v-else
             :data="dataStore.likeSongsList.data"
+            :cover="likedPlaylistCover"
             :height="90"
             title="我喜欢的音乐"
             description="发现你独特的音乐品味"
@@ -117,6 +119,11 @@ const dataStore = useDataStore();
 const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const compactHome = useMediaQuery("(max-width: 599px)");
+// 登录同步已返回喜欢歌单封面，歌曲详情仅在进入列表后加载。
+const likedPlaylistCover = computed(() => {
+  const playlist = dataStore.userLikeData.playlists[0];
+  return playlist?.coverSize?.m || playlist?.cover;
+});
 const recommendationScope = computed(() =>
   !isLogin()
     ? "guest"

@@ -34,6 +34,7 @@ import {
 const props = defineProps<{
   title: string;
   data?: SongType[];
+  cover?: string;
   hiddenCover?: boolean;
 }>();
 
@@ -48,7 +49,11 @@ const selectedSong = computed(() => {
   return songs?.length ? songs[Math.floor(Math.random() * songs.length)] : undefined;
 });
 const album = computed(
-  () => selectedSong.value?.coverSize?.m || selectedSong.value?.cover || "/images/song.jpg?asset",
+  () =>
+    props.cover ||
+    selectedSong.value?.coverSize?.m ||
+    selectedSong.value?.cover ||
+    "/images/song.jpg?asset",
 );
 const flow = ref(false);
 const active = ref(true);

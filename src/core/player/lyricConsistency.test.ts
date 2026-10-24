@@ -29,6 +29,7 @@ const payload = (translation = "translation one", roman = "roman one", timing = 
 function fixture() {
   const ttmlSignals: AbortSignal[] = [];
   let response = payload();
+  let nativeResponse: any = { songId: 0, nativeFallback: false, lrcData: "[]", yrcData: "[]" };
   let ttmlResponse: string | null | Promise<string | null> =
     '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"><body><div><p itunes:key="L1" begin="00:00:01.000" end="00:00:03.000"><span begin="00:00:01.000" end="00:00:02.000">hello </span><span begin="00:00:02.000" end="00:00:03.000">world</span></p></div></body></tt>';
   const pending: Array<{ resolve: (value: any) => void; reject: (error: Error) => void }> = [];
@@ -70,6 +71,7 @@ function fixture() {
       },
     },
     "@/utils/env": { isCapacitorAndroid: true, isElectron: false },
+    "@/plugins/androidNativePlayback": { AndroidNativePlayback: { getCurrentLyric: async () => nativeResponse } },
     "@/core/resource/CacheManager": { useCacheManager: () => ({ isAvailable: () => false }) },
     "lodash-es": lodash,
   };
@@ -123,12 +125,56 @@ function fixture() {
     respond: (value: any) => {
       response = value;
     },
+    respondNative: (value: any) => { nativeResponse = value; },
     delay: () => {
       delayed = true;
     },
     respondQq: (value: Promise<unknown>) => { qqResponse = value; },
   };
 }
+
+test("returning from screen-off playback shows matching native lyrics before the web response", async () => {
+  const f = fixture();
+  f.delay();
+  f.respondNative({ songId: 1, nativeFallback: true, lrcData: JSON.stringify([
+    { startTime: 1000, endTime: 2000, words: [{ word: "native background line", startTime: 1000, endTime: 2000 }] },
+  ]), yrcData: "[]" });
+  const request = f.run();
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(f.music.songLyric.lrcData[0]?.words[0]?.word, "native background line");
+    assert.equal(f.status.lyricLoading, false);
+  } finally { f.pending.forEach(pending => pending.resolve(payload())); await request; }
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0]?.word, "hello");
+});
+
+test("native lyrics from the preceding song cannot appear in a new request", async () => {
+  const f = fixture();
+  f.delay();
+  f.respondNative({ songId: 1, nativeFallback: true, lrcData: JSON.stringify([
+    { startTime: 1000, endTime: 2000, words: [{ word: "old song", startTime: 1000, endTime: 2000 }] },
+  ]), yrcData: "[]" });
+  const request = f.run(2);
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(f.music.songLyric.lrcData.length, 0);
+    assert.equal(f.status.lyricLoading, true);
+  } finally { f.pending.forEach(pending => pending.resolve(payload())); await request; }
+});
+
+test("an empty web response preserves matching background native lyrics", async () => {
+  const f = fixture();
+  f.delay();
+  f.respondNative({ songId: 1, nativeFallback: true, lrcData: JSON.stringify([
+    { startTime: 1000, endTime: 2000, words: [{ word: "background lyric", startTime: 1000, endTime: 2000 }] },
+  ]), yrcData: "[]" });
+  const request = f.run();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  f.pending.forEach(pending => pending.resolve({ code: 200, nolyric: true }));
+  await request;
+  assert.equal(f.music.songLyric.lrcData[0]?.words[0]?.word, "background lyric");
+  assert.equal(f.status.lyricLoading, false);
+});
 
 test("auto mode shows ready official YRC while TTML is pending, then upgrades to TTML", async () => {
   const f = fixture();

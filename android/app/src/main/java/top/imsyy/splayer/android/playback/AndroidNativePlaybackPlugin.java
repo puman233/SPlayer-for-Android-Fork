@@ -427,6 +427,16 @@ public class AndroidNativePlaybackPlugin extends Plugin {
   }
 
   @PluginMethod
+  public void getCurrentLyric(PluginCall call) {
+    runOnMainThread(call, () -> {
+      JSObject result = new JSObject();
+      org.json.JSONObject snapshot = PlaybackManager.getInstance(getContext()).currentLyricSnapshot();
+      for (String key : new String[]{"songId", "nativeFallback", "lrcData", "yrcData"}) result.put(key, snapshot.opt(key));
+      call.resolve(result);
+    });
+  }
+
+  @PluginMethod
   public void showFloatingLyric(PluginCall call) {
     if (!Settings.canDrawOverlays(getContext())) {
       call.reject("OVERLAY_PERMISSION_DENIED");

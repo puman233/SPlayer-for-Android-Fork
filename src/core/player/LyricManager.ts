@@ -7,6 +7,7 @@ import { keywords as defaultKeywords, regexes as defaultRegexes } from "@/assets
 import { useCacheManager } from "@/core/resource/CacheManager";
 import { fetchAndroidPrioritizedLyricResult } from "@/core/player/androidLyricScheduler";
 import { AndroidLocalLyric } from "@/plugins/androidLocalLyric";
+import { AndroidNativePlayback } from "@/plugins/androidNativePlayback";
 import { useMusicStore, useSettingStore, useStatusStore, useStreamingStore } from "@/stores";
 import type { LyricPriority, SongLyric } from "@/types/lyric";
 import type { SongType } from "@/types/main";
@@ -1601,6 +1602,24 @@ class LyricManager {
     let available = emptyLyricResult();
     const current = () => !closed && this.activeLyricReq === req;
 
+    // Screen-off native playback may already have loaded this track's official lyrics.
+    // Publish them while preferred web providers continue, without delaying or replacing ready web lyrics.
+    if (isCapacitorAndroid && !song.path && song.type !== "streaming") {
+      void AndroidNativePlayback.getCurrentLyric().then(async (snapshot) => {
+        if (!current() || !snapshot.nativeFallback || snapshot.songId !== song.id || this.hasLyricResult(available)) return;
+        const cached = emptyLyricResult();
+        const lrc = JSON.parse(snapshot.lrcData), yrc = JSON.parse(snapshot.yrcData);
+        if (!Array.isArray(lrc) || !Array.isArray(yrc)) return;
+        cached.data = this.handleLyricExclude({ lrcData: lrc, yrcData: yrc }, song, false);
+        cached.data = await this.applyChineseVariant(cached.data);
+        if (!current() || this.hasLyricResult(available) || !this.hasLyricResult(cached)) return;
+        const musicStore = useMusicStore();
+        if (musicStore.songLyric.lrcData.length || musicStore.songLyric.yrcData.length) return;
+        available = cached;
+        this.setFinalLyric(cached.data, req);
+      }).catch(() => {});
+    }
+
     try {
       if (this.prefetchedLyric && this.prefetchedLyric.key !== key) {
         this.prefetchedLyric = null;
@@ -1629,13 +1648,15 @@ class LyricManager {
         ]);
       }
       if (!current()) return;
+      if (!this.hasLyricResult(result) && this.hasLyricResult(available)) result = available;
       statusStore.usingTTMLLyric = result.meta.usingTTMLLyric;
       statusStore.usingQRCLyric = result.meta.usingQRCLyric;
       this.setFinalLyric(result.data, req);
     } catch (error) {
       if (!current()) return;
       console.error("❌ 处理歌词失败:", requestFailureCategory(error));
-      this.resetSongLyric();
+      if (this.hasLyricResult(available)) this.setFinalLyric(available.data, req);
+      else this.resetSongLyric();
     } finally {
       closed = true;
       if (deadline !== undefined) clearTimeout(deadline);

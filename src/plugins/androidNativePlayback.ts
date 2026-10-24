@@ -237,6 +237,7 @@ export interface AndroidNativePlaybackPlugin {
     durationMs: number;
   }): Promise<void>;
   getState(): Promise<AndroidNativePlaybackState>;
+  getCurrentLyric(): Promise<{ songId: number; nativeFallback: boolean; lrcData: string; yrcData: string }>;
   requestNotificationPermission(): Promise<AndroidNativePermissionResult>;
   showFloatingLyric(): Promise<void>;
   getFloatingLyricState(): Promise<{ visible: boolean; granted: boolean }>;

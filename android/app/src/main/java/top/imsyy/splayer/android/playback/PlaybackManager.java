@@ -159,6 +159,8 @@ public final class PlaybackManager {
 
   /** Java 端 URL 解析器：WebView 冻结时仍可自治取地址。 */
   private final PlaybackUrlResolver urlResolver = new PlaybackUrlResolver();
+  private final NativeLyricFetcher nativeLyricFetcher = new NativeLyricFetcher();
+  private final NativeLyricFallbackGate nativeLyricGate = new NativeLyricFallbackGate();
 
   private TrackMetadata currentMetadata = new TrackMetadata();
   private long nativeRecoverySongId = 0L;
@@ -319,6 +321,7 @@ public final class PlaybackManager {
         public void run() {
           // 仅在真正播放时 emit；callback 链常驻，BUFFERING→READY 后下一拍立即续传
           if (player != null && player.isPlaying()) {
+            requestNativeLyricIfNeeded();
             emitProgressChanged();
           } else {
             syncNativeFloatingLyricProgress();
@@ -587,6 +590,8 @@ public final class PlaybackManager {
   /** 硬清理：清播放列表 / 登入登出等场景，清空 MediaItem、通知栏、queuedNext 及快路径锁。 */
   public synchronized JSObject cleanup() {
     ensureInitialized();
+    nativeLyricFetcher.invalidatePending();
+    nativeLyricGate.select(0, android.os.SystemClock.elapsedRealtime());
     stagedMetadata = null;
     stagedMetadataSource = null;
     playbackRequested = false;
@@ -805,6 +810,9 @@ public final class PlaybackManager {
       songLevel = level;
     }
     urlResolver.updateContext(apiBaseUrl, cookie, songLevel, disableAiAudio, playSongDemo);
+    if (nativeLyricFetcher.updateContext(apiBaseUrl, cookie)) {
+      nativeLyricGate.select(currentMetadata.songId, android.os.SystemClock.elapsedRealtime());
+    }
     prefetchUpcomingUrls();
   }
 
@@ -2635,6 +2643,35 @@ public final class PlaybackManager {
   private long bufferedTimeMs = 0;
   private boolean bufferedPlaying = false;
   private JSONObject bufferedLyricConfig = null;
+  private boolean hasFloatingLyricData = false;
+  private boolean usingNativeLyricFallback = false;
+
+  private void requestNativeLyricIfNeeded() {
+    boolean eligible = !remoteMode && currentMetadata.canLike && floatingLyricService != null && nativeLyricFetcher.available();
+    NativeLyricFallbackGate.Ticket ticket = nativeLyricGate.request(android.os.SystemClock.elapsedRealtime(), eligible, hasFloatingLyricData);
+    if (ticket == null) return;
+    nativeLyricFetcher.request(ticket.songId, currentMetadata.durationMs, result -> mainHandler.post(() -> {
+      if (!nativeLyricGate.finish(ticket, result != null && result.terminal)) return;
+      if (result == null || !result.hasLyrics() || remoteMode || player == null || currentMetadata.songId != ticket.songId || hasFloatingLyricData) return;
+      updateFloatingLyricData(result.lrc, result.yrc);
+      usingNativeLyricFallback = true;
+    }));
+  }
+
+  private static boolean containsLyricLines(String lrc, String yrc) {
+    try { if (lrc != null && new org.json.JSONArray(lrc).length() > 0) return true; } catch (Exception ignored) { }
+    try { return yrc != null && new org.json.JSONArray(yrc).length() > 0; } catch (Exception ignored) { return false; }
+  }
+
+  public synchronized JSONObject currentLyricSnapshot() {
+    JSONObject data = new JSONObject();
+    try {
+      data.put("songId", currentMetadata.songId).put("nativeFallback", usingNativeLyricFallback)
+          .put("lrcData", bufferedLrcJson == null ? "[]" : bufferedLrcJson)
+          .put("yrcData", bufferedYrcJson == null ? "[]" : bufferedYrcJson);
+    } catch (Exception ignored) { }
+    return data;
+  }
 
   /** 开启悬浮歌词服务 */
   public synchronized boolean isFloatingLyricVisible() {
@@ -2648,12 +2685,16 @@ public final class PlaybackManager {
 
   /** 关闭悬浮歌词服务 */
   public synchronized void hideFloatingLyric() {
+    nativeLyricFetcher.invalidatePending();
     // Closing must also reset a persisted lock, including a service still starting.
     FloatingLyricService.clearPersistedLock(appContext);
     if (floatingLyricService != null) floatingLyricService.setLocked(false);
     floatingLyricService = null;
     bufferedLrcJson = null;
     bufferedYrcJson = null;
+    hasFloatingLyricData = false;
+    usingNativeLyricFallback = false;
+    nativeLyricGate.select(currentMetadata.songId, android.os.SystemClock.elapsedRealtime());
     Intent intent = new Intent(appContext, FloatingLyricService.class);
     appContext.stopService(intent);
   }
@@ -2683,6 +2724,8 @@ public final class PlaybackManager {
 
   /** 推送歌词——有服务直推，没服务先缓冲 */
   public synchronized void updateFloatingLyricData(String lrcJson, String yrcJson) {
+    hasFloatingLyricData = containsLyricLines(lrcJson, yrcJson);
+    usingNativeLyricFallback = false;
     bufferedLrcJson = lrcJson;
     bufferedYrcJson = yrcJson;
     if (floatingLyricService != null) floatingLyricService.pushLyrics(lrcJson, yrcJson);
@@ -2690,10 +2733,14 @@ public final class PlaybackManager {
 
   public synchronized void updateFloatingLyricData(String lrcJson, String yrcJson, long songId) {
     if (!remoteMode && songId > 0 && songId != currentMetadata.songId) return;
+    // A delayed WebView starts its own request by publishing empty data. Keep this track's native fallback.
+    if (usingNativeLyricFallback && songId == currentMetadata.songId && !containsLyricLines(lrcJson, yrcJson)) return;
     updateFloatingLyricData(lrcJson, yrcJson);
   }
 
   private synchronized void clearFloatingLyricForTrack(@Nullable TrackMetadata metadata) {
+    nativeLyricFetcher.invalidatePending();
+    nativeLyricGate.select(metadata == null ? 0 : metadata.songId, android.os.SystemClock.elapsedRealtime());
     updateFloatingLyricData("[]", "[]");
     updateFloatingLyricSongInfo(metadata == null ? "" : metadata.title,
         metadata == null ? "" : metadata.artist);

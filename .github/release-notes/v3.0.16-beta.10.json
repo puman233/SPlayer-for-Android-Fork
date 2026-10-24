@@ -107,10 +107,16 @@
       "exclusion_reason": "既有测试版冻结产物恢复工具完整性修正，不作为本次应用新功能。"
     },
     {
+      "source": "commit:3cf83750377d006595f7b6f603aa60bd34cd7c3d",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "用户指定beta.10/30033的发布准备提交，仅同步版本和更新说明。"
+    },
+    {
       "source": "commit:CURRENT",
       "classification": "internal",
       "release_ids": [],
-      "exclusion_reason": "同步用户指定的beta.10版本、30033构建号、更新日志与发布说明来源映射。"
+      "exclusion_reason": "补齐本版本固定源码和第三方许可附件清单，记录维护者明确接受的本版字体风险；应用逻辑、版本和原签名不变。"
     }
   ]
 }

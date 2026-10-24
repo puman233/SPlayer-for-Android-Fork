@@ -1,0 +1,35 @@
+{
+  "stableTag": "v3.0.15",
+  "certificateSha256": "d065190eb0f517db9f8575030ae5610615d2655b219bff48efcfe33d612e5fea",
+  "sourceArchives": [
+    {
+      "file": "ffmpeg-audio-player-38f1664e.tar.gz",
+      "source": "https://codeload.github.com/apoint123/ffmpeg-audio-player/tar.gz/38f1664ea3f9cb32007eb90dc13e25be84b34b6b",
+      "size": 67528,
+      "sha256": "96a7f52a0a511cf6ffcc297ebbbc41445c8ce44988ef9415c46d04056e7753b7"
+    },
+    {
+      "file": "ffmpeg-n8.0.1-894da5ca.tar.gz",
+      "source": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/894da5ca7d742e4429ffb2af534fcda0103ef593",
+      "size": 16422004,
+      "sha256": "9dad3557314f1b7923b61aff15e30079e964c3b41276bbd43dd8bb15b8028b5f"
+    },
+    {
+      "file": "soundtouch-2.4.0.tar.gz",
+      "source": "https://codeberg.org/soundtouch/soundtouch/archive/2.4.0.tar.gz",
+      "size": 607897,
+      "sha256": "b54ca9724afcf0b8c5326a0afb1b1676f2b892ee01c57d5312232ce4bc27a077"
+    }
+  ],
+  "tag": "v3.0.16-beta.10",
+  "riskAcceptance": {
+    "code": "THIRD_PARTY_FONT_LICENSE_UNCONFIRMED",
+    "file": "android/app/src/main/assets/iconfont_notification.ttf",
+    "gitBlob": "ce36d59d06853c0e340c42b43fa804efcd1d2cfd",
+    "accepted": true,
+    "releaseTag": "v3.0.16-beta.10",
+    "statement": "用户明确确认“接受，仅限 beta.10，继续发布”。仅接受本版本沿用的原通知图标字体许可证据未确认风险，不表示已取得字体许可，不豁免当前提交CI、设备验收、原签名、完整七附件和Environment人工审核。",
+    "acceptedOn": "2026-10-24",
+    "acceptedBy": "Repository maintainer, explicit instruction in this task"
+  }
+}

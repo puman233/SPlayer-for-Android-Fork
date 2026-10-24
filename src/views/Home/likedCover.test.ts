@@ -19,8 +19,8 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
     getAccountToken: () => "account:1",
   });
   const image = vue.defineComponent({
-    props: ["src"],
-    setup: (props) => () => vue.h("img", { src: props.src }),
+    props: ["src", "sources"],
+    setup: (props) => () => vue.h("img", { src: props.sources?.[0] || props.src }),
   });
   const slot = vue.defineComponent({
     setup: (_, ctx) => () => vue.h("div", ctx.slots.default?.()),
@@ -69,9 +69,11 @@ async function renderHome(compact: boolean, playlists: any[], songs: any[] = [])
         require: (name: string) =>
           name === "@/components/Card/HomeRecommendationCard.vue"
             ? { default: load("../../components/Card/HomeRecommendationCard.vue") }
-            : name.endsWith(".vue")
-              ? { default: slot }
-              : imports[name] || {},
+            : name.endsWith("StableCoverImage.vue")
+              ? { default: image }
+              : name.endsWith(".vue")
+                ? { default: slot }
+                : imports[name] || {},
       },
     );
     return module.exports.default;

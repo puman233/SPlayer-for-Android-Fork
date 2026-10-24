@@ -1,7 +1,7 @@
 <template>
   <button ref="card" type="button" class="home-rec-card song-data-card small" :aria-label="title">
     <span v-if="!hiddenCover" ref="media" class="cover" :class="{ flow }">
-      <s-image class="art" :src="album" alt="" cache-type="covers" />
+      <StableCoverImage class="art" :sources="coverSources" @display="album = $event" />
       <span class="caption info">
         <span ref="material" class="caption-material" aria-hidden="true" />
         <span class="caption-blur" aria-hidden="true" />
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import type { SongType } from "@/types/main";
 import { useStatusStore } from "@/stores";
+import StableCoverImage from "./StableCoverImage.vue";
 import {
   BackgroundRender,
   MeshGradientRenderer,
@@ -35,6 +36,7 @@ const props = defineProps<{
   title: string;
   data?: SongType[];
   cover?: string;
+  covers?: string[];
   hiddenCover?: boolean;
 }>();
 
@@ -43,18 +45,14 @@ const card = useTemplateRef<HTMLElement>("card");
 const media = useTemplateRef<HTMLElement>("media");
 const titleElement = useTemplateRef<HTMLElement>("titleElement");
 const material = useTemplateRef<HTMLElement>("material");
-// Keep the random selection stable until the input list changes, as in SongListCard.
-const selectedSong = computed(() => {
-  const songs = props.data;
-  return songs?.length ? songs[Math.floor(Math.random() * songs.length)] : undefined;
-});
-const album = computed(
+const coverSources = computed(
   () =>
-    props.cover ||
-    selectedSong.value?.coverSize?.m ||
-    selectedSong.value?.cover ||
-    "/images/song.jpg?asset",
+    props.covers ??
+    (props.cover
+      ? [props.cover]
+      : (props.data || []).map((song) => song.coverSize?.m || song.cover)),
 );
+const album = ref("/images/song.jpg?asset");
 const flow = ref(false);
 const active = ref(true);
 const visible = useElementVisibility(card);

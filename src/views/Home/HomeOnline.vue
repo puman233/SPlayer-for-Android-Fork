@@ -1,6 +1,6 @@
 <template>
   <div class="home-online">
-    <div v-if="isLogin()" class="main-rec">
+    <div v-if="isLogin()" :key="recommendationScope" class="main-rec">
       <div class="main-rec-grid">
         <n-flex :size="compactHome ? 8 : 20" class="rec-list" justify="space-between" vertical>
           <HomeRecommendationCard
@@ -17,13 +17,14 @@
             :height="90"
             description="根据你的音乐口味 · 每日更新"
             size="small"
+            stable-cover
             :hiddenCover="settingStore.hiddenCovers.home"
             @click="router.push({ name: 'daily-songs' })"
           />
           <HomeRecommendationCard
             v-if="compactHome"
             :data="dataStore.likeSongsList.data"
-            :cover="likedPlaylistCover"
+            :covers="likedPlaylistCovers"
             title="我喜欢的音乐"
             :hidden-cover="settingStore.hiddenCovers.home"
             @click="router.push({ name: 'like-songs' })"
@@ -31,11 +32,12 @@
           <SongListCard
             v-else
             :data="dataStore.likeSongsList.data"
-            :cover="likedPlaylistCover"
+            :covers="likedPlaylistCovers"
             :height="90"
             title="我喜欢的音乐"
             description="发现你独特的音乐品味"
             size="small"
+            stable-cover
             :hiddenCover="settingStore.hiddenCovers.home"
             @click="router.push({ name: 'like-songs' })"
           />
@@ -122,20 +124,25 @@ const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const compactHome = useMediaQuery("(max-width: 599px)");
 const likedPlaylistId = computed(() =>
-  isLogin() ? Number(dataStore.userLikeData.playlists[0]?.id || dataStore.likeSongsList.detail.id) : 0,
+  isLogin()
+    ? Number(dataStore.userLikeData.playlists[0]?.id || dataStore.likeSongsList.detail.id)
+    : 0,
 );
-const likedPlaylistCover = useLikedHomeCover({
+const likedPlaylistCovers = useLikedHomeCover({
   account: () => dataStore.getAccountToken(),
   playlistId: () => likedPlaylistId.value,
-  cachedCover: () => {
-    if (Number(dataStore.likeSongsList.detail.id) !== likedPlaylistId.value) return;
-    const song = dataStore.likeSongsList.data[0];
-    return song?.coverSize?.m || song?.cover;
+  cachedCovers: () => {
+    if (Number(dataStore.likeSongsList.detail.id) !== likedPlaylistId.value) return [];
+    return dataStore.likeSongsList.data
+      .slice(0, 20)
+      .map((song) => song.coverSize?.m || song.cover)
+      .filter((cover): cover is string => !!cover);
   },
   load: async (id) => {
-    const result = await playlistAllSongs(id, 1);
-    const song = formatSongsList(result.songs)[0];
-    return song?.coverSize?.m || song?.cover;
+    const result = await playlistAllSongs(id, 20);
+    return formatSongsList(result.songs)
+      .map((song) => song.coverSize?.m || song.cover)
+      .filter((cover): cover is string => !!cover);
   },
 });
 const recommendationScope = computed(() =>

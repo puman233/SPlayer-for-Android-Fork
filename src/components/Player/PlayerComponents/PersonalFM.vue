@@ -1,23 +1,11 @@
 <template>
   <n-card class="personal-fm">
     <!-- 封面 -->
-    <Transition name="fade" mode="out-in">
-      <n-image
-        v-if="!settingStore.hiddenCovers.personalFM"
-        :key="musicStore.personalFMSong?.id"
-        :src="musicStore.personalFMSong?.coverSize?.m || musicStore.personalFMSong?.cover"
-        class="cover"
-        preview-disabled
-        lazy
-        @load="coverLoaded"
-      >
-        <template #placeholder>
-          <div class="cover-loading">
-            <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
-          </div>
-        </template>
-      </n-image>
-    </Transition>
+    <StableCoverImage
+      v-if="!settingStore.hiddenCovers.personalFM"
+      :src="musicStore.personalFMSong?.coverSize?.m || musicStore.personalFMSong?.cover"
+      class="cover"
+    />
     <!-- 信息 -->
     <Transition name="fade" mode="out-in">
       <div
@@ -99,7 +87,7 @@
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useSongManager } from "@/core/player/SongManager";
 import { useMusicStore, useStatusStore, useSettingStore } from "@/stores";
-import { coverLoaded } from "@/utils/helper";
+import StableCoverImage from "@/components/Card/StableCoverImage.vue";
 import { debounce, isObject } from "lodash-es";
 
 const musicStore = useMusicStore();
@@ -167,8 +155,6 @@ onMounted(() => songManager.initPersonalFM());
     :deep(img) {
       width: 100%;
       height: 100%;
-      opacity: 0;
-      transition: opacity 0.35s ease-in-out;
     }
   }
   .info {

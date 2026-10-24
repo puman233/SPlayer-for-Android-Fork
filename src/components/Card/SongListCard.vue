@@ -8,13 +8,24 @@
     <div class="content">
       <!-- 封面 -->
       <div v-if="!hiddenCover" class="cover">
-        <n-image v-if="cover" :src="cover" preview-disabled lazy @load="coverLoaded">
+        <StableCoverImage
+          v-if="stableCover && (covers !== undefined || cover)"
+          :sources="covers ?? [cover || '']"
+        />
+        <n-image v-else-if="cover" :src="cover" preview-disabled lazy @load="coverLoaded">
           <template #placeholder>
             <div class="cover-loading">
               <img src="/images/song.jpg?asset" class="loading-img" alt="loading-img" />
             </div>
           </template>
         </n-image>
+        <div v-else-if="stableCover" class="cover-list">
+          <StableCoverImage
+            v-for="(item, index) in stableSongs"
+            :key="index"
+            :src="item.coverSize?.m || item.cover"
+          />
+        </div>
         <TransitionGroup v-else tag="div" name="fade" class="cover-list">
           <n-image
             v-for="item in songList"
@@ -56,6 +67,7 @@ import type { SongType } from "@/types/main";
 import { coverLoaded } from "@/utils/helper";
 import { sampleSize } from "lodash-es";
 import { VNodeChild } from "vue";
+import StableCoverImage from "./StableCoverImage.vue";
 
 const props = defineProps<{
   size: "normal" | "small";
@@ -65,11 +77,26 @@ const props = defineProps<{
   loading?: boolean;
   height?: number;
   cover?: string;
+  covers?: string[];
+  stableCover?: boolean;
   hiddenCover?: boolean;
 }>();
 
 // 列表前三首
 const songList = computed(() => sampleSize(props.data, 3));
+const retainedSongs = shallowRef<SongType[]>([]);
+watch(
+  () => props.data,
+  (songs) => {
+    if (props.stableCover && songs?.length) retainedSongs.value = sampleSize(songs, 3);
+  },
+  { immediate: true },
+);
+const stableSongs = computed(() =>
+  retainedSongs.value.length
+    ? retainedSongs.value
+    : [{ cover: "/images/song.jpg?asset", coverSize: undefined }],
+);
 </script>
 
 <style lang="scss" scoped>
@@ -95,7 +122,8 @@ const songList = computed(() => sampleSize(props.data, 3));
         width: 100%;
         height: 100%;
       }
-      .n-image {
+      .n-image,
+      .stable-cover {
         width: 100%;
         height: 100%;
         position: absolute;

@@ -53,7 +53,13 @@ public class LikedHomeCoverTest {
       await("!!document.querySelector('.home-online')");
       await("!!likedCoverProbe.p._s.get('data').userLikeData.playlists[0]?.cover");
       // The selected album image must differ from the server heart composite and decode successfully.
-      await("(()=>{const cards=[...document.querySelectorAll('.home-online .song-data-card')];const card=cards.find(c=>c.textContent.includes('我喜欢的音乐'));if(!card)return false;const seen=new Set(),stack=[document.querySelector('#app')._vnode];let c;while(stack.length){const v=stack.pop();if(!v||typeof v!=='object'||seen.has(v))continue;seen.add(v);if(v.props?.title==='我喜欢的音乐'&&v.component){c=v;break}if(v.component?.subTree)stack.push(v.component.subTree);if(Array.isArray(v.children))stack.push(...v.children);if(v.suspense?.activeBranch)stack.push(v.suspense.activeBranch)}const pl=likedCoverProbe.p._s.get('data').userLikeData.playlists[0];const expected=c?.props.cover;const images=[...card.querySelectorAll('img')];return !!expected&&expected!==pl.cover&&expected!==pl.coverSize?.m&&images.some(i=>i.complete&&i.naturalWidth>1&&i.naturalHeight>1&&!i.src.includes('/images/')&&(i.classList.contains('loaded')||!card.classList.contains('home-rec-card')))})()");
+      js("(()=>{const q=likedCoverProbe;q.card=()=>[...document.querySelectorAll('.home-online .song-data-card')].find(c=>c.textContent.includes('我喜欢的音乐'));q.source=()=>q.card()?.querySelector('.stable-cover')?.dataset.coverSource;q.visible=()=>{const card=q.card();return !!card&&[...card.querySelectorAll('img.cover.loaded')].some(i=>{if(!i.complete||i.naturalWidth<2||i.src.includes('/images/'))return false;for(let e=i;e&&e!==card.parentElement;e=e.parentElement){const s=getComputedStyle(e);if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)<0.99)return false}return true})}})()");
+      await("(()=>{const q=likedCoverProbe,pl=q.p._s.get('data').userLikeData.playlists[0];return !!q.source()&&q.source()!==pl.cover&&q.source()!==pl.coverSize?.m&&q.visible()})()");
+      js("(()=>{const q=likedCoverProbe;q.first=q.source();q.samples=0;q.blankFrames=0;q.monitor=true;const sample=()=>{if(!q.monitor)return;q.samples++;if(!q.visible())q.blankFrames++;requestAnimationFrame(sample)};requestAnimationFrame(sample)})()");
+      await("likedCoverProbe.source()!==likedCoverProbe.first&&likedCoverProbe.visible()");
+      js("likedCoverProbe.monitor=false");
+      assertEquals("No placeholder or invisible frame during natural cover rotation", "0", js("likedCoverProbe.blankFrames"));
+      System.out.println("HOME_REAL_ALBUM_ROTATION " + js("JSON.stringify({frames:likedCoverProbe.samples,blankFrames:likedCoverProbe.blankFrames})"));
       assertEquals("The account stayed unchanged", "true", js("likedCoverProbe.token===likedCoverProbe.p._s.get('data').getAccountToken()"));
       // Decoding can complete before Chromium submits its next frame and the image fade finishes.
       js("likedCoverProbe.painted=false;requestAnimationFrame(()=>requestAnimationFrame(()=>likedCoverProbe.painted=true))");
@@ -82,7 +88,7 @@ public class LikedHomeCoverTest {
       assertEquals("Clicking the artwork keeps the account", "true", js("likedCoverProbe.token===likedCoverProbe.p._s.get('data').getAccountToken()"));
       assertEquals("Artwork navigation preserves the song, queue and playback mode", "true", js("likedCoverProbe.beforeClick===likedCoverProbe.playback()"));
     } finally {
-      js("(()=>{const q=likedCoverProbe;q.a.config.globalProperties.$router.push(q.route);q.p._s.get('status').showFullPlayer=q.full;delete window.likedCoverProbe;})()");
+      js("(()=>{const q=likedCoverProbe;q.monitor=false;q.a.config.globalProperties.$router.push(q.route);q.p._s.get('status').showFullPlayer=q.full;delete window.likedCoverProbe;})()");
     }
   }
 }

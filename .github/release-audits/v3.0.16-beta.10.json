@@ -31,5 +31,13 @@
     "statement": "用户明确确认“接受，仅限 beta.10，继续发布”。仅接受本版本沿用的原通知图标字体许可证据未确认风险，不表示已取得字体许可，不豁免当前提交CI、设备验收、原签名、完整七附件和Environment人工审核。",
     "acceptedOn": "2026-10-24",
     "acceptedBy": "Repository maintainer, explicit instruction in this task"
+  },
+  "replacement": {
+    "previousCommit": "899e4407fd37ed8bd8c92e507d2b5d526578e905",
+    "previousTagObject": "d6f8fdd3e8f0520f111d6282c781de37c1ad51bd",
+    "previousVersionCode": 30033,
+    "versionCode": 30034,
+    "authorizedOn": "2026-10-24",
+    "authorization": "维护者明确要求撤销上一beta.10发布，并以包含息屏后台歌词修复的本版重新作为beta.10发布；旧附件及Tag元数据须先完整备份，当前提交CI、设备及Environment人工审核照常执行。"
   }
 }

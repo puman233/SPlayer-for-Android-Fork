@@ -2,6 +2,11 @@
   "previous_tag": "v3.0.16-beta.9",
   "changes": [
     {
+      "id": "screen-off-lyrics",
+      "category": "fixes",
+      "summary": "修复息屏后台自然切歌后桌面歌词不加载、需要打开应用才恢复的问题；新歌歌词可在后台独立加载，回到应用后立即复用，并避免旧歌歌词覆盖新歌。"
+    },
+    {
       "id": "cover-refresh",
       "category": "highlights",
       "summary": "首页卡片等新封面加载完成后再切换，刷新或加载失败时保留原图；喜欢音乐封面会自然轮换。"
@@ -113,10 +118,32 @@
       "exclusion_reason": "用户指定beta.10/30033的发布准备提交，仅同步版本和更新说明。"
     },
     {
-      "source": "commit:CURRENT",
+      "source": "commit:899e4407fd37ed8bd8c92e507d2b5d526578e905",
       "classification": "internal",
       "release_ids": [],
       "exclusion_reason": "补齐本版本固定源码和第三方许可附件清单，记录维护者明确接受的本版字体风险；应用逻辑、版本和原签名不变。"
+    },
+    {
+      "source": "changelog:7a445d8e5500793d",
+      "classification": "user-visible",
+      "release_ids": [
+        "screen-off-lyrics"
+      ],
+      "evidence": "修复息屏后台自然切歌后桌面歌词依赖打开应用才加载的问题：原生播放在网页事件延迟时独立加载当前歌曲的官方歌词，回到应用后复用已加载内容，并防止旧歌歌词覆盖新歌。"
+    },
+    {
+      "source": "commit:9cda1fe4f1264eb1ac9d6e48f60fd723bd568c1f",
+      "classification": "user-visible",
+      "release_ids": [
+        "screen-off-lyrics"
+      ],
+      "evidence": "NativeLyricFetcher在网页事件延迟时独立请求官方LRC/YRC，LyricManager读取本曲原生缓存并保留偏好来源升级。"
+    },
+    {
+      "source": "commit:CURRENT",
+      "classification": "internal",
+      "release_ids": [],
+      "exclusion_reason": "维护者明确授权撤销旧beta.10并用含息屏歌词修复的版本重新发布；构建号30033递增至30034，保留原签名及完整七附件门禁。"
     }
   ]
 }

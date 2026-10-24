@@ -43,7 +43,7 @@ android {
         applicationId "top.imsyy.splayer.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode providers.gradleProperty('previewVersionCode').map { it.toInteger() }.getOrElse(30033)
+        versionCode providers.gradleProperty('previewVersionCode').map { it.toInteger() }.getOrElse(30034)
         versionName providers.gradleProperty('previewVersion').getOrElse("3.0.16-beta.10")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
